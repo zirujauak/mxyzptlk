@@ -41,32 +41,29 @@ impl fmt::Display for Instruction {
         for b in &self.bytes {
             write!(f, " {:02x}", b)?;
         }
-        for i in 0..8-self.bytes.len() {
+        for i in 0..9-self.bytes.len() {
             write!(f, "   ")?;
         }
-        write!(f, "{:15} ", self.opcode_name.to_uppercase())?;
+        write!(f, "  {:15} ", self.opcode_name.to_uppercase())?;
         for i in 0..self.operand_types.len() {
+            if i > 0 {
+                write!(f, ",")?;
+            }
             match self.operand_types[i] {
-                OperandType::LargeConstant => write!(f, " ${:04x}", self.operands[i])?,
-                OperandType::SmallConstant => write!(f, " ${:02x}", self.operands[i])?,
+                OperandType::LargeConstant => write!(f, "#{:04x}", self.operands[i])?,
+                OperandType::SmallConstant => write!(f, "#{:02x}", self.operands[i])?,
                 OperandType::Variable => {
                     if self.operands[i] == 0 {
-                        write!(f, " (SP)+")?
+                        write!(f, "(SP)+")?
                     } else if self.operands[i] < 16 {
-                        write!(f, " L{:02x}", self.operands[i] - 1)?
+                        write!(f, "L{:02x}", self.operands[i] - 1)?
                     } else {
-                        write!(f, " G{:02x}", self.operands[i] - 16)?
+                        write!(f, "G{:02x}", self.operands[i] - 16)?
                     }
                 }
                 OperandType::Omitted => {}
             }
         }
-        // for ot in &self.operand_types {
-        //     match ot {
-        //         OperandType::Omitted => {}
-        //         _ => write!(f, " {:?}", ot)?,
-        //     }
-        // }
 
         match &self.store {
             Some(s) => {
@@ -426,7 +423,6 @@ fn decode_branch(map: &Vec<u8>, address: usize, opcode: u8) -> (usize, Option<Br
         0x80 | 0x90 | 0xa0 |
         0x81 | 0x91 | 0xa1 |
         0x82 | 0x92 | 0xa2 |
-        0x8c | 0x9c | 0xac | 
         /* b5 for < version 4 */
         /* b6 for < version 4 */
         0xbd |
@@ -484,15 +480,6 @@ pub fn decode_instruction(map: &Vec<u8>, version: u8, address: usize) -> Instruc
     let opcode_form = map_opcode_form(opcode);
 
     let (offset, operand_types) = decode_operand_types(map, offset, opcode, &opcode_form);
-
-    // let operand_types = decode_operand_types(map, version, address, opcode, &opcode_form);
-    // let opers = match opcode_form {
-    //     OpcodeForm::Var => address + 2,
-    //     OpcodeForm::DoubleVar => address + 3,
-    //     OpcodeForm::Ext => address + 3,
-    //     _ => address + 1
-    // };
-
     let (offset, operands) = decode_operands(map, offset, &operand_types);
     let (offset, store) = decode_store(map, version, offset, opcode);
     let (offset, branch) = decode_branch(map, offset, opcode);
