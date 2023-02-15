@@ -25,8 +25,8 @@ fn main() -> io::Result<()> {
     let version = buffer[0];
 
     let mut pc = word_value(&buffer, 6) as usize;
-    pc = 0xa325;
-    for i in 0..5 {
+    pc = 0xa372;
+    for i in 0..10 {
         let inst = decode_instruction(&buffer, version, pc);
         pc = inst.next_pc;
         println!("{}", inst);
