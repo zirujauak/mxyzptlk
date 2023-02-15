@@ -33,7 +33,7 @@ fn object_table_address(m: &Vec<u8>) -> usize {
 ///
 /// * `m` - Memory map
 /// * `p` - Property number
-fn default_property(m: &Vec<u8>, p: u8) -> Vec<u8> {
+pub fn default_property(m: &Vec<u8>, p: u8) -> Vec<u8> {
     let ota = object_table_address(m);
     let pa = ota + (p as usize * 2);
     let mut v = Vec::new();
