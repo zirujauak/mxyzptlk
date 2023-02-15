@@ -129,3 +129,20 @@ pub fn print_object_tree(m: &Vec<u8>, v: u8) {
         }
     }
 }
+
+pub fn print_default_properties(m: &Vec<u8>, v: u8) {
+    let prop_cnt = match v {
+        1 | 2 | 3 => 31,
+        4 | 5 | 6 | 7 | 8 => 63,
+        _ => 0
+    };
+
+    println!("Default properties:");
+    for i in 1..=prop_cnt {
+        print!("\t[{:2}]", i);
+        for b in default_property(m, i) {
+            print!(" {:02x}", b);
+        }
+        println!("");
+    }
+}
