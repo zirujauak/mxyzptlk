@@ -1,35 +1,25 @@
 #![crate_name = "mxyzptlk"]
+#[macro_use] extern crate log;
 
 use std::io;
 use std::io::prelude::*;
 use std::fs::File;
 
-pub mod object;
-pub mod object_tree;
-pub mod text;
-pub mod instruction;
+pub mod executor;
+// pub mod object_tree;
+// pub mod object;
+// pub mod text;
 
-use object_tree::*;
-use instruction::*;
-
-fn word_value(v: &Vec<u8>, a: usize) -> u16 {
-    let hb: u16 = (((v[a] as u16) << 8) as u16 & 0xFF00) as u16;
-    let lb: u16 = (v[a + 1] & 0xFF) as u16;
-    hb + lb
-}
+use executor::Executor;
+// use executor::instruction::Instruction;
 
 fn main() -> io::Result<()> {
-    let mut f = File::open("curses.z5")?;
+    let mut f = File::open("curses-r10.z3")?;
     let mut buffer = Vec::new();
     f.read_to_end(&mut buffer)?;
-    let version = buffer[0];
 
-    let mut pc = word_value(&buffer, 6) as usize;
-    pc = 0xa372;
-    for i in 0..10 {
-        let inst = decode_instruction(&buffer, version, pc);
-        pc = inst.next_pc;
-        println!("{}", inst);
-    }
+    executor::log::init();
+    let mut e = Executor::from_vec(buffer);
+    e.run();
     Ok(())
 }
