@@ -10,7 +10,6 @@ use state::State;
 use instruction::Instruction;
 
 pub struct Executor {
-    pub memory_map: Vec<u8>,
     pub state: State
 }
 
@@ -20,8 +19,8 @@ impl Executor {
 
         let state = State::new(&v, version);
         Executor { 
-            memory_map: v,
-            state }
+            state 
+        }
     }
 
     pub fn current_pc(&self) -> usize {
@@ -29,21 +28,20 @@ impl Executor {
     }
 
     pub fn instruction(&self) -> Instruction {
-        Instruction::from_address(&self.memory_map, header::version(&self.memory_map), self.current_pc())
+        Instruction::from_address(&self.state, self.current_pc())
     }
 
     pub fn run(&mut self) {
-        let version = header::version(&self.memory_map);
         let mut n = 1;
-        while true {
+        loop {
             if self.current_pc() == 0 {
                 panic!("Ending execution")
             }
 
             trace!("======> Instruction #{:04}", n);
-            let mut i = Instruction::from_address(&self.memory_map, version, self.current_pc());
+            let mut i = Instruction::from_address(&self.state, self.current_pc());
             trace!("{}", i);
-            self.state.current_frame_mut().pc = i.execute(&mut self.memory_map, version, &mut self.state);
+            self.state.current_frame_mut().pc = i.execute(&mut self.state);
             trace!("<====== Instruction #{:04}", n);
             n = n + 1;
         }

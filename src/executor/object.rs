@@ -167,7 +167,7 @@ fn default_property(memory_map: &Vec<u8>, property: u8) -> u16 {
     util::word_value(memory_map, property_address)
 }
 
-pub fn property(memory_map: &mut Vec<u8>, version: u8, object: usize, property: u8) -> u16 {
+pub fn property(memory_map: &Vec<u8>, version: u8, object: usize, property: u8) -> u16 {
     let property_address = property_address(memory_map, version, object, property);
     if property_address == 0 {
         default_property(memory_map, property)

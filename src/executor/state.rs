@@ -67,6 +67,8 @@ impl Frame {
 }
 
 pub struct State {
+    memory_map: Vec<u8>,
+    pub version: u8,
     frames: Vec<Frame>
 }
 
@@ -90,21 +92,31 @@ impl State {
         frames.push(f);
 
         State {
+            memory_map: memory_map.clone(),
+            version: memory_map[0],
             frames,
         }
     }
 
-    pub fn call(&mut self, memory_map: &Vec<u8>, version: u8, address: usize, return_address: usize, arguments: &Vec<u16>, result: Option<u8>) -> usize {
+    pub fn memory_map(&self) -> &Vec<u8> {
+        &self.memory_map
+    }
+
+    pub fn memory_map_mut(&mut self) -> &mut Vec<u8> {
+        self.memory_map.as_mut()
+    }
+
+    pub fn call(&mut self, address: usize, return_address: usize, arguments: &Vec<u16>, result: Option<u8>) -> usize {
         self.current_frame_mut().pc = return_address;
-        let f = Frame::call(memory_map, version, address, arguments, result);
+        let f = Frame::call(&self.memory_map(), self.version, address, arguments, result);
         self.frames.push(f);
         self.current_frame().pc
     }
 
-    pub fn return_fn(&mut self, memory_map: &mut Vec<u8>, _version: u8, result: u16) -> usize {
+    pub fn return_fn(&mut self, result: u16) -> usize {
         let f = self.pop_frame();
         match f.result {
-            Some(variable) => self.set_variable(memory_map, variable, result),
+            Some(variable) => self.set_variable(variable, result),
             None => {}
         }
 
@@ -123,25 +135,25 @@ impl State {
         self.frames.last_mut().unwrap()
     }
 
-    pub fn variable(&mut self, memory_map: &Vec<u8>, var: u8) -> u16 {
+    pub fn variable(&mut self, var: u8) -> u16 {
         if var == 0 {
             self.current_frame_mut().pop().unwrap()
         } else if var < 16 {
             self.current_frame().local_variables[var as usize - 1]
         } else {
-            util::word_value(memory_map, header::global_variable_table(memory_map) as usize + ((var as usize - 16) * 2))
+            util::word_value(&self.memory_map(), header::global_variable_table(&self.memory_map()) as usize + ((var as usize - 16) * 2))
         }
     }
 
-    pub fn set_variable(&mut self, memory_map: &mut Vec<u8>, var: u8, value: u16) {
+    pub fn set_variable(&mut self, var: u8, value: u16) {
         trace!("variable: set #{:02x} to #{:04x}", var, value);
         if var == 0 {
             self.current_frame_mut().push(value)
         } else if var < 16 {
             self.current_frame_mut().local_variables[var as usize - 1] = value
         } else {
-            let address = header::global_variable_table(memory_map) as usize + ((var as usize - 16) * 2);
-            util::set_word(memory_map, address, value)
+            let address = header::global_variable_table(&self.memory_map()) as usize + ((var as usize - 16) * 2);
+            util::set_word(self.memory_map_mut(), address, value)
         }
     }
 
@@ -153,5 +165,27 @@ impl State {
 
     pub fn seed(&mut self, seed: u64) {
         StdRng::seed_from_u64(seed as u64);
+    }
+
+    pub fn packed_routine_address(&self, address: u16) -> usize {
+        match self.version {
+            1 | 2 | 3 => address as usize * 2,
+            4 | 5 => address as usize * 4,
+            6 | 7 => (address as usize * 4) + (header::routine_offset(self.memory_map()) as usize * 8),
+            8 => address as usize * 8,
+            // TODO: error
+            _ => 0,
+        }
+    }
+
+    pub fn packed_string_address(&self, address: u16) -> usize {
+        match self.version {
+            1 | 2 | 3 => address as usize * 2,
+            4 | 5 => address as usize * 4,
+            6 | 7 => (address as usize * 4) + (header::strings_offset(self.memory_map()) as usize * 8),
+            8 => address as usize * 8,
+            // TODO: error
+            _ => 0,
+        }
     }
 }

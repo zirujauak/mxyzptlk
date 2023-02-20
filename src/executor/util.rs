@@ -1,5 +1,3 @@
-use super::header;
-
 pub fn word(high_byte: u8, low_byte: u8) -> u16 {
     ((high_byte as u16) << 8) & 0xFF00 | (low_byte as u16) & 0xFF
 }
@@ -29,13 +27,3 @@ pub fn set_word(memory_map: &mut Vec<u8>, address: usize, v: u16) {
     debug!("memory: set ${:05x} to #{:04x}", address, v)
 }
 
-pub fn packed_address(memory_map: &Vec<u8>, version: u8, address: u16) -> usize {
-    match version {
-        1 | 2 | 3 => address as usize * 2,
-        4 | 5 => address as usize * 4,
-        6 | 7 => (address as usize * 4) + (header::routine_offset(memory_map) as usize * 8),
-        8 => address as usize * 8,
-        // TODO: error
-        _ => 0,
-    }
-}
