@@ -542,7 +542,7 @@ impl Instruction {
         let object = self.operand_value(state, 0) as usize;
         trace!("GET_SIBLING #{:04x}", object);
 
-        let sibling = object::sibling(&state.memory_map(), state.version, object) as u16;
+        let sibling = object::sibling(state, object) as u16;
         state.set_variable(self.store.unwrap(), sibling);
         let condition = sibling != 0;
         self.execute_branch(condition)
@@ -552,7 +552,7 @@ impl Instruction {
         let object = self.operand_value(state, 0) as usize;
         trace!("GET_CHILD #{:04x}", object);
 
-        let child = object::child(&state.memory_map(), state.version, object) as u16;
+        let child = object::child(state, object) as u16;
         state.set_variable(self.store.unwrap(), child);
         let condition = child != 0;
         self.execute_branch(condition)
@@ -562,7 +562,7 @@ impl Instruction {
         let object = self.operand_value(state, 0) as usize;
         trace!("GET_PARENT #{:04x}", object);
 
-        let parent = object::parent(&state.memory_map(), state.version, object) as u16;
+        let parent = object::parent(state, object) as u16;
         state.set_variable(self.store.unwrap(), parent);
         self.next_address
     }
@@ -595,7 +595,7 @@ impl Instruction {
 
     fn print_obj(&self, state: &mut State) -> usize {
         let object = self.operand_value(state, 0) as usize;
-        let ztext = object::short_name(&state.memory_map(), state.version, object);
+        let ztext = object::short_name(state, object);
 
         let text = text::from_vec(&state.memory_map(), state.version, &ztext);
         print!("{}", text);
@@ -735,7 +735,7 @@ impl Instruction {
 
         trace!("TEST_ATTR #{:04x} #{:02}", object, attribute);
         let version = state.version;
-        let condition = object::attribute(state.memory_map_mut(), version, object, attribute);
+        let condition = object::attribute(state, object, attribute);
         self.execute_branch(condition)
     }
 
@@ -745,7 +745,7 @@ impl Instruction {
 
         trace!("SET_ATTR #{:04x} #{:02}", object, attribute);
         let version = state.version;
-        object::set_attribute(state.memory_map_mut(), version, object, attribute);
+        object::set_attribute(state, object, attribute);
         self.next_address
     }
 
@@ -755,7 +755,7 @@ impl Instruction {
 
         trace!("CLEAR_ATTR #{:04x} #{:02x}", object, attribute);
         let version = state.version;
-        object::clear_attribute(state.memory_map_mut(), version, object, attribute);
+        object::clear_attribute(state, object, attribute);
         self.next_address
     }
 
@@ -765,7 +765,7 @@ impl Instruction {
 
         trace!("GET_PROP #{:04x} ${:02x}", object, property);
 
-        let value = object::property(&state.memory_map(), state.version, object, property);
+        let value = object::property(state, object, property);
         state.set_variable(self.store.unwrap(), value);
         self.next_address
     }
@@ -845,7 +845,7 @@ impl Instruction {
 
         trace!("PUT_PROP #{:04x} #{:02x} #{:04x}", object, prop, value);
         let version = state.version;
-        object::set_property(state.memory_map_mut(), version, object, prop, value);
+        object::set_property(state, object, prop, value);
         self.next_address
     }
 
