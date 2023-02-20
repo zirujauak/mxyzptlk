@@ -261,7 +261,7 @@ impl Instruction {
         )
     }
 
-    fn store(
+    fn decode_store(
         memory_map: &Vec<u8>,
         version: u8,
         address: usize,
@@ -412,7 +412,7 @@ impl Instruction {
         let (next_address, opcode) = Self::opcode(&state.memory_map(), address);
         let (next_address, operands) = Self::operands(&state.memory_map(), next_address, &opcode);
         let (next_address, store) =
-            Self::store(&state.memory_map(), state.version, next_address, &opcode);
+            Self::decode_store(&state.memory_map(), state.version, next_address, &opcode);
         let (next_address, branch) =
             Self::branch(&state.memory_map(), state.version, next_address, &opcode);
         Instruction {
@@ -428,438 +428,439 @@ impl Instruction {
     pub fn execute(&mut self, state: &mut State) -> usize {
         match self.opcode.opcount {
             OperandCount::_0OP => match self.opcode.instruction {
-                0x0 => rtrue(state, &self),
-                0x1 => rfalse(state, &self),
-                0x2 => print_literal(state, &self),
-                0xB => new_line(state, &self),
+                0x0 => self.rtrue(state),
+                0x1 => self.rfalse(state),
+                0x2 => self.print_literal(state),
+                0xB => self.new_line(state),
                 _ => 0,
             },
             OperandCount::_1OP => match self.opcode.instruction {
-                0x1 => get_sibling(state, &self),
-                0x2 => get_child(state, &self),
-                0x3 => get_parent(state, &self),
-                0x5 => inc(state, &self),
-                0x6 => dec(state, &self),
-                0xA => print_obj(state, &self),
-                0xC => jump(state, &self),
-                0xD => print_paddr(state, &self),
-                0xF => call_1n(state, &self),
+                0x1 => self.get_sibling(state),
+                0x2 => self.get_child(state),
+                0x3 => self.get_parent(state),
+                0x5 => self.inc(state),
+                0x6 => self.dec(state),
+                0xA => self.print_obj(state),
+                0xC => self.jump(state),
+                0xD => self.print_paddr(state),
+                0xF => self.call_1n(state),
                 _ => 0,
             },
             OperandCount::_2OP => match self.opcode.instruction {
-                0x01 => je(state, &self),
-                0x02 => jl(state, &self),
-                0x09 => and(state, &self),
-                0x0A => test_attr(state, &self),
-                0x0B => set_attr(state, &self),
-                0x0C => clear_attr(state, &self),
-                0x0D => store(state, &self),
-                0x0F => loadw(state, &self),
-                0x10 => loadb(state, &self),
-                0x15 => sub(state, &self),
-                0x11 => get_prop(state, &self),
+                0x01 => self.je(state),
+                0x02 => self.jl(state),
+                0x09 => self.and(state),
+                0x0A => self.test_attr(state),
+                0x0B => self.set_attr(state),
+                0x0C => self.clear_attr(state),
+                0x0D => self.store(state),
+                0x0F => self.loadw(state),
+                0x10 => self.loadb(state),
+                0x15 => self.sub(state),
+                0x11 => self.get_prop(state),
                 _ => 0,
             },
             OperandCount::_VAR => match self.opcode.instruction {
-                0x00 => call(state, &self),
-                0x01 => storew(state, &self),
-                0x02 => storeb(state, &self),
-                0x03 => put_prop(state, &self),
-                0x04 => read(state, &self),
-                0x05 => print_char(state, &self),
-                0x06 => print_num(state, &self),
-                0x07 => random(state, &self),
+                0x00 => self.call(state),
+                0x01 => self.storew(state),
+                0x02 => self.storeb(state),
+                0x03 => self.put_prop(state),
+                0x04 => self.read(state),
+                0x05 => self.print_char(state),
+                0x06 => self.print_num(state),
+                0x07 => self.random(state),
                 _ => 0,
             },
         }
     }
-}
 
-fn operand_value(state: &mut State, operand: &Operand) -> u16 {
-    match operand.operand_type {
-        OperandType::SmallConstant | OperandType::LargeConstant => operand.operand_value,
-        OperandType::Variable => state.variable(operand.operand_value as u8),
-    }
-}
-
-fn branch(condition: bool, instruction: &Instruction) -> usize {
-    if condition == instruction.branch.as_ref().unwrap().condition {
-        instruction.branch.as_ref().unwrap().address
-    } else {
-        instruction.next_address
-    }
-}
-
-// 0OP
-fn rtrue(state: &mut State, _instruction: &Instruction) -> usize {
-    trace!("RTRUE");
-    state.return_fn(1 as u16)
-}
-
-fn rfalse(state: &mut State, _instruction: &Instruction) -> usize {
-    trace!("RFALSE");
-    state.return_fn(0 as u16)
-}
-
-fn print_literal(state: &State, instruction: &Instruction) -> usize {
-    let mut ztext = Vec::new();
-
-    let mut word = 0;
-    while word & 0x8000 == 0 {
-        word = util::word_value(
-            &state.memory_map(),
-            instruction.next_address + (ztext.len() * 2),
-        );
-        ztext.push(word);
-    }
-
-    let text = text::from_vec(&state.memory_map(), state.version, &ztext);
-    print!("{}", text);
-    trace!("PRINT \"{}\"", text);
-
-    instruction.next_address + ztext.len() * 2
-}
-
-fn new_line(_state: &State, instruction: &Instruction) -> usize {
-    println!("");
-    trace!("NEW_LINE");
-    instruction.next_address
-}
-
-// 1OP
-fn get_sibling(state: &mut State, instruction: &Instruction) -> usize {
-    let object = operand_value(state, &instruction.operands[0]) as usize;
-    trace!("GET_SIBLING #{:04x}", object);
-
-    let sibling = object::sibling(&state.memory_map(), state.version, object) as u16;
-    state.set_variable(instruction.store.unwrap(), sibling);
-    let condition = sibling != 0;
-    branch(condition, instruction)
-}
-
-fn get_child(state: &mut State, instruction: &Instruction) -> usize {
-    let object = operand_value(state, &instruction.operands[0]) as usize;
-    trace!("GET_CHILD #{:04x}", object);
-
-    let child = object::child(&state.memory_map(), state.version, object) as u16;
-    state.set_variable(instruction.store.unwrap(), child);
-    let condition = child != 0;
-    branch(condition, instruction)
-}
-
-fn get_parent(state: &mut State, instruction: &Instruction) -> usize {
-    let object = operand_value(state, &instruction.operands[0]) as usize;
-    trace!("GET_PARENT #{:04x}", object);
-
-    let parent = object::parent(&state.memory_map(), state.version, object) as u16;
-    state.set_variable(instruction.store.unwrap(), parent);
-    instruction.next_address
-}
-
-fn inc(state: &mut State, instruction: &Instruction) -> usize {
-    let arg = operand_value(state, &instruction.operands[0]) as u8;
-    trace!("INC #{:02x}", arg);
-    let val = state.variable(arg);
-    let new_val = val as i16 + 1;
-    state.set_variable(arg, new_val as u16);
-    instruction.next_address
-}
-
-fn dec(state: &mut State, instruction: &Instruction) -> usize {
-    let arg = operand_value(state, &instruction.operands[0]) as u8;
-    trace!("DEC #{:02x}", arg);
-    let val = state.variable(arg);
-    let new_val = val as i16 - 1;
-    state.set_variable(arg, new_val as u16);
-    instruction.next_address
-}
-
-fn print_obj(state: &mut State, instruction: &Instruction) -> usize {
-    let object = operand_value(state, &instruction.operands[0]) as usize;
-    let ztext = object::short_name(&state.memory_map(), state.version, object);
-
-    let text = text::from_vec(&state.memory_map(), state.version, &ztext);
-    print!("{}", text);
-    trace!("PRINT_OBJ #{:04x} \"{}\'", object, text);
-    instruction.next_address
-}
-
-fn jump(state: &mut State, instruction: &Instruction) -> usize {
-    let offset = operand_value(state, &instruction.operands[0]) as i16;
-    let address = (instruction.next_address as isize + offset as isize - 2) as usize;
-    trace!("JUMP ${:05x}", address);
-    address
-}
-
-fn print_paddr(state: &mut State, instruction: &Instruction) -> usize {
-    let addr = operand_value(state, &instruction.operands[0]);
-    let address = state.packed_string_address(addr);
-    trace!("PRINT_PADDR ${:05x}", addr);
-
-    let text = text::as_text(&state.memory_map(), state.version, address);
-    print!("{}", text);
-    instruction.next_address
-}
-
-fn call_1n(state: &mut State, instruction: &Instruction) -> usize {
-    let addr = operand_value(state, &instruction.operands[0]);
-    let address = state.packed_routine_address(addr);
-
-    trace!("CALL_1N ${:05x}", address);
-    state.call(address, instruction.next_address, &Vec::new(), None)
-}
-
-// 2OP
-fn je(state: &mut State, instruction: &Instruction) -> usize {
-    let a = operand_value(state, &instruction.operands[0]) as i16;
-    let b = operand_value(state, &instruction.operands[1]) as i16;
-
-    let condition = a == b;
-    trace!(
-        "JE #{:04x} #{:04x} [{}]",
-        a,
-        b,
-        instruction
-            .branch
-            .as_ref()
-            .unwrap()
-            .condition
-            .to_string()
-            .to_uppercase()
-    );
-    branch(condition, instruction)
-}
-
-fn jl(state: &mut State, instruction: &Instruction) -> usize {
-    let a = operand_value(state, &instruction.operands[0]) as i16;
-    let b = operand_value(state, &instruction.operands[1]) as i16;
-
-    let condition = a < b;
-    trace!(
-        "JL #{:04x} #{:04x} [{}]",
-        a,
-        b,
-        instruction
-            .branch
-            .as_ref()
-            .unwrap()
-            .condition
-            .to_string()
-            .to_uppercase()
-    );
-
-    branch(condition, instruction)
-}
-
-fn and(state: &mut State, instruction: &Instruction) -> usize {
-    let a = operand_value(state, &instruction.operands[0]) as u16;
-    let b = operand_value(state, &instruction.operands[1]) as u16;
-
-    trace!("AND #{:04x} #{:04x}", a, b);
-    let v = a & b;
-    state.set_variable(instruction.store.unwrap(), v);
-    instruction.next_address
-}
-
-fn loadw(state: &mut State, instruction: &Instruction) -> usize {
-    let addr = operand_value(state, &instruction.operands[0]) as usize;
-    let index = operand_value(state, &instruction.operands[1]) as usize;
-
-    let address = addr + (index * 2);
-    let value = util::word_value(&state.memory_map(), address);
-    trace!(
-        "LOADW ${:05x} -> {:02x}",
-        address,
-        instruction.store.unwrap()
-    );
-    state.set_variable(instruction.store.unwrap(), value);
-    instruction.next_address
-}
-
-fn loadb(state: &mut State, instruction: &Instruction) -> usize {
-    let addr = operand_value(state, &instruction.operands[0]) as usize;
-    let index = operand_value(state, &instruction.operands[1]) as usize;
-
-    let address = addr + index;
-    let value = util::byte_value(&state.memory_map(), address) as u16;
-    trace!(
-        "LOADB ${:05x} -> {:02}",
-        address,
-        instruction.store.unwrap()
-    );
-    state.set_variable(instruction.store.unwrap(), value);
-    instruction.next_address
-}
-
-fn store(state: &mut State, instruction: &Instruction) -> usize {
-    let var = operand_value(state, &instruction.operands[0]) as u8;
-    let value = operand_value(state, &instruction.operands[1]) as u16;
-
-    trace!("STORE #{:04x} -> #{:02x}", value, var);
-    state.set_variable(var, value);
-    instruction.next_address
-}
-
-fn test_attr(state: &mut State, instruction: &Instruction) -> usize {
-    let object = operand_value(state, &instruction.operands[0]) as usize;
-    let attribute = operand_value(state, &instruction.operands[1]) as u8;
-
-    trace!("TEST_ATTR #{:04x} #{:02}", object, attribute);
-    let version = state.version;
-    let condition = object::attribute(state.memory_map_mut(), version, object, attribute);
-    branch(condition, instruction)
-}
-
-fn set_attr(state: &mut State, instruction: &Instruction) -> usize {
-    let object = operand_value(state, &instruction.operands[0]) as usize;
-    let attribute = operand_value(state, &instruction.operands[1]) as u8;
-
-    trace!("SET_ATTR #{:04x} #{:02}", object, attribute);
-    let version = state.version;
-    object::set_attribute(state.memory_map_mut(), version, object, attribute);
-    instruction.next_address
-}
-
-fn clear_attr(state: &mut State, instruction: &Instruction) -> usize {
-    let object = operand_value(state, &instruction.operands[0]) as usize;
-    let attribute = operand_value(state, &instruction.operands[1]) as u8;
-
-    trace!("CLEAR_ATTR #{:04x} #{:02x}", object, attribute);
-    let version = state.version;
-    object::clear_attribute(state.memory_map_mut(), version, object, attribute);
-    instruction.next_address
-}
-
-fn get_prop(state: &mut State, instruction: &Instruction) -> usize {
-    let object = operand_value(state, &instruction.operands[0]) as usize;
-    let property = operand_value(state, &instruction.operands[1]) as u8;
-
-    trace!("GET_PROP #{:04x} ${:02x}", object, property);
-
-    let value = object::property(&state.memory_map(), state.version, object, property);
-    state.set_variable(instruction.store.unwrap(), value);
-    instruction.next_address
-}
-
-fn sub(state: &mut State, instruction: &Instruction) -> usize {
-    let a = operand_value(state, &instruction.operands[0]) as i16;
-    let b = operand_value(state, &instruction.operands[1]) as i16;
-
-    trace!("SUB #{:04x} #{:04x}", a, b);
-    let value = (a - b) as u16;
-    state.set_variable(instruction.store.unwrap(), value);
-    instruction.next_address
-}
-
-// VAR
-fn call(state: &mut State, instruction: &Instruction) -> usize {
-    let addr = operand_value(state, &instruction.operands[0]);
-    let address = state.packed_routine_address(addr);
-
-    let mut arguments = Vec::new();
-    for i in 1..instruction.operands.len() {
-        arguments.push(operand_value(state, &instruction.operands[i]))
-    }
-    trace!("CALL ${:05x} with {} arg(s)", address, arguments.len());
-    state.call(
-        address,
-        instruction.next_address,
-        &arguments,
-        instruction.store,
-    )
-}
-
-fn storew(state: &mut State, instruction: &Instruction) -> usize {
-    let address = operand_value(state, &instruction.operands[0]) as usize;
-    let index = operand_value(state, &instruction.operands[1]) as usize;
-    let value = operand_value(state, &instruction.operands[2]) as u16;
-
-    trace!("STOREW #{:04x} to ${:05x}", value, address + (index * 2));
-    util::set_word(state.memory_map_mut(), address + (index * 2), value);
-    instruction.next_address
-}
-
-fn storeb(state: &mut State, instruction: &Instruction) -> usize {
-    let address = operand_value(state, &instruction.operands[0]) as usize;
-    let index = operand_value(state, &instruction.operands[1]) as usize;
-    let value = operand_value(state, &instruction.operands[2]) as u8;
-
-    trace!("STOREB #{:02x} to ${:05x}", value, address + index);
-    util::set_byte(state.memory_map_mut(), address + index, value);
-    instruction.next_address
-}
-
-fn put_prop(state: &mut State, instruction: &Instruction) -> usize {
-    let object = operand_value(state, &instruction.operands[0]) as usize;
-    let prop = operand_value(state, &instruction.operands[1]) as u8;
-    let value = operand_value(state, &instruction.operands[2]) as u16;
-
-    trace!("PUT_PROP #{:04x} #{:02x} #{:04x}", object, prop, value);
-    let version = state.version;
-    object::set_property(state.memory_map_mut(), version, object, prop, value);
-    instruction.next_address
-}
-
-pub fn read(state: &mut State, instruction: &Instruction) -> usize {
-    let text = operand_value(state, &instruction.operands[0]) as u16;
-    let parse = operand_value(state, &instruction.operands[1]) as u16;
-
-    match state.version {
-        1 | 2 | 3 => {
-            trace!("SREAD #{:04x} #{:04x}", text, parse);
+    fn operand_value(&self, state: &mut State, index: usize) -> u16 {
+        match self.operands[index].operand_type {
+            OperandType::SmallConstant | OperandType::LargeConstant => self.operands[index].operand_value,
+            OperandType::Variable => state.variable(self.operands[index].operand_value as u8),
         }
-        4 | 5 | 6 | 7 | 8 => {
-            let time = operand_value(state, &instruction.operands[2]) as u16;
-            let routine = operand_value(state, &instruction.operands[3]) as u16;
-            trace!(
-                "{}READ #{:04x} #{:04x} #{:04x} #{:04x}",
-                if state.version == 4 { "S" } else { "A" },
-                text,
-                parse,
-                time,
-                routine
+    }
+
+    fn execute_branch(&self, condition: bool) -> usize {
+        if condition == self.branch.as_ref().unwrap().condition {
+            self.branch.as_ref().unwrap().address
+        } else {
+            self.next_address
+        }
+    }
+
+    // 0OP
+    fn rtrue(&self, state: &mut State) -> usize {
+        trace!("RTRUE");
+        state.return_fn(1 as u16)
+    }
+
+    fn rfalse(&self, state: &mut State) -> usize {
+        trace!("RFALSE");
+        state.return_fn(0 as u16)
+    }
+
+    fn print_literal(&self, state: &State) -> usize {
+        let mut ztext = Vec::new();
+
+        let mut word = 0;
+        while word & 0x8000 == 0 {
+            word = util::word_value(
+                &state.memory_map(),
+                self.next_address + (ztext.len() * 2),
             );
+            ztext.push(word);
         }
-        _ => {}
+
+        let text = text::from_vec(&state.memory_map(), state.version, &ztext);
+        print!("{}", text);
+        trace!("PRINT \"{}\"", text);
+
+        self.next_address + ztext.len() * 2
     }
 
-    panic!("read not implemented")
-}
-
-fn print_char(state: &mut State, instruction: &Instruction) -> usize {
-    let c = operand_value(state, &instruction.operands[0]) as u8;
-
-    trace!("PRINT_CHAR {}", c as char);
-    print!("{}", c as char);
-    instruction.next_address
-}
-
-fn print_num(state: &mut State, instruction: &Instruction) -> usize {
-    let n = operand_value(state, &instruction.operands[0]);
-    trace!("PRINT_NUM {}", n);
-    print!("{}", n);
-    instruction.next_address
-}
-
-fn random(state: &mut State, instruction: &Instruction) -> usize {
-    let range = operand_value(state, &instruction.operands[0]) as i16;
-    trace!("RANDOM #{}", range);
-
-    if range < 0 {
-        state.seed(range as u64);
-        state.set_variable(instruction.store.unwrap(), 0);
+    fn new_line(&self, _state: &State) -> usize {
+        println!("");
+        trace!("NEW_LINE");
+        self.next_address
     }
-    if range == 0 {
-        state.seed(
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Error geting time")
-                .as_millis() as u64,
+
+    // 1OP
+    fn get_sibling(&self, state: &mut State) -> usize {
+        let object = self.operand_value(state, 0) as usize;
+        trace!("GET_SIBLING #{:04x}", object);
+
+        let sibling = object::sibling(&state.memory_map(), state.version, object) as u16;
+        state.set_variable(self.store.unwrap(), sibling);
+        let condition = sibling != 0;
+        self.execute_branch(condition)
+    }
+
+    fn get_child(&self, state: &mut State) -> usize {
+        let object = self.operand_value(state, 0) as usize;
+        trace!("GET_CHILD #{:04x}", object);
+
+        let child = object::child(&state.memory_map(), state.version, object) as u16;
+        state.set_variable(self.store.unwrap(), child);
+        let condition = child != 0;
+        self.execute_branch(condition)
+    }
+
+    fn get_parent(&self, state: &mut State) -> usize {
+        let object = self.operand_value(state, 0) as usize;
+        trace!("GET_PARENT #{:04x}", object);
+
+        let parent = object::parent(&state.memory_map(), state.version, object) as u16;
+        state.set_variable(self.store.unwrap(), parent);
+        self.next_address
+    }
+
+    fn inc(&self, state: &mut State) -> usize {
+        let arg = self.operand_value(state, 0) as u8;
+        trace!("INC #{:02x}", arg);
+        let val = state.variable(arg);
+        let new_val = val as i16 + 1;
+        state.set_variable(arg, new_val as u16);
+        self.next_address
+    }
+
+    fn dec(&self, state: &mut State) -> usize {
+        let arg = self.operand_value(state, 0) as u8;
+        trace!("DEC #{:02x}", arg);
+        let val = state.variable(arg);
+        let new_val = val as i16 - 1;
+        state.set_variable(arg, new_val as u16);
+        self.next_address
+    }
+
+    fn print_obj(&self, state: &mut State) -> usize {
+        let object = self.operand_value(state, 0) as usize;
+        let ztext = object::short_name(&state.memory_map(), state.version, object);
+
+        let text = text::from_vec(&state.memory_map(), state.version, &ztext);
+        print!("{}", text);
+        trace!("PRINT_OBJ #{:04x} \"{}\'", object, text);
+        self.next_address
+    }
+
+    fn jump(&self, state: &mut State) -> usize {
+        let offset = self.operand_value(state, 0) as i16;
+        let address = (self.next_address as isize + offset as isize - 2) as usize;
+        trace!("JUMP ${:05x}", address);
+        address
+    }
+
+    fn print_paddr(&self, state: &mut State) -> usize {
+        let addr = self.operand_value(state, 0);
+        let address = state.packed_string_address(addr);
+        trace!("PRINT_PADDR ${:05x}", addr);
+
+        let text = text::as_text(&state.memory_map(), state.version, address);
+        print!("{}", text);
+        self.next_address
+    }
+
+    fn call_1n(&self, state: &mut State) -> usize {
+        let addr = self.operand_value(state, 0);
+        let address = state.packed_routine_address(addr);
+
+        trace!("CALL_1N ${:05x}", address);
+        state.call(address, self.next_address, &Vec::new(), None)
+    }
+
+    // 2OP
+    fn je(&self, state: &mut State) -> usize {
+        let a = self.operand_value(state, 0) as i16;
+        let b = self.operand_value(state, 1) as i16;
+
+        let condition = a == b;
+        trace!(
+            "JE #{:04x} #{:04x} [{}]",
+            a,
+            b,
+            self
+                .branch
+                .as_ref()
+                .unwrap()
+                .condition
+                .to_string()
+                .to_uppercase()
         );
-        state.set_variable(instruction.store.unwrap(), 0);
-    } else {
-        state.set_variable(instruction.store.unwrap(), state.random(range as u16));
+        self.execute_branch(condition)
     }
 
-    instruction.next_address
+    fn jl(&self, state: &mut State) -> usize {
+        let a = self.operand_value(state, 0) as i16;
+        let b = self.operand_value(state, 1) as i16;
+
+        let condition = a < b;
+        trace!(
+            "JL #{:04x} #{:04x} [{}]",
+            a,
+            b,
+            self
+                .branch
+                .as_ref()
+                .unwrap()
+                .condition
+                .to_string()
+                .to_uppercase()
+        );
+
+        self.execute_branch(condition)
+    }
+
+    fn and(&self, state: &mut State) -> usize {
+        let a = self.operand_value(state, 0) as u16;
+        let b = self.operand_value(state, 1) as u16;
+
+        trace!("AND #{:04x} #{:04x}", a, b);
+        let v = a & b;
+        state.set_variable(self.store.unwrap(), v);
+        self.next_address
+    }
+
+    fn loadw(&self, state: &mut State) -> usize {
+        let addr = self.operand_value(state, 0) as usize;
+        let index = self.operand_value(state, 1) as usize;
+
+        let address = addr + (index * 2);
+        let value = util::word_value(&state.memory_map(), address);
+        trace!(
+            "LOADW ${:05x} -> {:02x}",
+            address,
+            self.store.unwrap()
+        );
+        state.set_variable(self.store.unwrap(), value);
+        self.next_address
+    }
+
+    fn loadb(&self, state: &mut State) -> usize {
+        let addr = self.operand_value(state, 0) as usize;
+        let index = self.operand_value(state, 1) as usize;
+
+        let address = addr + index;
+        let value = util::byte_value(&state.memory_map(), address) as u16;
+        trace!(
+            "LOADB ${:05x} -> {:02}",
+            address,
+            self.store.unwrap()
+        );
+        state.set_variable(self.store.unwrap(), value);
+        self.next_address
+    }
+
+    fn store(&self, state: &mut State) -> usize {
+        let var = self.operand_value(state, 0) as u8;
+        let value = self.operand_value(state, 1) as u16;
+
+        trace!("STORE #{:04x} -> #{:02x}", value, var);
+        state.set_variable(var, value);
+        self.next_address
+    }
+
+    fn test_attr(&self, state: &mut State) -> usize {
+        let object = self.operand_value(state, 0) as usize;
+        let attribute = self.operand_value(state, 1) as u8;
+
+        trace!("TEST_ATTR #{:04x} #{:02}", object, attribute);
+        let version = state.version;
+        let condition = object::attribute(state.memory_map_mut(), version, object, attribute);
+        self.execute_branch(condition)
+    }
+
+    fn set_attr(&self, state: &mut State) -> usize {
+        let object = self.operand_value(state, 0) as usize;
+        let attribute = self.operand_value(state, 1) as u8;
+
+        trace!("SET_ATTR #{:04x} #{:02}", object, attribute);
+        let version = state.version;
+        object::set_attribute(state.memory_map_mut(), version, object, attribute);
+        self.next_address
+    }
+
+    fn clear_attr(&self, state: &mut State) -> usize {
+        let object = self.operand_value(state, 0) as usize;
+        let attribute = self.operand_value(state, 1) as u8;
+
+        trace!("CLEAR_ATTR #{:04x} #{:02x}", object, attribute);
+        let version = state.version;
+        object::clear_attribute(state.memory_map_mut(), version, object, attribute);
+        self.next_address
+    }
+
+    fn get_prop(&self, state: &mut State) -> usize {
+        let object = self.operand_value(state, 0) as usize;
+        let property = self.operand_value(state, 1) as u8;
+
+        trace!("GET_PROP #{:04x} ${:02x}", object, property);
+
+        let value = object::property(&state.memory_map(), state.version, object, property);
+        state.set_variable(self.store.unwrap(), value);
+        self.next_address
+    }
+
+    fn sub(&self, state: &mut State) -> usize {
+        let a = self.operand_value(state, 0) as i16;
+        let b = self.operand_value(state, 1) as i16;
+
+        trace!("SUB #{:04x} #{:04x}", a, b);
+        let value = (a - b) as u16;
+        state.set_variable(self.store.unwrap(), value);
+        self.next_address
+    }
+
+    // VAR
+    fn call(&self, state: &mut State) -> usize {
+        let addr = self.operand_value(state, 0);
+        let address = state.packed_routine_address(addr);
+
+        let mut arguments = Vec::new();
+        for i in 1..self.operands.len() {
+            arguments.push(self.operand_value(state, i))
+        }
+        trace!("CALL ${:05x} with {} arg(s)", address, arguments.len());
+        state.call(
+            address,
+            self.next_address,
+            &arguments,
+            self.store,
+        )
+    }
+
+    fn storew(&self, state: &mut State) -> usize {
+        let address = self.operand_value(state, 0) as usize;
+        let index = self.operand_value(state, 1) as usize;
+        let value = self.operand_value(state, 2) as u16;
+
+        trace!("STOREW #{:04x} to ${:05x}", value, address + (index * 2));
+        util::set_word(state.memory_map_mut(), address + (index * 2), value);
+        self.next_address
+    }
+
+    fn storeb(&self, state: &mut State) -> usize {
+        let address = self.operand_value(state, 0) as usize;
+        let index = self.operand_value(state, 1) as usize;
+        let value = self.operand_value(state, 2) as u8;
+
+        trace!("STOREB #{:02x} to ${:05x}", value, address + index);
+        util::set_byte(state.memory_map_mut(), address + index, value);
+        self.next_address
+    }
+
+    fn put_prop(&self, state: &mut State) -> usize {
+        let object = self.operand_value(state, 0) as usize;
+        let prop = self.operand_value(state, 1) as u8;
+        let value = self.operand_value(state, 2) as u16;
+
+        trace!("PUT_PROP #{:04x} #{:02x} #{:04x}", object, prop, value);
+        let version = state.version;
+        object::set_property(state.memory_map_mut(), version, object, prop, value);
+        self.next_address
+    }
+
+    pub fn read(&self, state: &mut State) -> usize {
+        let text = self.operand_value(state, 0) as u16;
+        let parse = self.operand_value(state, 1) as u16;
+
+        match state.version {
+            1 | 2 | 3 => {
+                trace!("SREAD #{:04x} #{:04x}", text, parse);
+            }
+            4 | 5 | 6 | 7 | 8 => {
+                let time = self.operand_value(state, 2) as u16;
+                let routine = self.operand_value(state, 3) as u16;
+                trace!(
+                    "{}READ #{:04x} #{:04x} #{:04x} #{:04x}",
+                    if state.version == 4 { "S" } else { "A" },
+                    text,
+                    parse,
+                    time,
+                    routine
+                );
+            }
+            _ => {}
+        }
+
+        panic!("read not implemented")
+    }
+
+    fn print_char(&self, state: &mut State) -> usize {
+        let c = self.operand_value(state, 0) as u8;
+
+        trace!("PRINT_CHAR {}", c as char);
+        print!("{}", c as char);
+        self.next_address
+    }
+
+    fn print_num(&self, state: &mut State) -> usize {
+        let n = self.operand_value(state, 0);
+        trace!("PRINT_NUM {}", n);
+        print!("{}", n);
+        self.next_address
+    }
+
+    fn random(&self, state: &mut State) -> usize {
+        let range = self.operand_value(state, 0) as i16;
+        trace!("RANDOM #{}", range);
+
+        let v = if range < 0 {
+            state.seed(range as u64);
+            0
+        } else if range == 0 {
+            state.seed(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Error geting time")
+                    .as_millis() as u64,
+            );
+            0
+        } else {
+            state.random(range as u16)
+        };
+
+        state.set_variable(self.store.unwrap(), v);
+
+        self.next_address
+    }
 }
