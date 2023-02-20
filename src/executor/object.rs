@@ -188,7 +188,7 @@ pub fn property(state: &State, object: usize, property: u8) -> u16 {
         }
     }
 }
-pub fn set_property(state: &State, object: usize, property: u8, value: u16) {
+pub fn set_property(state: &mut State, object: usize, property: u8, value: u16) {
     trace!(
         "Set property #{:02} on object #{:04x} to #{:04x}",
         property,
