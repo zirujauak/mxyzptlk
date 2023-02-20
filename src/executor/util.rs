@@ -1,16 +1,6 @@
 pub fn word(high_byte: u8, low_byte: u8) -> u16 {
     ((high_byte as u16) << 8) & 0xFF00 | (low_byte as u16) & 0xFF
 }
-pub fn word_value(memory_map: &Vec<u8>, address: usize) -> u16 {
-    word(
-        byte_value(memory_map, address),
-        byte_value(memory_map, address + 1),
-    )
-}
-
-pub fn byte_value(memory_map: &Vec<u8>, address: usize) -> u8 {
-    memory_map[address]
-}
 
 pub fn set_byte(memory_map: &mut Vec<u8>, address: usize, v: u8) {
     memory_map[address] = v;
