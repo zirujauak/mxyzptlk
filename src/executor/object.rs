@@ -1,11 +1,10 @@
 use super::header;
 use super::state::State;
-use super::util;
 
 fn object_address(state: &State, object: usize) -> usize {
     match state.version {
-        1 | 2 | 3 => header::object_table(&state.memory_map()) + 62 + (9 * (object - 1)),
-        4 | 5 | 6 | 7 | 8 => header::object_table(&state.memory_map()) + 126 + (14 * (object - 1)),
+        1 | 2 | 3 => header::object_table(state) + 62 + (9 * (object - 1)),
+        4 | 5 | 6 | 7 | 8 => header::object_table(state) + 126 + (14 * (object - 1)),
         // TODO: Error
         _ => 0,
     }
@@ -19,7 +18,7 @@ pub fn attribute(state: &State, object: usize, attribute: u8) -> bool {
     match state.version {
         1 | 2 | 3 => {
             if attribute < 32 {
-                util::byte_value(&state.memory_map(), address) & mask == mask
+                state.byte_value(address) & mask == mask
             } else {
                 warn!("Invalid attribute #{:02x}", attribute);
                 false
@@ -27,7 +26,7 @@ pub fn attribute(state: &State, object: usize, attribute: u8) -> bool {
         }
         4 | 5 | 6 | 7 | 8 => {
             if attribute < 48 {
-                util::byte_value(&state.memory_map(), address) & mask == mask
+                state.byte_value(address) & mask == mask
             } else {
                 warn!("Invalid attribute #{:02x}", attribute);
                 false
@@ -42,18 +41,18 @@ pub fn set_attribute(state: &mut State, object: usize, attribute: u8) {
     let offset = attribute as usize / 8;
     let address = object_address + offset;
     let mask = 1 << (7 - (attribute % 8));
-    let attribute_byte = util::byte_value(&state.memory_map(), address);
+    let attribute_byte = state.byte_value(address);
     match state.version {
         1 | 2 | 3 => {
             if attribute < 32 {
-                util::set_byte(state.memory_map_mut(), address, attribute_byte | mask)
+                state.set_byte(address, attribute_byte | mask)
             } else {
                 warn!("Invalid attribute #{:02x}", attribute)
             }
         }
         4 | 5 | 6 | 7 | 8 => {
             if attribute < 48 {
-                util::set_byte(state.memory_map_mut(), address, attribute_byte | mask)
+                state.set_byte(address, attribute_byte | mask)
             } else {
                 warn!("Invalid attribute #{:02x}", attribute)
             }
@@ -66,17 +65,17 @@ pub fn clear_attribute(state: &mut State, object: usize, attribute: u8) {
     let address = object_address(state, object);
     let mask: u8 = 1 << 7 - (attribute % 8);
     let offset = attribute as usize / 8;
-    let byte = util::byte_value(&state.memory_map(), address + offset);
+    let byte = state.byte_value(address + offset);
 
     match state.version {
         1 | 2 | 3 => {
             if attribute < 32 {
-                util::set_byte(state.memory_map_mut(), address + offset, byte & !mask);
+                state.set_byte(address + offset, byte & !mask);
             }
         }
         4 | 5 | 6 | 7 | 8 => {
             if attribute < 48 {
-                util::set_byte(state.memory_map_mut(), address + offset, byte & !mask)
+                state.set_byte(address + offset, byte & !mask)
             }
         }
         _ => {}
@@ -86,8 +85,8 @@ pub fn clear_attribute(state: &mut State, object: usize, attribute: u8) {
 fn property_table_address(state: &State, object: usize) -> usize {
     let object_table = object_address(state, object);
     match state.version {
-        1 | 2 | 3 => util::word_value(&state.memory_map(), object_table + 7) as usize,
-        4 | 5 | 6 | 7 | 8 => util::word_value(&state.memory_map(), object_table + 12) as usize,
+        1 | 2 | 3 => state.word_value(object_table + 7) as usize,
+        4 | 5 | 6 | 7 | 8 => state.word_value(object_table + 12) as usize,
         _ => 0,
     }
 }
@@ -95,13 +94,13 @@ fn property_table_address(state: &State, object: usize) -> usize {
 fn property_size(state: &State, property_address: usize) -> u8 {
     match state.version {
         1 | 2 | 3 => {
-            let size_byte = util::byte_value(&state.memory_map(), property_address);
+            let size_byte = state.byte_value(property_address);
             (size_byte / 32) + 1
         }
         4 | 5 | 6 | 7 | 8 => {
-            let size_byte = util::byte_value(&state.memory_map(), property_address);
+            let size_byte = state.byte_value(property_address);
             if size_byte & 0x80 == 0x80 {
-                util::byte_value(&state.memory_map(), property_address + 1) & 0x3F
+                state.byte_value(property_address + 1) & 0x3F
             } else {
                 if size_byte & 0x40 == 0x40 {
                     2
@@ -116,10 +115,10 @@ fn property_size(state: &State, property_address: usize) -> u8 {
 
 fn property_address(state: &State, object: usize, property: u8) -> usize {
     let property_table = property_table_address(state, object);
-    let header_size = util::byte_value(&state.memory_map(), property_table) as usize;
+    let header_size = state.byte_value(property_table) as usize;
     let mut property_address = property_table + 1 + (header_size * 2);
 
-    let mut size_byte = util::byte_value(&state.memory_map(), property_address);
+    let mut size_byte = state.byte_value(property_address);
     while size_byte != 0 {
         match state.version {
             1 | 2 | 3 => {
@@ -131,7 +130,7 @@ fn property_address(state: &State, object: usize, property: u8) -> usize {
                     return 0;
                 } else {
                     property_address = property_address + 1 + prop_size;
-                    size_byte = util::byte_value(&state.memory_map(), property_address);
+                    size_byte = state.byte_value(property_address);
                 }
             }
             4 | 5 | 6 | 7 | 8 => {
@@ -139,7 +138,7 @@ fn property_address(state: &State, object: usize, property: u8) -> usize {
                 let mut prop_data = 1;
                 let prop_size = if size_byte & 0x80 == 0x80 {
                     prop_data = 2;
-                    util::byte_value(&state.memory_map(), property_address + 1) as usize & 0x3F
+                    state.byte_value(property_address + 1) as usize & 0x3F
                 } else {
                     if size_byte & 0x40 == 0x40 {
                         2
@@ -153,7 +152,7 @@ fn property_address(state: &State, object: usize, property: u8) -> usize {
                     return 0;
                 } else {
                     property_address = property_address + prop_data + prop_size;
-                    size_byte = util::byte_value(&state.memory_map(), property_address);
+                    size_byte = state.byte_value(property_address);
                 }
             }
             _ => return 0,
@@ -163,9 +162,9 @@ fn property_address(state: &State, object: usize, property: u8) -> usize {
 }
 
 fn default_property(state: &State, property: u8) -> u16 {
-    let object_table = header::object_table(&state.memory_map());
+    let object_table = header::object_table(state);
     let property_address = object_table + (property as usize * 2);
-    util::word_value(&state.memory_map(), property_address)
+    state.word_value(property_address)
 }
 
 pub fn property(state: &State, object: usize, property: u8) -> u16 {
@@ -176,8 +175,8 @@ pub fn property(state: &State, object: usize, property: u8) -> u16 {
         let size = property_size(state, property_address);
         match state.version {
             1 | 2 | 3 => match size {
-                1 => util::byte_value(&state.memory_map(), property_address + 1) as u16,
-                2 => util::word_value(&state.memory_map(), property_address + 1),
+                1 => state.byte_value(property_address + 1) as u16,
+                2 => state.word_value(property_address + 1),
                 _ => {
                     trace!("Can't get property with length {}", size);
                     panic!("Can't get property with length {}", size);
@@ -221,8 +220,8 @@ pub fn set_property(state: &mut State, object: usize, property: u8, value: u16) 
     };
 
     match property_size {
-        1 => util::set_byte(state.memory_map_mut(), property_data, (value & 0xFF) as u8),
-        2 => util::set_word(state.memory_map_mut(), property_data, value),
+        1 => state.set_byte(property_data, (value & 0xFF) as u8),
+        2 => state.set_word(property_data, value),
         _ => {
             error!(
                 "Object #{:04x} property #{:02x} has length {}",
@@ -238,13 +237,10 @@ pub fn set_property(state: &mut State, object: usize, property: u8, value: u16) 
 
 pub fn short_name(state: &State, object: usize) -> Vec<u16> {
     let property_table = property_table_address(state, object);
-    let header_count = util::byte_value(&state.memory_map(), property_table);
+    let header_count = state.byte_value(property_table);
     let mut ztext = Vec::new();
     for i in 0..header_count as usize {
-        ztext.push(util::word_value(
-            &state.memory_map(),
-            property_table + 1 + (i * 2),
-        ));
+        ztext.push(state.word_value(property_table + 1 + (i * 2)));
     }
 
     ztext
@@ -254,8 +250,8 @@ pub fn parent(state: &State, object: usize) -> usize {
     let object_address = object_address(state, object);
 
     match state.version {
-        1 | 2 | 3 => util::byte_value(&state.memory_map(), object_address + 4) as usize,
-        4 | 5 | 6 | 7 | 8 => util::word_value(&state.memory_map(), object_address + 6) as usize,
+        1 | 2 | 3 => state.byte_value(object_address + 4) as usize,
+        4 | 5 | 6 | 7 | 8 => state.word_value(object_address + 6) as usize,
         _ => 0,
     }
 }
@@ -264,8 +260,8 @@ pub fn child(state: &State, object: usize) -> usize {
     let object_address = object_address(state, object);
 
     match state.version {
-        1 | 2 | 3 => util::byte_value(&state.memory_map(), object_address + 6) as usize,
-        4 | 5 | 6 | 7 | 8 => util::word_value(&state.memory_map(), object_address + 10) as usize,
+        1 | 2 | 3 => state.byte_value(object_address + 6) as usize,
+        4 | 5 | 6 | 7 | 8 => state.word_value(object_address + 10) as usize,
         _ => 0,
     }
 }
@@ -274,8 +270,8 @@ pub fn sibling(state: &State, object: usize) -> usize {
     let object_address = object_address(state, object);
 
     match state.version {
-        1 | 2 | 3 => util::byte_value(&state.memory_map(), object_address + 5) as usize,
-        4 | 5 | 6 | 7 | 8 => util::word_value(&state.memory_map(), object_address + 8) as usize,
+        1 | 2 | 3 => state.byte_value(object_address + 5) as usize,
+        4 | 5 | 6 | 7 | 8 => state.word_value(object_address + 8) as usize,
         _ => 0,
     }
 }

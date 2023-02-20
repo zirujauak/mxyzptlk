@@ -1,4 +1,4 @@
-use crate::executor::util::*;
+use super::state::State;
 
 pub enum Flag {
     // Flags 1, v1 - 3
@@ -27,8 +27,8 @@ pub enum Flag {
     GameWantsMenus,        // bit 8
 }
 
-pub fn version(memory_map: &Vec<u8>) -> u8 {
-    byte_value(memory_map, 0x00)
+pub fn version(state: &State) -> u8 {
+    state.byte_value(0x00)
 }
 
 fn flag_bit(version: u8, flag: &Flag) -> u8 {
@@ -134,59 +134,59 @@ fn is_flag1(flag: &Flag) -> bool {
         _ => false,
     }
 }
-pub fn flag(memory_map: &Vec<u8>, flag: Flag) -> u16 {
-    let v = version(memory_map);
+pub fn flag(state: &State, flag: Flag) -> u16 {
+    let v = version(state);
     let bit = flag_bit(v, &flag);
 
     if is_flag1(&flag) {
-        (byte_value(memory_map, 0x01) >> bit) as u16 & 1
+        (state.byte_value(0x01) >> bit) as u16 & 1
     } else {
-        (word_value(memory_map, 0x0a) >> bit) & 1
+        (state.word_value(0x0a) >> bit) & 1
     }
 }
 
-pub fn set_flag(memory_map: &mut Vec<u8>, flag: Flag) {
-    let v = version(memory_map);
+pub fn set_flag(state: &mut State, flag: Flag) {
+    let v = version(state);
     let bit = flag_bit(v, &flag);
 
     if is_flag1(&flag) {
         let mask = ((1 as u8) << bit) & 0xFF;
-        set_byte(memory_map, 0x01, byte_value(memory_map, 1) | mask);
+        state.set_byte(0x01, state.byte_value(1) | mask);
     } else {
         let mask = ((1 as u16) << bit) & 0xFFFF;
-        set_word(memory_map, 0x0a, word_value(memory_map, 10) | mask);
+        state.set_word(0x0a, state.word_value(10) | mask);
     }
 }
 
-pub fn clear_flag(memory_map: &mut Vec<u8>, flag: Flag) {
-    let v = version(memory_map);
+pub fn clear_flag(state: &mut State, flag: Flag) {
+    let v = state.version;
     let bit = flag_bit(v, &flag);
 
     if is_flag1(&flag) {
         let mask = !(((1 as u8) << bit) & 0xFF);
-        set_byte(memory_map, 0x01, byte_value(memory_map, 1) & mask);
+        state.set_byte(0x01, state.byte_value(1) & mask);
     } else {
         let mask = !(((1 as u16) << bit) & 0xFFFF);
-        set_word(memory_map, 0x0a, word_value(memory_map, 10) & mask);
+        state.set_word(0x0a, state.word_value(10) & mask);
     }
 }
 
-pub fn initial_pc(memory_map: &Vec<u8>) -> u16 {
-    word_value(memory_map, 0x06)
+pub fn initial_pc(state: &State) -> u16 {
+    state.word_value(0x06)
 }
 
-pub fn routine_offset(memory_map: &Vec<u8>) -> u16 {
-    word_value(memory_map, 0x28)
+pub fn routine_offset(state: &State) -> u16 {
+    state.word_value(0x28)
 }
 
-pub fn strings_offset(memory_map: &Vec<u8>) -> u16 {
-    word_value(memory_map, 0x2a)
+pub fn strings_offset(state: &State) -> u16 {
+    state.word_value(0x2a)
 }
 
-pub fn object_table(memory_map: &Vec<u8>) -> usize {
-    word_value(memory_map, 0x0a) as usize
+pub fn object_table(state: &State) -> usize {
+    state.word_value(0x0a) as usize
 }
 
-pub fn global_variable_table(memory_map: &Vec<u8>) -> u16 {
-    word_value(memory_map, 0x0c)
+pub fn global_variable_table(state: &State) -> u16 {
+    state.word_value(0x0c)
 }

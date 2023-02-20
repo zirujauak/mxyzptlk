@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::object;
 use super::state::State;
-use super::{text, util};
+use super::text;
 
 #[derive(Debug)]
 pub enum OperandType {
@@ -110,11 +110,7 @@ impl Instruction {
         }
     }
 
-    fn operands(
-        memory_map: &Vec<u8>,
-        mut address: usize,
-        opcode: &Opcode,
-    ) -> (usize, Vec<Operand>) {
+    fn operands(state: &State, mut address: usize, opcode: &Opcode) -> (usize, Vec<Operand>) {
         let mut operand_types = Vec::new();
         let mut operands = Vec::new();
         match opcode.form {
@@ -138,7 +134,7 @@ impl Instruction {
             }
             OpcodeForm::Variable => {
                 if opcode.opcode == 0xEC || opcode.opcode == 0xFA {
-                    let b1 = memory_map[address];
+                    let b1 = state.byte_value(address);
                     address = address + 1;
                     for i in 0..4 {
                         match Self::operand_type(b1, i) {
@@ -147,7 +143,7 @@ impl Instruction {
                         }
                     }
 
-                    let b2 = memory_map[address];
+                    let b2 = state.byte_value(address);
                     address = address + 1;
                     for i in 0..4 {
                         match Self::operand_type(b2, i) {
@@ -156,12 +152,12 @@ impl Instruction {
                         }
                     }
                 } else if opcode.opcode & 0x20 == 0 {
-                    let b = memory_map[address];
+                    let b = state.byte_value(address);
                     address = address + 1;
                     operand_types.push(Self::operand_type(b, 0).unwrap());
                     operand_types.push(Self::operand_type(b, 1).unwrap());
                 } else {
-                    let b = memory_map[address];
+                    let b = state.byte_value(address);
                     address = address + 1;
                     for i in 0..4 {
                         match Self::operand_type(b, i) {
@@ -172,7 +168,7 @@ impl Instruction {
                 }
             }
             OpcodeForm::Extended => {
-                let b = memory_map[address];
+                let b = state.byte_value(address);
                 address = address + 1;
                 for i in 0..4 {
                     match Self::operand_type(b, i) {
@@ -186,7 +182,7 @@ impl Instruction {
         for t in operand_types {
             match t {
                 OperandType::LargeConstant => {
-                    let v = util::word_value(memory_map, address);
+                    let v = state.word_value(address);
                     address = address + 2;
                     operands.push(Operand {
                         operand_type: t,
@@ -194,7 +190,7 @@ impl Instruction {
                     })
                 }
                 OperandType::SmallConstant | OperandType::Variable => {
-                    let v = util::byte_value(memory_map, address);
+                    let v = state.byte_value(address);
                     address = address + 1;
                     operands.push(Operand {
                         operand_type: t,
@@ -207,11 +203,11 @@ impl Instruction {
         (address, operands)
     }
 
-    fn opcode(memory_map: &Vec<u8>, mut address: usize) -> (usize, Opcode) {
-        let mut opcode = memory_map[address];
+    fn opcode(state: &State, mut address: usize) -> (usize, Opcode) {
+        let mut opcode = state.byte_value(address);
         address = address + 1;
         if opcode == 0xBE {
-            opcode = memory_map[address];
+            opcode = state.byte_value(address);
             address = address + 1;
         }
 
@@ -261,41 +257,36 @@ impl Instruction {
         )
     }
 
-    fn decode_store(
-        memory_map: &Vec<u8>,
-        version: u8,
-        address: usize,
-        opcode: &Opcode,
-    ) -> (usize, Option<u8>) {
+    fn decode_store(state: &State, address: usize, opcode: &Opcode) -> (usize, Option<u8>) {
         match opcode.form {
             OpcodeForm::Extended => match opcode.instruction {
                 0x00 | 0x01 | 0x02 | 0x03 | 0x04 | 0x09 | 0x0A | 0x0C | 0x13 | 0x1D => {
-                    (address + 1, Some(util::byte_value(memory_map, address)))
+                    (address + 1, Some(state.byte_value(address)))
                 }
                 _ => (address, None),
             },
             _ => match opcode.opcount {
-                OperandCount::_0OP => match version {
+                OperandCount::_0OP => match state.version {
                     4 => match opcode.instruction {
-                        0x05 | 0x06 => (address + 1, Some(util::byte_value(memory_map, address))),
+                        0x05 | 0x06 => (address + 1, Some(state.byte_value(address))),
                         _ => (address, None),
                     },
                     _ => (address, None),
                 },
                 OperandCount::_1OP => match opcode.instruction {
                     0x01 | 0x02 | 0x03 | 0x04 | 0x0E => {
-                        (address + 1, Some(util::byte_value(memory_map, address)))
+                        (address + 1, Some(state.byte_value(address)))
                     }
                     0x08 => {
-                        if version >= 4 {
-                            (address + 1, Some(util::byte_value(memory_map, address)))
+                        if state.version >= 4 {
+                            (address + 1, Some(state.byte_value(address)))
                         } else {
                             (address, None)
                         }
                     }
                     0x0F => {
-                        if version <= 4 {
-                            (address + 1, Some(util::byte_value(memory_map, address)))
+                        if state.version <= 4 {
+                            (address + 1, Some(state.byte_value(address)))
                         } else {
                             (address, None)
                         }
@@ -304,23 +295,23 @@ impl Instruction {
                 },
                 OperandCount::_2OP => match opcode.instruction {
                     0x08 | 0x09 | 0x0F | 0x10 | 0x11 | 0x12 | 0x13 | 0x14 | 0x15 | 0x16 | 0x17
-                    | 0x18 | 0x19 => (address + 1, Some(util::byte_value(memory_map, address))),
+                    | 0x18 | 0x19 => (address + 1, Some(state.byte_value(address))),
                     _ => (address, None),
                 },
                 OperandCount::_VAR => match opcode.instruction {
                     0x00 | 0x07 | 0x0C | 0x16 | 0x17 | 0x18 => {
-                        (address + 1, Some(util::byte_value(memory_map, address)))
+                        (address + 1, Some(state.byte_value(address)))
                     }
                     0x04 => {
-                        if version >= 5 {
-                            (address + 1, Some(util::byte_value(memory_map, address)))
+                        if state.version >= 5 {
+                            (address + 1, Some(state.byte_value(address)))
                         } else {
                             (address, None)
                         }
                     }
                     0x09 => {
-                        if version == 6 {
-                            (address + 1, Some(util::byte_value(memory_map, address)))
+                        if state.version == 6 {
+                            (address + 1, Some(state.byte_value(address)))
                         } else {
                             (address, None)
                         }
@@ -339,8 +330,8 @@ impl Instruction {
         }
     }
 
-    fn decode_branch(memory_map: &Vec<u8>, address: usize) -> (usize, Option<Branch>) {
-        let b = util::byte_value(memory_map, address);
+    fn decode_branch(state: &State, address: usize) -> (usize, Option<Branch>) {
+        let b = state.byte_value(address);
         let condition = b & 0x80 == 0x80;
         match b & 0x40 {
             0x40 => {
@@ -354,8 +345,7 @@ impl Instruction {
                 )
             }
             _ => {
-                let mut offset =
-                    (((b & 0x3f) as u16) << 8) | util::byte_value(memory_map, address + 1) as u16;
+                let mut offset = (((b & 0x3f) as u16) << 8) | state.byte_value(address + 1) as u16;
                 if offset & 0x2000 == 0x2000 {
                     offset = offset | 0xC000;
                 }
@@ -370,23 +360,18 @@ impl Instruction {
         }
     }
 
-    fn branch(
-        memory_map: &Vec<u8>,
-        version: u8,
-        address: usize,
-        opcode: &Opcode,
-    ) -> (usize, Option<Branch>) {
+    fn branch(state: &State, address: usize, opcode: &Opcode) -> (usize, Option<Branch>) {
         match opcode.form {
             OpcodeForm::Extended => match opcode.instruction {
-                0x06 | 0x18 | 0x1b => Self::decode_branch(memory_map, address),
+                0x06 | 0x18 | 0x1b => Self::decode_branch(state, address),
                 _ => (address, None),
             },
             _ => match opcode.opcount {
                 OperandCount::_0OP => match opcode.instruction {
-                    0x0d | 0x0f => Self::decode_branch(memory_map, address),
+                    0x0d | 0x0f => Self::decode_branch(state, address),
                     0x05 | 0x06 => {
-                        if version < 4 {
-                            Self::decode_branch(memory_map, address)
+                        if state.version < 4 {
+                            Self::decode_branch(state, address)
                         } else {
                             (address, None)
                         }
@@ -394,12 +379,12 @@ impl Instruction {
                     _ => (address, None),
                 },
                 OperandCount::_1OP => match opcode.instruction {
-                    0x00 | 0x01 | 0x02 => Self::decode_branch(memory_map, address),
+                    0x00 | 0x01 | 0x02 => Self::decode_branch(state, address),
                     _ => (address, None),
                 },
                 OperandCount::_2OP => match opcode.instruction {
                     0x01 | 0x02 | 0x03 | 0x04 | 0x05 | 0x06 | 0x07 | 0x0a => {
-                        Self::decode_branch(memory_map, address)
+                        Self::decode_branch(state, address)
                     }
                     _ => (address, None),
                 },
@@ -409,12 +394,10 @@ impl Instruction {
     }
 
     pub fn from_address(state: &State, address: usize) -> Instruction {
-        let (next_address, opcode) = Self::opcode(&state.memory_map(), address);
-        let (next_address, operands) = Self::operands(&state.memory_map(), next_address, &opcode);
-        let (next_address, store) =
-            Self::decode_store(&state.memory_map(), state.version, next_address, &opcode);
-        let (next_address, branch) =
-            Self::branch(&state.memory_map(), state.version, next_address, &opcode);
+        let (next_address, opcode) = Self::opcode(state, address);
+        let (next_address, operands) = Self::operands(state, next_address, &opcode);
+        let (next_address, store) = Self::decode_store(state, next_address, &opcode);
+        let (next_address, branch) = Self::branch(state, next_address, &opcode);
         Instruction {
             address,
             opcode,
@@ -488,7 +471,9 @@ impl Instruction {
 
     fn operand_value(&self, state: &mut State, index: usize) -> u16 {
         match self.operands[index].operand_type {
-            OperandType::SmallConstant | OperandType::LargeConstant => self.operands[index].operand_value,
+            OperandType::SmallConstant | OperandType::LargeConstant => {
+                self.operands[index].operand_value
+            }
             OperandType::Variable => state.variable(self.operands[index].operand_value as u8),
         }
     }
@@ -517,14 +502,11 @@ impl Instruction {
 
         let mut word = 0;
         while word & 0x8000 == 0 {
-            word = util::word_value(
-                &state.memory_map(),
-                self.next_address + (ztext.len() * 2),
-            );
+            word = state.word_value(self.next_address + (ztext.len() * 2));
             ztext.push(word);
         }
 
-        let text = text::from_vec(&state.memory_map(), state.version, &ztext);
+        let text = text::from_vec(state, &ztext);
         print!("{}", text);
         trace!("PRINT \"{}\"", text);
 
@@ -597,7 +579,7 @@ impl Instruction {
         let object = self.operand_value(state, 0) as usize;
         let ztext = object::short_name(state, object);
 
-        let text = text::from_vec(&state.memory_map(), state.version, &ztext);
+        let text = text::from_vec(state, &ztext);
         print!("{}", text);
         trace!("PRINT_OBJ #{:04x} \"{}\'", object, text);
         self.next_address
@@ -615,7 +597,7 @@ impl Instruction {
         let address = state.packed_string_address(addr);
         trace!("PRINT_PADDR ${:05x}", addr);
 
-        let text = text::as_text(&state.memory_map(), state.version, address);
+        let text = text::as_text(state, address);
         print!("{}", text);
         self.next_address
     }
@@ -638,8 +620,7 @@ impl Instruction {
             "JE #{:04x} #{:04x} [{}]",
             a,
             b,
-            self
-                .branch
+            self.branch
                 .as_ref()
                 .unwrap()
                 .condition
@@ -658,8 +639,7 @@ impl Instruction {
             "JL #{:04x} #{:04x} [{}]",
             a,
             b,
-            self
-                .branch
+            self.branch
                 .as_ref()
                 .unwrap()
                 .condition
@@ -695,12 +675,8 @@ impl Instruction {
         let index = self.operand_value(state, 1) as usize;
 
         let address = addr + (index * 2);
-        let value = util::word_value(&state.memory_map(), address);
-        trace!(
-            "LOADW ${:05x} -> {:02x}",
-            address,
-            self.store.unwrap()
-        );
+        let value = state.word_value(address);
+        trace!("LOADW ${:05x} -> {:02x}", address, self.store.unwrap());
         state.set_variable(self.store.unwrap(), value);
         self.next_address
     }
@@ -710,12 +686,8 @@ impl Instruction {
         let index = self.operand_value(state, 1) as usize;
 
         let address = addr + index;
-        let value = util::byte_value(&state.memory_map(), address) as u16;
-        trace!(
-            "LOADB ${:05x} -> {:02}",
-            address,
-            self.store.unwrap()
-        );
+        let value = state.byte_value(address) as u16;
+        trace!("LOADB ${:05x} -> {:02}", address, self.store.unwrap());
         state.set_variable(self.store.unwrap(), value);
         self.next_address
     }
@@ -734,7 +706,6 @@ impl Instruction {
         let attribute = self.operand_value(state, 1) as u8;
 
         trace!("TEST_ATTR #{:04x} #{:02}", object, attribute);
-        let version = state.version;
         let condition = object::attribute(state, object, attribute);
         self.execute_branch(condition)
     }
@@ -744,7 +715,6 @@ impl Instruction {
         let attribute = self.operand_value(state, 1) as u8;
 
         trace!("SET_ATTR #{:04x} #{:02}", object, attribute);
-        let version = state.version;
         object::set_attribute(state, object, attribute);
         self.next_address
     }
@@ -754,7 +724,6 @@ impl Instruction {
         let attribute = self.operand_value(state, 1) as u8;
 
         trace!("CLEAR_ATTR #{:04x} #{:02x}", object, attribute);
-        let version = state.version;
         object::clear_attribute(state, object, attribute);
         self.next_address
     }
@@ -810,12 +779,7 @@ impl Instruction {
             arguments.push(self.operand_value(state, i))
         }
         trace!("CALL ${:05x} with {} arg(s)", address, arguments.len());
-        state.call(
-            address,
-            self.next_address,
-            &arguments,
-            self.store,
-        )
+        state.call(address, self.next_address, &arguments, self.store)
     }
 
     fn storew(&self, state: &mut State) -> usize {
@@ -824,7 +788,7 @@ impl Instruction {
         let value = self.operand_value(state, 2) as u16;
 
         trace!("STOREW #{:04x} to ${:05x}", value, address + (index * 2));
-        util::set_word(state.memory_map_mut(), address + (index * 2), value);
+        state.set_word( address + (index * 2), value);
         self.next_address
     }
 
@@ -834,7 +798,7 @@ impl Instruction {
         let value = self.operand_value(state, 2) as u8;
 
         trace!("STOREB #{:02x} to ${:05x}", value, address + index);
-        util::set_byte(state.memory_map_mut(), address + index, value);
+        state.set_byte(address + index, value);
         self.next_address
     }
 
@@ -844,7 +808,6 @@ impl Instruction {
         let value = self.operand_value(state, 2) as u16;
 
         trace!("PUT_PROP #{:04x} #{:02x} #{:04x}", object, prop, value);
-        let version = state.version;
         object::set_property(state, object, prop, value);
         self.next_address
     }

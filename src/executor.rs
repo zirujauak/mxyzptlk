@@ -1,5 +1,4 @@
 pub mod header;
-pub mod util;
 pub mod state;
 pub mod instruction;
 pub mod log;
@@ -15,7 +14,7 @@ pub struct Executor {
 
 impl Executor {
     pub fn from_vec(v: Vec<u8>) -> Executor {
-        let version = header::version(&v);
+        let version = v[0];
 
         let state = State::new(&v, version);
         Executor { 
