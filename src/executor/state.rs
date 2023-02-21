@@ -4,6 +4,8 @@ use rand::SeedableRng;
 
 use crate::executor::header;
 
+use super::interpreter::Interpreter;
+
 #[derive(Debug)]
 pub struct Frame {
     address: usize,
@@ -75,15 +77,19 @@ impl Frame {
 
     pub fn pop(&mut self) -> Option<u16> {
         trace!(
-            "stack[{}]: pop #{:04x}",
+            "stack[{}]: pop -> #{:04x}",
             self.stack.len(),
             self.stack.last().unwrap()
         );
         self.stack.pop()
     }
 
+    pub fn peek(&self) -> Option<&u16> {
+        self.stack.last()
+    }
+
     pub fn push(&mut self, value: u16) {
-        trace!("stack[{}]: push #{:04x}", self.stack.len(), value);
+        trace!("stack[{}]: push <- #{:04x}", self.stack.len(), value);
         self.stack.push(value);
     }
 }
@@ -92,10 +98,12 @@ pub struct State {
     memory_map: Vec<u8>,
     pub version: u8,
     frames: Vec<Frame>,
+    pub interpreter: Box<dyn Interpreter>,
 }
 
 impl State {
-    pub fn new(memory_map: &Vec<u8>, version: u8) -> State {
+    pub fn new(memory_map: &Vec<u8>, interpreter: Box<dyn Interpreter>) -> State {
+        let version = byte_value(memory_map, 0);
         let f = {
             let pc = word_value(memory_map, 0x06) as usize;
             match version {
@@ -114,6 +122,7 @@ impl State {
             memory_map: memory_map.clone(),
             version: memory_map[0],
             frames,
+            interpreter,
         }
     }
 
@@ -132,6 +141,12 @@ impl State {
         arguments: &Vec<u16>,
         result: Option<u8>,
     ) -> usize {
+        trace!(
+            "Call routine @ ${:05x} with {} args",
+            address,
+            arguments.len()
+        );
+
         self.current_frame_mut().pc = return_address;
         let f = Frame::call(&self.memory_map(), self.version, address, arguments, result);
         self.frames.push(f);
@@ -145,6 +160,7 @@ impl State {
             None => {}
         }
 
+        trace!("Return to ${:05x} with result #{:04x}", self.current_frame().pc, result);
         self.current_frame().pc
     }
 
@@ -167,8 +183,19 @@ impl State {
             self.current_frame().local_variables[var as usize - 1]
         } else {
             self.word_value(
-                header::global_variable_table(self) as usize
-                    + ((var as usize - 16) * 2),
+                header::global_variable_table(self) as usize + ((var as usize - 16) * 2),
+            )
+        }
+    }
+
+    pub fn peek_variable(&self, var: u8) -> u16 {
+        if var == 0 {
+            *self.current_frame().peek().unwrap()
+        } else if var < 16 {
+            self.current_frame().local_variables[var as usize - 1]
+        } else {
+            self.word_value(
+                header::global_variable_table(self) as usize + ((var as usize - 16) * 2),
             )
         }
     }
@@ -180,8 +207,7 @@ impl State {
         } else if var < 16 {
             self.current_frame_mut().local_variables[var as usize - 1] = value
         } else {
-            let address = header::global_variable_table(self) as usize
-                + ((var as usize - 16) * 2);
+            let address = header::global_variable_table(self) as usize + ((var as usize - 16) * 2);
             self.set_word(address, value)
         }
     }
@@ -200,9 +226,7 @@ impl State {
         match self.version {
             1 | 2 | 3 => address as usize * 2,
             4 | 5 => address as usize * 4,
-            6 | 7 => {
-                (address as usize * 4) + (header::routine_offset(self) as usize * 8)
-            }
+            6 | 7 => (address as usize * 4) + (header::routine_offset(self) as usize * 8),
             8 => address as usize * 8,
             // TODO: error
             _ => 0,
@@ -213,9 +237,7 @@ impl State {
         match self.version {
             1 | 2 | 3 => address as usize * 2,
             4 | 5 => address as usize * 4,
-            6 | 7 => {
-                (address as usize * 4) + (header::strings_offset(self) as usize * 8)
-            }
+            6 | 7 => (address as usize * 4) + (header::strings_offset(self) as usize * 8),
             8 => address as usize * 8,
             // TODO: error
             _ => 0,
@@ -248,5 +270,69 @@ impl State {
         self.memory_map[address] = value;
 
         debug!("memory: set ${:05x} to #{:02x}", address, value)
+    }
+}
+
+impl Interpreter for State {
+    fn buffer_mode(&mut self, mode: bool) {
+        self.interpreter.buffer_mode(mode);
+    }
+    fn erase_line(&mut self, value: u16) {
+        trace!("Dispatch ERASE_LINE {}", value)
+    }
+    fn erase_window(&mut self, window: i16) {
+        self.interpreter.erase_window(window);
+    }
+    fn get_cursor(&mut self) -> (u16, u16) {
+        trace!("Dispatch GET_CURSOR");
+        (1, 1)
+    }
+    fn input_stream(&mut self, stream: u16) {
+        trace!("Dispatch INPUT_STREAM {}", stream)
+    }
+    fn new_line(&mut self) {
+        self.interpreter.new_line();
+    }
+    fn output_stream(&mut self, stream: i16, table: usize) {
+        self.interpreter.output_stream(stream, table);
+    }
+    fn print(&mut self, text: String) {
+        self.interpreter.print(text)
+    }
+    fn print_table(&mut self, text: String, width: u16, height: u16, skip: u16) {
+        trace!("Dispatch PRINT_TABLE {}, {}, {}", width, height, skip)
+    }
+    fn read(&mut self, length: u8, time: u16) -> String {
+        trace!("Dispatch READ {}, {}", length, time);
+
+        String::new()
+    }
+    fn read_char(&mut self, time: u16) -> char {
+        self.interpreter.read_char(time)
+    }
+
+    fn set_colour(&mut self, foreground: u16, background: u16) {
+        trace!("Dispatch SET_COLOUR {}, {}", foreground, background)
+    }
+    fn set_cursor(&mut self, line: u16, column: u16) {
+        self.interpreter.set_cursor(line, column);
+    }
+    fn set_text_style(&mut self, style: u16) {
+        trace!("Dipsatch SET_TEXT_STYLE {}", style)
+    }
+    fn set_window(&mut self, window: u16) {
+        trace!("Dispatch SET_WINDOW {}", window)
+    }
+    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8) {
+        trace!(
+            "Dipsatch SOUND_EFFECT {}, {}, {}, {}",
+            number,
+            effect,
+            volume,
+            repeats
+        )
+    }
+    fn split_window(&mut self, lines: u16) {
+        trace!("Dispatch SPLIT_WINDOW {}", lines)
     }
 }

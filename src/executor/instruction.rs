@@ -1,6 +1,8 @@
 use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::executor::interpreter::Interpreter;
+
 use super::object;
 use super::state::State;
 use super::text;
@@ -12,6 +14,7 @@ pub enum OperandType {
     Variable,
 }
 
+#[derive(Debug)]
 pub struct Operand {
     operand_type: OperandType,
     operand_value: u16,
@@ -151,11 +154,6 @@ impl Instruction {
                             None => break,
                         }
                     }
-                } else if opcode.opcode & 0x20 == 0 {
-                    let b = state.byte_value(address);
-                    address = address + 1;
-                    operand_types.push(Self::operand_type(b, 0).unwrap());
-                    operand_types.push(Self::operand_type(b, 1).unwrap());
                 } else {
                     let b = state.byte_value(address);
                     address = address + 1;
@@ -205,13 +203,14 @@ impl Instruction {
 
     fn opcode(state: &State, mut address: usize) -> (usize, Opcode) {
         let mut opcode = state.byte_value(address);
+        let extended = opcode == 0xBE;
         address = address + 1;
         if opcode == 0xBE {
             opcode = state.byte_value(address);
             address = address + 1;
         }
 
-        let form = if opcode == 0xBE {
+        let form = if extended {
             OpcodeForm::Extended
         } else {
             match (opcode >> 6) & 0x3 {
@@ -345,7 +344,8 @@ impl Instruction {
                 )
             }
             _ => {
-                let mut offset = (((b & 0x3f) as u16) << 8) | state.byte_value(address + 1) as u16;
+                let mut offset =
+                    ((b as u16 & 0x3f) << 8) | (state.byte_value(address + 1) as u16) & 0xFF;
                 if offset & 0x2000 == 0x2000 {
                     offset = offset | 0xC000;
                 }
@@ -445,6 +445,7 @@ impl Instruction {
                 0x14 => self.add(state),
                 0x15 => self.sub(state),
                 0x17 => self.div(state),
+                0x18 => self.modulus(state),
                 _ => 0,
             },
             OperandCount::_VAR => match self.opcode.instruction {
@@ -486,18 +487,253 @@ impl Instruction {
         }
     }
 
+    fn format_variable(&self, var: u8) -> String {
+        if var == 0 {
+            "(SP+)".to_string()
+        } else if var < 16 {
+            format!("L{:02x}", var - 1)
+        } else {
+            format!("G{:02x}", var - 16)
+        }
+    }
+
+    fn format_operand(&self, state: &State, index: usize) -> String {
+        match self.operands[index].operand_type {
+            OperandType::SmallConstant => {
+                format!("#{:02x}", self.operands[index].operand_value)
+            }
+            OperandType::LargeConstant => {
+                format!("#{:04x}", self.operands[index].operand_value)
+            }
+            OperandType::Variable => {
+                let mut var_string = self.format_variable(self.operands[index].operand_value as u8);
+                var_string.push_str(&format!(
+                    " [{:04x}]",
+                    state.peek_variable(self.operands[index].operand_value as u8)
+                ));
+                var_string
+            }
+        }
+    }
+
+    fn format_operands(&self, state: &State) -> String {
+        let mut f = String::new();
+        for i in 0..self.operands.len() {
+            f.push_str(&self.format_operand(state, i));
+            if i < self.operands.len() - 1 {
+                f.push(',')
+            }
+        }
+
+        f
+    }
+
+    fn format_branch(&self) -> String {
+        match &self.branch {
+            Some(b) => {
+                format!(
+                    " [{}] => ${:05x}",
+                    b.condition.to_string().to_uppercase(),
+                    b.address
+                )
+            }
+            None => String::new(),
+        }
+    }
+
+    fn format_store(&self) -> String {
+        match &self.store {
+            Some(s) => format!(" -> {}", self.format_variable(*s)),
+            None => String::new(),
+        }
+    }
+
+    fn name(&self, state: &State) -> &str {
+        match self.opcode.form {
+            OpcodeForm::Extended => match self.opcode.instruction {
+                0x00 => "SAVE",
+                0x01 => "RESTORE",
+                0x02 => "LOG_SHIFT",
+                0x03 => "ART_SHIFT",
+                0x04 => "SET_FONT",
+                0x05 => "DRAW_PICTURE",
+                0x06 => "PICTURE_DATA",
+                0x07 => "ERASE_PICTURE",
+                0x08 => "SET_MARGINS",
+                0x09 => "SAVE_UNDO",
+                0x0A => "RESTORE_UNDO",
+                0x0B => "PRINT_UNICODE",
+                0x0C => "CHECK_UNICODE",
+                0x0D => "SET_TRUE_COLOUR",
+                0x10 => "MOVE_WINDOW",
+                0x11 => "WINDOW_SIZE",
+                0x12 => "WINDOW_STYLE",
+                0x13 => "GET_WIND_PROP",
+                0x14 => "SCROLL_WINDOW",
+                0x15 => "POP_STACK",
+                0x16 => "READ_MOUSE",
+                0x17 => "MOUSE_WINDOW",
+                0x18 => "PUSH_STACK",
+                0x19 => "PUT_WIND_PROP",
+                0x1A => "PRINT_FORM",
+                0x1B => "MAKE_MENU",
+                0x1C => "PICTURE_TABLE",
+                0x1D => "BUFFER_SCREEN",
+                _ => "UNKNOWN!",
+            },
+            _ => match self.opcode.opcount {
+                OperandCount::_0OP => match self.opcode.instruction {
+                    0x0 => "RTRUE",
+                    0x1 => "RFALSE",
+                    0x2 => "PRINT",
+                    0x3 => "PRINT_RET",
+                    0x4 => "NOP",
+                    0x5 => "SAVE",
+                    0x6 => "RESTORE",
+                    0x7 => "RESTART",
+                    0x8 => "RET_POPPED",
+                    0x9 => {
+                        if state.version < 5 {
+                            "POP"
+                        } else {
+                            "CATCH"
+                        }
+                    }
+                    0xA => "QUIT",
+                    0xB => "NEW_LINE",
+                    0xC => "SHOW_STATUS",
+                    0xD => "VERIFY",
+                    0xF => "PIRACY",
+                    _ => "UNKNOWN!",
+                },
+                OperandCount::_1OP => match self.opcode.instruction {
+                    0x0 => "JZ",
+                    0x1 => "GET_SIBLING",
+                    0x2 => "GET_CHILD",
+                    0x3 => "GET_PARENT",
+                    0x4 => "GET_PROP_LEN",
+                    0x5 => "INC",
+                    0x6 => "DEC",
+                    0x7 => "PRINT_ADDR",
+                    0x8 => "CALL_1S",
+                    0x9 => "REMOVE_OBJ",
+                    0xA => "PRINT_OBJ",
+                    0xB => "RET",
+                    0xC => "JUMP",
+                    0xD => "PRINT_PADDR",
+                    0xE => "LOAD",
+                    0xF => {
+                        if state.version < 5 {
+                            "NOT"
+                        } else {
+                            "CALL_1N"
+                        }
+                    }
+                    _ => "UNKNOWN!",
+                },
+                OperandCount::_2OP => match self.opcode.instruction {
+                    0x01 => "JE",
+                    0x02 => "JL",
+                    0x03 => "JG",
+                    0x04 => "DEC_CHK",
+                    0x05 => "INC_CHK",
+                    0x06 => "JIN",
+                    0x07 => "TEST",
+                    0x08 => "OR",
+                    0x09 => "AND",
+                    0x0A => "TEST_ATTR",
+                    0x0B => "SET_ATTR",
+                    0x0C => "CLEAR_ATTR",
+                    0x0D => "STORE",
+                    0x0E => "INSERT_OBJ",
+                    0x0F => "LOADW",
+                    0x10 => "LOADB",
+                    0x11 => "GET_PROP",
+                    0x12 => "GET_PROP_ADDR",
+                    0x13 => "GET_NEXT_PROP",
+                    0x14 => "ADD",
+                    0x15 => "SUB",
+                    0x16 => "MUL",
+                    0x17 => "DIV",
+                    0x18 => "MOD",
+                    0x19 => "CALL_2S",
+                    0x1A => "CALL_2N",
+                    0x1B => "SET_COLOUR",
+                    0x1C => "THROW",
+                    _ => "UNKNOWN!",
+                },
+                OperandCount::_VAR => match self.opcode.instruction {
+                    0x00 => {
+                        if state.version < 4 {
+                            "CALL"
+                        } else {
+                            "CALL_VS"
+                        }
+                    }
+                    0x01 => "STOREW",
+                    0x02 => "STOREB",
+                    0x03 => "PUT_PROP",
+                    0x04 => {
+                        if state.version < 5 {
+                            "SREAD"
+                        } else {
+                            "AREAD"
+                        }
+                    }
+                    0x05 => "PRINT_CHAR",
+                    0x06 => "PRINT_NUM",
+                    0x07 => "RANDOM",
+                    0x08 => "PUSH",
+                    0x09 => "PULL",
+                    0x0A => "SPLIT_WINDOW",
+                    0x0B => "SET_WINDOW",
+                    0x0C => "CALL_VS2",
+                    0x0D => "ERASE_WINDOW",
+                    0x0E => "ERASE_LINE",
+                    0x0F => "SET_CURSOR",
+                    0x10 => "GET_CURSOR",
+                    0x11 => "SET_TEXT_STYLE",
+                    0x12 => "BUFFER_MODE",
+                    0x13 => "OUTPUT_STREAM",
+                    0x14 => "INPUT_STREAM",
+                    0x15 => "SOUND_EFFECT",
+                    0x16 => "READ_CHAR",
+                    0x17 => "SCAN_TABLE",
+                    0x18 => "NOT",
+                    0x19 => "CALL_VN",
+                    0x1A => "CALL_VN2",
+                    0x1B => "TOKENISE",
+                    0x1C => "ENCODE_TEXT",
+                    0x1D => "COPY_TABLE",
+                    0x1E => "PRINT_TABLE",
+                    0x1F => "CHECK_ARG_COUNT",
+                    _ => "UNKNOWN!",
+                },
+            },
+        }
+    }
+
+    pub fn trace_instruction(&self, state: &State) {
+        trace!(
+            "${:05x}: {} {}{}{}",
+            self.address,
+            self.name(state),
+            self.format_operands(state),
+            self.format_branch(),
+            self.format_store()
+        );
+    }
+
     // 0OP
     fn rtrue(&self, state: &mut State) -> usize {
-        trace!("RTRUE");
         state.return_fn(1 as u16)
     }
 
     fn rfalse(&self, state: &mut State) -> usize {
-        trace!("RFALSE");
         state.return_fn(0 as u16)
     }
 
-    fn print_literal(&self, state: &State) -> usize {
+    fn print_literal(&self, state: &mut State) -> usize {
         let mut ztext = Vec::new();
 
         let mut word = 0;
@@ -507,62 +743,57 @@ impl Instruction {
         }
 
         let text = text::from_vec(state, &ztext);
-        print!("{}", text);
-        trace!("PRINT \"{}\"", text);
+        state.print(text);
 
         self.next_address + ztext.len() * 2
     }
 
-    fn new_line(&self, _state: &State) -> usize {
-        println!("");
-        trace!("NEW_LINE");
+    fn new_line(&self, state: &mut State) -> usize {
+        state.interpreter.new_line();
         self.next_address
     }
 
     // 1OP
     fn get_sibling(&self, state: &mut State) -> usize {
         let object = self.operand_value(state, 0) as usize;
-        trace!("GET_SIBLING #{:04x}", object);
-
         let sibling = object::sibling(state, object) as u16;
-        state.set_variable(self.store.unwrap(), sibling);
         let condition = sibling != 0;
+
+        state.set_variable(self.store.unwrap(), sibling);
         self.execute_branch(condition)
     }
 
     fn get_child(&self, state: &mut State) -> usize {
         let object = self.operand_value(state, 0) as usize;
-        trace!("GET_CHILD #{:04x}", object);
-
         let child = object::child(state, object) as u16;
-        state.set_variable(self.store.unwrap(), child);
         let condition = child != 0;
+
+        state.set_variable(self.store.unwrap(), child);
         self.execute_branch(condition)
     }
 
     fn get_parent(&self, state: &mut State) -> usize {
         let object = self.operand_value(state, 0) as usize;
-        trace!("GET_PARENT #{:04x}", object);
-
         let parent = object::parent(state, object) as u16;
+
         state.set_variable(self.store.unwrap(), parent);
         self.next_address
     }
 
     fn inc(&self, state: &mut State) -> usize {
         let arg = self.operand_value(state, 0) as u8;
-        trace!("INC #{:02x}", arg);
         let val = state.variable(arg);
         let new_val = val as i16 + 1;
+
         state.set_variable(arg, new_val as u16);
         self.next_address
     }
 
     fn dec(&self, state: &mut State) -> usize {
         let arg = self.operand_value(state, 0) as u8;
-        trace!("DEC #{:02x}", arg);
         let val = state.variable(arg);
         let new_val = val as i16 - 1;
+
         state.set_variable(arg, new_val as u16);
         self.next_address
     }
@@ -571,7 +802,6 @@ impl Instruction {
         let addr = self.operand_value(state, 0) as u16;
         let address = state.packed_routine_address(addr);
 
-        trace!("CALL_1S ${:05x}", address);
         state.call(address, self.next_address, &Vec::new(), self.store)
     }
 
@@ -580,25 +810,22 @@ impl Instruction {
         let ztext = object::short_name(state, object);
 
         let text = text::from_vec(state, &ztext);
-        print!("{}", text);
-        trace!("PRINT_OBJ #{:04x} \"{}\'", object, text);
+        state.print(text);
         self.next_address
     }
 
     fn jump(&self, state: &mut State) -> usize {
         let offset = self.operand_value(state, 0) as i16;
         let address = (self.next_address as isize + offset as isize - 2) as usize;
-        trace!("JUMP ${:05x}", address);
         address
     }
 
     fn print_paddr(&self, state: &mut State) -> usize {
         let addr = self.operand_value(state, 0);
         let address = state.packed_string_address(addr);
-        trace!("PRINT_PADDR ${:05x}", addr);
 
         let text = text::as_text(state, address);
-        print!("{}", text);
+        state.print(text);
         self.next_address
     }
 
@@ -606,46 +833,26 @@ impl Instruction {
         let addr = self.operand_value(state, 0);
         let address = state.packed_routine_address(addr);
 
-        trace!("CALL_1N ${:05x}", address);
         state.call(address, self.next_address, &Vec::new(), None)
     }
 
     // 2OP
     fn je(&self, state: &mut State) -> usize {
         let a = self.operand_value(state, 0) as i16;
-        let b = self.operand_value(state, 1) as i16;
+        let mut condition = false;
+        for i in 1..self.operands.len() {
+            condition = condition || (a == self.operand_value(state, i) as i16);
+        }
 
-        let condition = a == b;
-        trace!(
-            "JE #{:04x} #{:04x} [{}]",
-            a,
-            b,
-            self.branch
-                .as_ref()
-                .unwrap()
-                .condition
-                .to_string()
-                .to_uppercase()
-        );
         self.execute_branch(condition)
     }
 
     fn jl(&self, state: &mut State) -> usize {
         let a = self.operand_value(state, 0) as i16;
-        let b = self.operand_value(state, 1) as i16;
-
-        let condition = a < b;
-        trace!(
-            "JL #{:04x} #{:04x} [{}]",
-            a,
-            b,
-            self.branch
-                .as_ref()
-                .unwrap()
-                .condition
-                .to_string()
-                .to_uppercase()
-        );
+        let mut condition = false;
+        for i in 1..self.operands.len() {
+            condition = condition || (a == self.operand_value(state, i) as i16);
+        }
 
         self.execute_branch(condition)
     }
@@ -653,9 +860,8 @@ impl Instruction {
     fn or(&self, state: &mut State) -> usize {
         let a = self.operand_value(state, 0) as u16;
         let b = self.operand_value(state, 1) as u16;
-
-        trace!("OR #{:04x} #{:04x}", a, b);
         let v = a | b;
+
         state.set_variable(self.store.unwrap(), v);
         self.next_address
     }
@@ -663,9 +869,8 @@ impl Instruction {
     fn and(&self, state: &mut State) -> usize {
         let a = self.operand_value(state, 0) as u16;
         let b = self.operand_value(state, 1) as u16;
-
-        trace!("AND #{:04x} #{:04x}", a, b);
         let v = a & b;
+
         state.set_variable(self.store.unwrap(), v);
         self.next_address
     }
@@ -673,10 +878,9 @@ impl Instruction {
     fn loadw(&self, state: &mut State) -> usize {
         let addr = self.operand_value(state, 0) as usize;
         let index = self.operand_value(state, 1) as usize;
-
         let address = addr + (index * 2);
         let value = state.word_value(address);
-        trace!("LOADW ${:05x} -> {:02x}", address, self.store.unwrap());
+
         state.set_variable(self.store.unwrap(), value);
         self.next_address
     }
@@ -684,10 +888,9 @@ impl Instruction {
     fn loadb(&self, state: &mut State) -> usize {
         let addr = self.operand_value(state, 0) as usize;
         let index = self.operand_value(state, 1) as usize;
-
         let address = addr + index;
         let value = state.byte_value(address) as u16;
-        trace!("LOADB ${:05x} -> {:02}", address, self.store.unwrap());
+
         state.set_variable(self.store.unwrap(), value);
         self.next_address
     }
@@ -696,7 +899,6 @@ impl Instruction {
         let var = self.operand_value(state, 0) as u8;
         let value = self.operand_value(state, 1) as u16;
 
-        trace!("STORE #{:04x} -> #{:02x}", value, var);
         state.set_variable(var, value);
         self.next_address
     }
@@ -704,9 +906,8 @@ impl Instruction {
     fn test_attr(&self, state: &mut State) -> usize {
         let object = self.operand_value(state, 0) as usize;
         let attribute = self.operand_value(state, 1) as u8;
-
-        trace!("TEST_ATTR #{:04x} #{:02}", object, attribute);
         let condition = object::attribute(state, object, attribute);
+
         self.execute_branch(condition)
     }
 
@@ -714,7 +915,6 @@ impl Instruction {
         let object = self.operand_value(state, 0) as usize;
         let attribute = self.operand_value(state, 1) as u8;
 
-        trace!("SET_ATTR #{:04x} #{:02}", object, attribute);
         object::set_attribute(state, object, attribute);
         self.next_address
     }
@@ -723,7 +923,6 @@ impl Instruction {
         let object = self.operand_value(state, 0) as usize;
         let attribute = self.operand_value(state, 1) as u8;
 
-        trace!("CLEAR_ATTR #{:04x} #{:02x}", object, attribute);
         object::clear_attribute(state, object, attribute);
         self.next_address
     }
@@ -731,10 +930,8 @@ impl Instruction {
     fn get_prop(&self, state: &mut State) -> usize {
         let object = self.operand_value(state, 0) as usize;
         let property = self.operand_value(state, 1) as u8;
-
-        trace!("GET_PROP #{:04x} ${:02x}", object, property);
-
         let value = object::property(state, object, property);
+
         state.set_variable(self.store.unwrap(), value);
         self.next_address
     }
@@ -742,9 +939,8 @@ impl Instruction {
     fn add(&self, state: &mut State) -> usize {
         let a = self.operand_value(state, 0) as i16;
         let b = self.operand_value(state, 1) as i16;
-
-        trace!("ADD #{:04x} #{:04x}", a, b);
         let value = (a + b) as u16;
+
         state.set_variable(self.store.unwrap(), value);
         self.next_address
     }
@@ -752,9 +948,8 @@ impl Instruction {
     fn sub(&self, state: &mut State) -> usize {
         let a = self.operand_value(state, 0) as i16;
         let b = self.operand_value(state, 1) as i16;
-
-        trace!("SUB #{:04x} #{:04x}", a, b);
         let value = (a - b) as u16;
+
         state.set_variable(self.store.unwrap(), value);
         self.next_address
     }
@@ -762,9 +957,17 @@ impl Instruction {
     fn div(&self, state: &mut State) -> usize {
         let a = self.operand_value(state, 0) as i16;
         let b = self.operand_value(state, 1) as i16;
-
-        trace!("DIV #{:04x} #{:04x}", a, b);
         let value = (a / b) as u16;
+
+        state.set_variable(self.store.unwrap(), value);
+        self.next_address
+    }
+
+    fn modulus(&self, state: &mut State) -> usize {
+        let a = self.operand_value(state, 0) as i16;
+        let b = self.operand_value(state, 1) as i16;
+        let value = (a % b) as u16;
+
         state.set_variable(self.store.unwrap(), value);
         self.next_address
     }
@@ -778,7 +981,7 @@ impl Instruction {
         for i in 1..self.operands.len() {
             arguments.push(self.operand_value(state, i))
         }
-        trace!("CALL ${:05x} with {} arg(s)", address, arguments.len());
+
         state.call(address, self.next_address, &arguments, self.store)
     }
 
@@ -787,8 +990,7 @@ impl Instruction {
         let index = self.operand_value(state, 1) as usize;
         let value = self.operand_value(state, 2) as u16;
 
-        trace!("STOREW #{:04x} to ${:05x}", value, address + (index * 2));
-        state.set_word( address + (index * 2), value);
+        state.set_word(address + (index * 2), value);
         self.next_address
     }
 
@@ -797,7 +999,6 @@ impl Instruction {
         let index = self.operand_value(state, 1) as usize;
         let value = self.operand_value(state, 2) as u8;
 
-        trace!("STOREB #{:02x} to ${:05x}", value, address + index);
         state.set_byte(address + index, value);
         self.next_address
     }
@@ -807,7 +1008,6 @@ impl Instruction {
         let prop = self.operand_value(state, 1) as u8;
         let value = self.operand_value(state, 2) as u16;
 
-        trace!("PUT_PROP #{:04x} #{:02x} #{:04x}", object, prop, value);
         object::set_property(state, object, prop, value);
         self.next_address
     }
@@ -816,20 +1016,18 @@ impl Instruction {
         let text = self.operand_value(state, 0) as u16;
         let parse = self.operand_value(state, 1) as u16;
 
-        let prefix = if state.version < 5 { "S" } else { "A" };
+        let len = if state.version < 5 {
+            state.byte_value(text as usize) - 1
+        } else {
+            state.byte_value(text as usize)
+        };
+
         if self.operands.len() > 2 {
             let time = self.operand_value(state, 2) as u16;
             let routine = self.operand_value(state, 3) as u16;
-            trace!(
-                "{}READ #{:04x} #{:04x} #{:04x} #{:04x}",
-                prefix,
-                text,
-                parse,
-                time,
-                routine
-            );
+            state.read(len, time);
         } else {
-            trace!("{}READ #{:04x} #{:04x}", prefix, text, parse);
+            state.read(len, 0);
         }
 
         panic!("read not implemented")
@@ -838,21 +1036,19 @@ impl Instruction {
     fn print_char(&self, state: &mut State) -> usize {
         let c = self.operand_value(state, 0) as u8;
 
-        trace!("PRINT_CHAR {}", c as char);
-        print!("{}", c as char);
+        state.print(format!("{}", c as char));
         self.next_address
     }
 
     fn print_num(&self, state: &mut State) -> usize {
         let n = self.operand_value(state, 0);
-        trace!("PRINT_NUM {}", n);
-        print!("{}", n);
+
+        state.print(format!("{}", n));
         self.next_address
     }
 
     fn random(&self, state: &mut State) -> usize {
         let range = self.operand_value(state, 0) as i16;
-        trace!("RANDOM #{}", range);
 
         let v = if range < 0 {
             state.seed(range as u64);
@@ -870,28 +1066,27 @@ impl Instruction {
         };
 
         state.set_variable(self.store.unwrap(), v);
-
         self.next_address
     }
 
     fn split_window(&self, state: &mut State) -> usize {
         let lines = self.operand_value(state, 0);
-        trace!("SPLIT_WINDOW #{:04x}", lines);
 
+        state.split_window(lines);
         self.next_address
     }
 
     fn set_window(&self, state: &mut State) -> usize {
         let window = self.operand_value(state, 0);
-        trace!("SET_WINDOW #{:04x}", window);
 
+        state.set_window(window);
         self.next_address
     }
 
     fn erase_window(&self, state: &mut State) -> usize {
         let window = self.operand_value(state, 0) as i16;
 
-        trace!("ERASE_WINDOW #{:04x}", window);
+        state.erase_window(window);
         self.next_address
     }
 
@@ -899,30 +1094,31 @@ impl Instruction {
         let line = self.operand_value(state, 0);
         let column = self.operand_value(state, 1);
 
-        trace!("SET_CURSOR #{:04x} #{:04x}", line, column);
+        state.set_cursor(line, column);
         self.next_address
     }
 
     fn set_text_style(&self, state: &mut State) -> usize {
         let style = self.operand_value(state, 0);
 
-        trace!("SET_TEXT_STYLE #{:04x}", style);
+        state.set_text_style(style);
         self.next_address
     }
 
     fn buffer_mode(&self, state: &mut State) -> usize {
         let mode = self.operand_value(state, 0);
-        trace!("BUFFER_MODE #{:04x}", mode);
+
+        state.buffer_mode(mode == 1);
         self.next_address
     }
 
     fn output_stream(&self, state: &mut State) -> usize {
-        let stream = self.operand_value(state, 0);
-        if state.version < 5 || stream != 3 {
-            trace!("OUTPUT_STREAM #{:04x}", stream);
+        let stream = self.operand_value(state, 0) as i16;
+        if stream != 3 {
+            state.output_stream(stream, 0);
         } else {
             let table = self.operand_value(state, 1);
-            trace!("OUTPUT_STREAM #{:04x} ${:04x}", stream, table)
+            state.output_stream(stream, table as usize);
         }
 
         self.next_address
@@ -930,14 +1126,19 @@ impl Instruction {
 
     fn read_char(&self, state: &mut State) -> usize {
         let x = self.operand_value(state, 0);
+        if x != 1 {
+            panic!("READ_CHAR first argument ({}) must be 1", x);
+        }
         if self.operands.len() > 1 {
             let time = self.operand_value(state, 1);
             let routine = self.operand_value(state, 2);
-            trace!("READ_CHAR #{:04x} #{:04x} #{:04x}", x, time, routine);
+            let c = state.read_char(time) as u16;
+            state.set_variable(self.store.unwrap(), c);
         } else {
-            trace!("READ_CHAR #{:04x}", x)
+            let c = state.read_char(0) as u16;
+            state.set_variable(self.store.unwrap(), c);
         }
 
-        panic!("read_char not implement")
+        self.next_address
     }
 }
