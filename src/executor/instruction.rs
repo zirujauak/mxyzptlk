@@ -1,7 +1,7 @@
 use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::executor::interpreter::Interpreter;
+use crate::interpreter::Interpreter;
 
 use super::object;
 use super::state::State;

@@ -4,7 +4,8 @@ use rand::SeedableRng;
 
 use crate::executor::header;
 
-use super::interpreter::Interpreter;
+use crate::interpreter::Interpreter;
+use crate::interpreter::Spec;
 
 #[derive(Debug)]
 pub struct Frame {
@@ -124,6 +125,38 @@ impl State {
             frames,
             interpreter,
         }
+    }
+
+    pub fn initialize(&mut self, spec: Spec) {
+        // Set and clear flag bits
+        for f in spec.set_flags {
+            header::set_flag(self, f)
+        }
+        for f in spec.clear_flags {
+            header::clear_flag(self, f)
+        }
+
+        // Interpreter number/version
+        self.set_byte(0x1E, spec.interpreter_number);
+        self.set_byte(0x1F, spec.interpreter_version);
+
+        // Screen size
+        self.set_byte(0x20, spec.screen_lines);
+        self.set_byte(0x21, spec.screen_columns);
+
+        if self.version >= 5 {
+            // Character sizing
+            self.set_byte(0x22, spec.column_units);
+            self.set_byte(0x23, spec.line_units);
+
+            // Default colours
+            self.set_byte(0x2C, spec.background_color);
+            self.set_byte(0x2D, spec.foreground_color);
+        }
+
+        // Specification
+        self.set_byte(0x32, 1);
+        self.set_byte(0x33, 1);
     }
 
     pub fn memory_map(&self) -> &Vec<u8> {
