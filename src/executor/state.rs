@@ -366,6 +366,6 @@ impl Interpreter for State {
         )
     }
     fn split_window(&mut self, lines: u16) {
-        trace!("Dispatch SPLIT_WINDOW {}", lines)
+        self.interpreter.split_window(lines);
     }
 }
