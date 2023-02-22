@@ -414,17 +414,21 @@ impl Instruction {
                 0x0 => self.rtrue(state),
                 0x1 => self.rfalse(state),
                 0x2 => self.print_literal(state),
+                0x3 => self.print_ret(state),
                 0xB => self.new_line(state),
                 _ => 0,
             },
             OperandCount::_1OP => match self.opcode.instruction {
+                0x0 => self.jz(state),
                 0x1 => self.get_sibling(state),
                 0x2 => self.get_child(state),
                 0x3 => self.get_parent(state),
+                0x4 => self.get_prop_len(state),
                 0x5 => self.inc(state),
                 0x6 => self.dec(state),
                 0x8 => self.call_1s(state),
                 0xA => self.print_obj(state),
+                0xB => self.ret(state),
                 0xC => self.jump(state),
                 0xD => self.print_paddr(state),
                 0xF => self.call_1n(state),
@@ -433,6 +437,8 @@ impl Instruction {
             OperandCount::_2OP => match self.opcode.instruction {
                 0x01 => self.je(state),
                 0x02 => self.jl(state),
+                0x03 => self.jg(state),
+                0x06 => self.jin(state),
                 0x08 => self.or(state),
                 0x09 => self.and(state),
                 0x0A => self.test_attr(state),
@@ -443,10 +449,14 @@ impl Instruction {
                 0x0F => self.loadw(state),
                 0x10 => self.loadb(state),
                 0x11 => self.get_prop(state),
+                0x12 => self.get_prop_addr(state),
                 0x14 => self.add(state),
                 0x15 => self.sub(state),
+                0x16 => self.mul(state),
                 0x17 => self.div(state),
                 0x18 => self.modulus(state),
+                0x19 => self.call_2s(state),
+                0x1A => self.call_2n(state),
                 _ => 0,
             },
             OperandCount::_VAR => match self.opcode.instruction {
@@ -458,6 +468,7 @@ impl Instruction {
                 0x05 => self.print_char(state),
                 0x06 => self.print_num(state),
                 0x07 => self.random(state),
+                0x08 => self.push(state),
                 0x0A => self.split_window(state),
                 0x0B => self.set_window(state),
                 0x0D => self.erase_window(state),
@@ -466,6 +477,7 @@ impl Instruction {
                 0x12 => self.buffer_mode(state),
                 0x13 => self.output_stream(state),
                 0x16 => self.read_char(state),
+                0x19 => self.call_vn(state),
                 _ => 0,
             },
         }
@@ -756,12 +768,45 @@ impl Instruction {
         self.next_address + ztext.len() * 2
     }
 
+    fn print_ret(&self, state: &mut State) -> usize {
+        let mut ztext = Vec::new();
+
+        let mut word = 0;
+        while word & 0x8000 == 0 {
+            word = state.word_value(self.next_address + (ztext.len() * 2));
+            ztext.push(word);
+        }
+
+        let text = text::from_vec(state, &ztext);
+        state.print(text);
+        state.return_fn(1)
+    }
+
     fn new_line(&self, state: &mut State) -> usize {
         state.interpreter.new_line();
         self.next_address
     }
 
+    // Utility fn
+    fn call_fn(&self, state: &mut State, address: usize, return_addr: usize, arguments: &Vec<u16>, result: Option<u8>) -> usize {
+        if address == 0 || address == 1 {
+            match result {
+                Some(v) => state.set_variable(v, address as u16),
+                None => {}
+            }
+            return_addr
+        } else {
+            state.call(address, return_addr, arguments, result)
+        }
+    }
+
     // 1OP
+    fn jz(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        self.execute_branch(operands[0] == 0)
+    }
+
     fn get_sibling(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
         let sibling = object::sibling(state, operands[0] as usize) as u16;
@@ -788,6 +833,14 @@ impl Instruction {
         self.next_address
     }
 
+    fn get_prop_len(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let len = object::property_length(state, operands[0] as usize);
+        state.set_variable(self.store.unwrap(), len as u16);
+        self.next_address
+    }
+
     fn inc(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
         let val = state.variable(operands[0] as u8);
@@ -810,7 +863,7 @@ impl Instruction {
         let operands = self.operand_values(state);
         let address = state.packed_routine_address(operands[0]);
 
-        state.call(address, self.next_address, &Vec::new(), self.store)
+        self.call_fn(state, address, self.next_address, &Vec::new(), self.store)
     }
 
     fn print_obj(&self, state: &mut State) -> usize {
@@ -822,6 +875,12 @@ impl Instruction {
         self.next_address
     }
 
+    fn ret(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        state.return_fn(operands[0])
+    }
+    
     fn jump(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
@@ -842,7 +901,7 @@ impl Instruction {
         let operands = self.operand_values(state);
         let address = state.packed_routine_address(operands[0]);
 
-        state.call(address, self.next_address, &Vec::new(), None)
+        self.call_fn(state, address, self.next_address, &Vec::new(), None)
     }
 
     // 2OP
@@ -859,15 +918,22 @@ impl Instruction {
 
     fn jl(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
-
-        let mut condition = false;
-        for i in 1..operands.len() {
-            condition = condition || (operands[0] as i16 == operands[i] as i16);
-        }
-
-        self.execute_branch(condition)
+        
+        self.execute_branch((operands[0] as i16) < (operands[1] as i16))
     }
 
+    fn jg(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        self.execute_branch((operands[0] as i16) > (operands[1] as i16))
+    }
+
+    fn jin(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        self.execute_branch(object::parent(state, operands[0] as usize) == operands[1] as usize)
+    }
+    
     fn or(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
@@ -921,6 +987,54 @@ impl Instruction {
 
     fn insert_obj(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
+        
+        let object = operands[0] as usize;
+        let new_parent = operands[1] as usize;
+        trace!("Insert {} into {}", object, new_parent);
+
+        // Step 1: remove object from its current parent
+        let old_parent = object::parent(state, object);
+        trace!("Old parent {}", old_parent);
+        
+        // If the old parent is not "nothing"
+        if old_parent != 0 {
+            let old_parent_child = object::child(state, old_parent);
+            trace!("Old parent child {}", old_parent_child);
+
+            // If the old_parent's child is this object
+            if old_parent_child == object {
+                trace!("Set {} child to {}", old_parent, object::sibling(state, object));
+                // Simply set the old parent's child to the object's sibling
+                object::set_child(state, old_parent, object::sibling(state, object));
+            } else {
+                // Else need to traverse the child list until we find
+                // the entry whose next sibiling is the object
+                let mut sibling = old_parent_child;
+                while sibling != 0 && object::sibling(state, sibling) != object {
+                    sibling = object::sibling(state, sibling);
+                }
+
+                trace!("Object previous sibling {}", sibling);
+                if sibling == 0 {
+                    panic!("Inconsistent object tree state!")
+                }
+
+                trace!("Set previous sibling {} sibling to {}", sibling, object::sibling(state, object));
+                object::set_sibling(state, sibling, object::sibling(state, object));
+            }
+        }
+
+        // Step 2: Set object's sibling to the new_parent's child
+        trace!("Set object {} sibling to {}", object, object::child(state, new_parent));
+        object::set_sibling(state, object, object::child(state, new_parent));
+
+        // Step 3: Set new_parent's child to the object
+        trace!("Set object {} child to {}", new_parent, object);
+        object::set_child(state, new_parent, object);
+
+        // Step 4: Set the object's parent to new_parent
+        trace!("Set object {} parent to {}", object, new_parent);
+        object::set_parent(state, object, new_parent);
 
         self.next_address
     }
@@ -955,6 +1069,15 @@ impl Instruction {
         self.next_address
     }
 
+    fn get_prop_addr(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let value = object::property_data_addr(state, operands[0] as usize, operands[1] as u8);
+        state.set_variable(self.store.unwrap(), value as u16);
+        self.next_address
+
+    }
+
     fn add(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
@@ -973,6 +1096,18 @@ impl Instruction {
         let mut value = operands[0] as i16;
         for i in 1..operands.len() {
             value = value - operands[i] as i16;
+        }
+
+        state.set_variable(self.store.unwrap(), value as u16);
+        self.next_address
+    }
+
+    fn mul(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let mut value = operands[0] as i16;
+        for i in 1..operands.len() {
+            value = value * operands[i] as i16;
         }
 
         state.set_variable(self.store.unwrap(), value as u16);
@@ -1003,7 +1138,26 @@ impl Instruction {
         self.next_address
     }
 
+    pub fn call_2s(&self, state: &mut State) -> usize {
+        let operands: Vec<u16> = self.operand_values(state);
+
+        let address = state.packed_routine_address(operands[0]);
+        let arguments = vec![operands[1]];
+
+        self.call_fn(state, address, self.next_address, &arguments, self.store)
+    }
+
+    pub fn call_2n(&self, state: &mut State) -> usize {
+        let operands: Vec<u16> = self.operand_values(state);
+
+        let address = state.packed_routine_address(operands[0]);
+        let arguments = vec![operands[1]];
+
+        self.call_fn(state, address, self.next_address, &arguments, None)
+    }
+
     // VAR
+    // aka call_vs
     fn call(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
@@ -1013,7 +1167,7 @@ impl Instruction {
             arguments.push(operands[i]);
         }
 
-        state.call(address, self.next_address, &arguments, self.store)
+        self.call_fn(state, address, self.next_address, &arguments, self.store)
     }
 
     fn storew(&self, state: &mut State) -> usize {
@@ -1097,6 +1251,12 @@ impl Instruction {
         self.next_address
     }
 
+    fn push(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        state.current_frame_mut().push(operands[0]);
+        self.next_address
+    }
     fn split_window(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
@@ -1171,5 +1331,17 @@ impl Instruction {
         }
 
         self.next_address
+    }
+
+    fn call_vn(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let address = state.packed_routine_address(operands[0]);
+        let mut arguments = Vec::new();
+        for i in 1..operands.len() {
+            arguments.push(operands[i]);
+        }
+
+        self.call_fn(state, address, self.next_address, &arguments, None)
     }
 }
