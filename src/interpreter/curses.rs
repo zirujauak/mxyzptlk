@@ -150,6 +150,18 @@ impl Interpreter for Curses {
     }
 
     fn split_window(&mut self, lines: u16) {
+        if lines == 0 {
+            // Unsplit
+        } else {
+            if version == 3 {
+                // Split off {lines} lines
+                // Clear the upper window (1)
+            } else {
+                // Split off {lines} lines
+                // If cursor is in upper window, move cursor to first line
+                // in lower window (0)
+            }
+        }
         todo!()
     }
 }
