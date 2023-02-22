@@ -91,25 +91,35 @@ fn property_table_address(state: &State, object: usize) -> usize {
     }
 }
 
-fn property_size(state: &State, property_address: usize) -> u8 {
+fn property_size(state: &State, property_address: usize) -> usize {
+    let size_byte = state.byte_value(property_address);
     match state.version {
         1 | 2 | 3 => {
-            let size_byte = state.byte_value(property_address);
-            (size_byte / 32) + 1
-        }
+            (size_byte as usize / 32) + 1
+        },
         4 | 5 | 6 | 7 | 8 => {
-            let size_byte = state.byte_value(property_address);
-            if size_byte & 0x80 == 0x80 {
-                state.byte_value(property_address + 1) & 0x3F
-            } else {
-                if size_byte & 0x40 == 0x40 {
-                    2
-                } else {
-                    1
-                }
+            match size_byte & 0xC0 {
+                0x40 => 2,
+                0x20 => 1,
+                _ => state.byte_value(property_address + 1) as usize & 0x3F
+
             }
-        }
-        _ => 0,
+        },
+        _ => 0
+    }    
+}
+
+fn property_data_address(state: &State, property_address: usize) -> usize {
+    match state.version {
+        1 | 2 | 3 => property_address + 1,
+        4 | 5 | 6 | 7 | 8 => {
+            if state.byte_value(property_address) & 0x80 == 0x80 {
+                property_address + 2
+            } else {
+                property_address + 1
+            }
+        },
+        _ => 0
     }
 }
 
@@ -134,7 +144,10 @@ fn property_address(state: &State, object: usize, property: u8) -> usize {
                 }
             }
             4 | 5 | 6 | 7 | 8 => {
+                trace!("property_address: ${:04x}", property_address);
+                trace!("size byte: ${:02x}", size_byte);
                 let prop_num = size_byte & 0x3F;
+                trace!("property #{}", prop_num);
                 let mut prop_data = 1;
                 let prop_size = if size_byte & 0x80 == 0x80 {
                     prop_data = 2;
@@ -146,6 +159,7 @@ fn property_address(state: &State, object: usize, property: u8) -> usize {
                         1
                     }
                 };
+                trace!("property size: {} bytes", prop_size);
                 if prop_num == property {
                     return property_address;
                 } else if prop_num < property {
@@ -173,17 +187,37 @@ pub fn property(state: &State, object: usize, property: u8) -> u16 {
         default_property(state, property)
     } else {
         let size = property_size(state, property_address);
+        let property_data_address = property_data_address(state, property_address);
+        match size {
+            1 => state.byte_value(property_data_address) as u16,
+            2 => state.word_value(property_data_address),
+            _ => panic!("GET_PROP for property with length > 2")
+        }
+    }
+}
+
+pub fn property_data_addr(state: &State, object: usize, property: u8) -> usize {
+    let property_address = property_address(state, object, property);
+    if property_address == 0 {
+        0
+    } else {
+        property_data_address(state, property_address)
+    }
+}
+
+pub fn property_length(state: &State, property_data_address: usize) -> usize {
+    if property_data_address == 0 {
+        0
+    } else {
+        let size_byte = state.byte_value(property_data_address - 1);
         match state.version {
-            1 | 2 | 3 => match size {
-                1 => state.byte_value(property_address + 1) as u16,
-                2 => state.word_value(property_address + 1),
-                _ => {
-                    trace!("Can't get property with length {}", size);
-                    panic!("Can't get property with length {}", size);
-                }
+            1 | 2 | 3 => property_size(state, property_data_address - 1),
+            4 | 5 | 6 | 7 | 8 => if size_byte & 0x80 == 0x80 {
+                property_size(state, property_data_address - 2)
+            } else {
+                property_size(state, property_data_address - 1)
             },
-            4 | 5 | 6 | 7 | 8 => 0,
-            _ => 0,
+            _ => 0
         }
     }
 }
@@ -247,31 +281,74 @@ pub fn short_name(state: &State, object: usize) -> Vec<u16> {
 }
 
 pub fn parent(state: &State, object: usize) -> usize {
-    let object_address = object_address(state, object);
+    if object == 0 {
+        warn!("parent called on object 0");
+        0
+    } else {
+        let object_address = object_address(state, object);
 
+        match state.version {
+            1 | 2 | 3 => state.byte_value(object_address + 4) as usize,
+            4 | 5 | 6 | 7 | 8 => state.word_value(object_address + 6) as usize,
+            _ => 0,
+        }   
+    }
+}
+
+pub fn set_parent(state: &mut State, object: usize, parent: usize) {
+    let object_address = object_address(state, object);
     match state.version {
-        1 | 2 | 3 => state.byte_value(object_address + 4) as usize,
-        4 | 5 | 6 | 7 | 8 => state.word_value(object_address + 6) as usize,
-        _ => 0,
+        1 | 2 | 3 => state.set_byte(object_address as usize + 4, parent as u8),
+        4 | 5 | 6 | 7 | 8 => state.set_word(object_address as usize + 6, parent as u16),
+        _ => {}
     }
 }
 
 pub fn child(state: &State, object: usize) -> usize {
-    let object_address = object_address(state, object);
+    if object == 0 {
+        warn!("child called on object 0");
+        0
+    } else {
+        let object_address = object_address(state, object);
 
+        match state.version {
+            1 | 2 | 3 => state.byte_value(object_address + 6) as usize,
+            4 | 5 | 6 | 7 | 8 => state.word_value(object_address + 10) as usize,
+            _ => 0,
+        }
+    }
+}
+
+pub fn set_child(state: &mut State, object: usize, child: usize) {
+    let object_address = object_address(state, object);
     match state.version {
-        1 | 2 | 3 => state.byte_value(object_address + 6) as usize,
-        4 | 5 | 6 | 7 | 8 => state.word_value(object_address + 10) as usize,
-        _ => 0,
+        1 | 2 | 3 => state.set_byte(object_address as usize + 6, child as u8),
+        4 | 5 | 6 | 7 | 8 => state.set_word(object_address as usize + 10, child as u16),
+        _ => {}
     }
 }
 
 pub fn sibling(state: &State, object: usize) -> usize {
-    let object_address = object_address(state, object);
+    if object == 0 {
+        warn!("sibling called on object 0");
+        0
+    } else {
+        let object_address = object_address(state, object);
 
-    match state.version {
-        1 | 2 | 3 => state.byte_value(object_address + 5) as usize,
-        4 | 5 | 6 | 7 | 8 => state.word_value(object_address + 8) as usize,
-        _ => 0,
+        match state.version {
+            1 | 2 | 3 => state.byte_value(object_address + 5) as usize,
+            4 | 5 | 6 | 7 | 8 => state.word_value(object_address + 8) as usize,
+            _ => 0,
+        }
     }
 }
+
+pub fn set_sibling(state: &mut State, object: usize, sibling: usize) {
+    let object_address = object_address(state, object);
+    match state.version {
+        1 | 2 | 3 => state.set_byte(object_address as usize + 5, sibling as u8),
+        4 | 5 | 6 | 7 | 8 => state.set_word(object_address as usize + 8, sibling as u16),
+        _ => {}
+    }
+}
+
