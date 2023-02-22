@@ -439,6 +439,7 @@ impl Instruction {
                 0x0B => self.set_attr(state),
                 0x0C => self.clear_attr(state),
                 0x0D => self.store(state),
+                0x0E => self.insert_obj(state),
                 0x0F => self.loadw(state),
                 0x10 => self.loadb(state),
                 0x11 => self.get_prop(state),
@@ -470,13 +471,20 @@ impl Instruction {
         }
     }
 
-    fn operand_value(&self, state: &mut State, index: usize) -> u16 {
-        match self.operands[index].operand_type {
-            OperandType::SmallConstant | OperandType::LargeConstant => {
-                self.operands[index].operand_value
-            }
-            OperandType::Variable => state.variable(self.operands[index].operand_value as u8),
+    fn operand_value(&self, state: &mut State, operand: &Operand) -> u16 {
+        match operand.operand_type {
+            OperandType::SmallConstant | OperandType::LargeConstant => operand.operand_value,
+            OperandType::Variable => state.variable(operand.operand_value as u8),
         }
+    }
+
+    fn operand_values(&self, state: &mut State) -> Vec<u16> {
+        let mut v = Vec::new();
+        for o in &self.operands {
+            v.push(self.operand_value(state, &o))
+        }
+
+        v
     }
 
     fn execute_branch(&self, condition: bool) -> usize {
@@ -755,8 +763,8 @@ impl Instruction {
 
     // 1OP
     fn get_sibling(&self, state: &mut State) -> usize {
-        let object = self.operand_value(state, 0) as usize;
-        let sibling = object::sibling(state, object) as u16;
+        let operands = self.operand_values(state);
+        let sibling = object::sibling(state, operands[0] as usize) as u16;
         let condition = sibling != 0;
 
         state.set_variable(self.store.unwrap(), sibling);
@@ -764,8 +772,8 @@ impl Instruction {
     }
 
     fn get_child(&self, state: &mut State) -> usize {
-        let object = self.operand_value(state, 0) as usize;
-        let child = object::child(state, object) as u16;
+        let operands = self.operand_values(state);
+        let child = object::child(state, operands[0] as usize) as u16;
         let condition = child != 0;
 
         state.set_variable(self.store.unwrap(), child);
@@ -773,41 +781,41 @@ impl Instruction {
     }
 
     fn get_parent(&self, state: &mut State) -> usize {
-        let object = self.operand_value(state, 0) as usize;
-        let parent = object::parent(state, object) as u16;
+        let operands = self.operand_values(state);
+        let parent = object::parent(state, operands[0] as usize) as u16;
 
         state.set_variable(self.store.unwrap(), parent);
         self.next_address
     }
 
     fn inc(&self, state: &mut State) -> usize {
-        let arg = self.operand_value(state, 0) as u8;
-        let val = state.variable(arg);
+        let operands = self.operand_values(state);
+        let val = state.variable(operands[0] as u8);
         let new_val = val as i16 + 1;
 
-        state.set_variable(arg, new_val as u16);
+        state.set_variable(operands[0] as u8, new_val as u16);
         self.next_address
     }
 
     fn dec(&self, state: &mut State) -> usize {
-        let arg = self.operand_value(state, 0) as u8;
-        let val = state.variable(arg);
+        let operands = self.operand_values(state);
+        let val = state.variable(operands[0] as u8);
         let new_val = val as i16 - 1;
 
-        state.set_variable(arg, new_val as u16);
+        state.set_variable(operands[0] as u8, new_val as u16);
         self.next_address
     }
 
     fn call_1s(&self, state: &mut State) -> usize {
-        let addr = self.operand_value(state, 0) as u16;
-        let address = state.packed_routine_address(addr);
+        let operands = self.operand_values(state);
+        let address = state.packed_routine_address(operands[0]);
 
         state.call(address, self.next_address, &Vec::new(), self.store)
     }
 
     fn print_obj(&self, state: &mut State) -> usize {
-        let object = self.operand_value(state, 0) as usize;
-        let ztext = object::short_name(state, object);
+        let operands = self.operand_values(state);
+        let ztext = object::short_name(state, operands[0] as usize);
 
         let text = text::from_vec(state, &ztext);
         state.print(text);
@@ -815,14 +823,15 @@ impl Instruction {
     }
 
     fn jump(&self, state: &mut State) -> usize {
-        let offset = self.operand_value(state, 0) as i16;
-        let address = (self.next_address as isize + offset as isize - 2) as usize;
-        address
+        let operands = self.operand_values(state);
+
+        let address = (self.next_address as isize) + (operands[0] as i16) as isize - 2;
+        address as usize
     }
 
     fn print_paddr(&self, state: &mut State) -> usize {
-        let addr = self.operand_value(state, 0);
-        let address = state.packed_string_address(addr);
+        let operands = self.operand_values(state);
+        let address = state.packed_string_address(operands[0]);
 
         let text = text::as_text(state, address);
         state.print(text);
@@ -830,55 +839,63 @@ impl Instruction {
     }
 
     fn call_1n(&self, state: &mut State) -> usize {
-        let addr = self.operand_value(state, 0);
-        let address = state.packed_routine_address(addr);
+        let operands = self.operand_values(state);
+        let address = state.packed_routine_address(operands[0]);
 
         state.call(address, self.next_address, &Vec::new(), None)
     }
 
     // 2OP
     fn je(&self, state: &mut State) -> usize {
-        let a = self.operand_value(state, 0) as i16;
+        let operands = self.operand_values(state);
+
         let mut condition = false;
-        for i in 1..self.operands.len() {
-            condition = condition || (a == self.operand_value(state, i) as i16);
+        for i in 1..operands.len() {
+            condition = condition || (operands[0] as i16 == operands[i] as i16);
         }
 
         self.execute_branch(condition)
     }
 
     fn jl(&self, state: &mut State) -> usize {
-        let a = self.operand_value(state, 0) as i16;
+        let operands = self.operand_values(state);
+
         let mut condition = false;
-        for i in 1..self.operands.len() {
-            condition = condition || (a == self.operand_value(state, i) as i16);
+        for i in 1..operands.len() {
+            condition = condition || (operands[0] as i16 == operands[i] as i16);
         }
 
         self.execute_branch(condition)
     }
 
     fn or(&self, state: &mut State) -> usize {
-        let a = self.operand_value(state, 0) as u16;
-        let b = self.operand_value(state, 1) as u16;
-        let v = a | b;
+        let operands = self.operand_values(state);
+
+        let mut v = operands[0];
+        for i in 1..operands.len() {
+            v = v | operands[i]
+        }
 
         state.set_variable(self.store.unwrap(), v);
         self.next_address
     }
 
     fn and(&self, state: &mut State) -> usize {
-        let a = self.operand_value(state, 0) as u16;
-        let b = self.operand_value(state, 1) as u16;
-        let v = a & b;
+        let operands = self.operand_values(state);
+
+        let mut v = operands[0];
+        for i in 1..operands.len() {
+            v = v & operands[i];
+        }
 
         state.set_variable(self.store.unwrap(), v);
         self.next_address
     }
 
     fn loadw(&self, state: &mut State) -> usize {
-        let addr = self.operand_value(state, 0) as usize;
-        let index = self.operand_value(state, 1) as usize;
-        let address = addr + (index * 2);
+        let operands = self.operand_values(state);
+
+        let address = operands[0] as usize + (operands[1] as usize * 2);
         let value = state.word_value(address);
 
         state.set_variable(self.store.unwrap(), value);
@@ -886,9 +903,9 @@ impl Instruction {
     }
 
     fn loadb(&self, state: &mut State) -> usize {
-        let addr = self.operand_value(state, 0) as usize;
-        let index = self.operand_value(state, 1) as usize;
-        let address = addr + index;
+        let operands = self.operand_values(state);
+
+        let address = operands[0] as usize + operands[1] as usize;
         let value = state.byte_value(address) as u16;
 
         state.set_variable(self.store.unwrap(), value);
@@ -896,135 +913,145 @@ impl Instruction {
     }
 
     fn store(&self, state: &mut State) -> usize {
-        let var = self.operand_value(state, 0) as u8;
-        let value = self.operand_value(state, 1) as u16;
+        let operands = self.operand_values(state);
 
-        state.set_variable(var, value);
+        state.set_variable(operands[0] as u8, operands[1]);
+        self.next_address
+    }
+
+    fn insert_obj(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
         self.next_address
     }
 
     fn test_attr(&self, state: &mut State) -> usize {
-        let object = self.operand_value(state, 0) as usize;
-        let attribute = self.operand_value(state, 1) as u8;
-        let condition = object::attribute(state, object, attribute);
+        let operands = self.operand_values(state);
+
+        let condition = object::attribute(state, operands[0] as usize, operands[1] as u8);
 
         self.execute_branch(condition)
     }
 
     fn set_attr(&self, state: &mut State) -> usize {
-        let object = self.operand_value(state, 0) as usize;
-        let attribute = self.operand_value(state, 1) as u8;
+        let operands = self.operand_values(state);
 
-        object::set_attribute(state, object, attribute);
+        object::set_attribute(state, operands[0] as usize, operands[1] as u8);
         self.next_address
     }
 
     fn clear_attr(&self, state: &mut State) -> usize {
-        let object = self.operand_value(state, 0) as usize;
-        let attribute = self.operand_value(state, 1) as u8;
+        let operands = self.operand_values(state);
 
-        object::clear_attribute(state, object, attribute);
+        object::clear_attribute(state, operands[0] as usize, operands[1] as u8);
         self.next_address
     }
 
     fn get_prop(&self, state: &mut State) -> usize {
-        let object = self.operand_value(state, 0) as usize;
-        let property = self.operand_value(state, 1) as u8;
-        let value = object::property(state, object, property);
+        let operands = self.operand_values(state);
 
+        let value = object::property(state, operands[0] as usize, operands[1] as u8);
         state.set_variable(self.store.unwrap(), value);
         self.next_address
     }
 
     fn add(&self, state: &mut State) -> usize {
-        let a = self.operand_value(state, 0) as i16;
-        let b = self.operand_value(state, 1) as i16;
-        let value = (a + b) as u16;
+        let operands = self.operand_values(state);
 
-        state.set_variable(self.store.unwrap(), value);
+        let mut value = operands[0] as i16;
+        for i in 1..operands.len() {
+            value = value + operands[i] as i16;
+        }
+
+        state.set_variable(self.store.unwrap(), value as u16);
         self.next_address
     }
 
     fn sub(&self, state: &mut State) -> usize {
-        let a = self.operand_value(state, 0) as i16;
-        let b = self.operand_value(state, 1) as i16;
-        let value = (a - b) as u16;
+        let operands = self.operand_values(state);
 
-        state.set_variable(self.store.unwrap(), value);
+        let mut value = operands[0] as i16;
+        for i in 1..operands.len() {
+            value = value - operands[i] as i16;
+        }
+
+        state.set_variable(self.store.unwrap(), value as u16);
         self.next_address
     }
 
     fn div(&self, state: &mut State) -> usize {
-        let a = self.operand_value(state, 0) as i16;
-        let b = self.operand_value(state, 1) as i16;
-        let value = (a / b) as u16;
+        let operands = self.operand_values(state);
 
-        state.set_variable(self.store.unwrap(), value);
+        let mut value = operands[0] as i16;
+        for i in 1..operands.len() {
+            value = value / operands[i] as i16;
+        }
+
+        state.set_variable(self.store.unwrap(), value as u16);
         self.next_address
     }
 
     fn modulus(&self, state: &mut State) -> usize {
-        let a = self.operand_value(state, 0) as i16;
-        let b = self.operand_value(state, 1) as i16;
-        let value = (a % b) as u16;
+        let operands = self.operand_values(state);
 
-        state.set_variable(self.store.unwrap(), value);
+        let mut value = operands[0] as i16;
+        for i in 1..operands.len() {
+            value = value % operands[i] as i16;
+        }
+
+        state.set_variable(self.store.unwrap(), value as u16);
         self.next_address
     }
 
     // VAR
     fn call(&self, state: &mut State) -> usize {
-        let addr = self.operand_value(state, 0);
-        let address = state.packed_routine_address(addr);
+        let operands = self.operand_values(state);
 
+        let address = state.packed_routine_address(operands[0]);
         let mut arguments = Vec::new();
-        for i in 1..self.operands.len() {
-            arguments.push(self.operand_value(state, i))
+        for i in 1..operands.len() {
+            arguments.push(operands[i]);
         }
 
         state.call(address, self.next_address, &arguments, self.store)
     }
 
     fn storew(&self, state: &mut State) -> usize {
-        let address = self.operand_value(state, 0) as usize;
-        let index = self.operand_value(state, 1) as usize;
-        let value = self.operand_value(state, 2) as u16;
+        let operands = self.operand_values(state);
 
-        state.set_word(address + (index * 2), value);
+        state.set_word(operands[0] as usize + (operands[1] as usize * 2), operands[2]);
         self.next_address
     }
 
     fn storeb(&self, state: &mut State) -> usize {
-        let address = self.operand_value(state, 0) as usize;
-        let index = self.operand_value(state, 1) as usize;
-        let value = self.operand_value(state, 2) as u8;
+        let operands = self.operand_values(state);
 
-        state.set_byte(address + index, value);
+        state.set_byte(operands[0] as usize + operands[1] as usize, operands[2] as u8);
         self.next_address
     }
 
     fn put_prop(&self, state: &mut State) -> usize {
-        let object = self.operand_value(state, 0) as usize;
-        let prop = self.operand_value(state, 1) as u8;
-        let value = self.operand_value(state, 2) as u16;
+        let operands = self.operand_values(state);
 
-        object::set_property(state, object, prop, value);
+        object::set_property(state, operands[0] as usize, operands[1] as u8, operands[2]);
         self.next_address
     }
 
     pub fn read(&self, state: &mut State) -> usize {
-        let text = self.operand_value(state, 0) as u16;
-        let parse = self.operand_value(state, 1) as u16;
+        let operands = self.operand_values(state);
+
+        let text = operands[0] as usize;
+        let parse = operands[1] as usize;
 
         let len = if state.version < 5 {
-            state.byte_value(text as usize) - 1
+            state.byte_value(text) - 1
         } else {
-            state.byte_value(text as usize)
+            state.byte_value(text)
         };
 
         if self.operands.len() > 2 {
-            let time = self.operand_value(state, 2) as u16;
-            let routine = self.operand_value(state, 3) as u16;
+            let time = operands[2] as u16;
+            let routine = operands[3] as u16;
             state.read(len, time);
         } else {
             state.read(len, 0);
@@ -1034,22 +1061,23 @@ impl Instruction {
     }
 
     fn print_char(&self, state: &mut State) -> usize {
-        let c = self.operand_value(state, 0) as u8;
+        let operands = self.operand_values(state);
 
-        state.print(format!("{}", c as char));
+        state.print(format!("{}", (operands[0] as u8) as char));
         self.next_address
     }
 
     fn print_num(&self, state: &mut State) -> usize {
-        let n = self.operand_value(state, 0);
+        let operands = self.operand_values(state);
 
-        state.print(format!("{}", n));
+        state.print(format!("{}", operands[0]));
         self.next_address
     }
 
     fn random(&self, state: &mut State) -> usize {
-        let range = self.operand_value(state, 0) as i16;
+        let operands = self.operand_values(state);
 
+        let range = operands[0] as i16;
         let v = if range < 0 {
             state.seed(range as u64);
             0
@@ -1070,54 +1098,55 @@ impl Instruction {
     }
 
     fn split_window(&self, state: &mut State) -> usize {
-        let lines = self.operand_value(state, 0);
+        let operands = self.operand_values(state);
 
-        state.split_window(lines);
+        state.split_window(operands[0]);
         self.next_address
     }
 
     fn set_window(&self, state: &mut State) -> usize {
-        let window = self.operand_value(state, 0);
+        let operands = self.operand_values(state);
 
-        state.set_window(window);
+        state.set_window(operands[0]);
         self.next_address
     }
 
     fn erase_window(&self, state: &mut State) -> usize {
-        let window = self.operand_value(state, 0) as i16;
+        let operands = self.operand_values(state);
 
-        state.erase_window(window);
+        state.erase_window(operands[0] as i16);
         self.next_address
     }
 
     fn set_cursor(&self, state: &mut State) -> usize {
-        let line = self.operand_value(state, 0);
-        let column = self.operand_value(state, 1);
+        let operands = self.operand_values(state);
 
-        state.set_cursor(line, column);
+        state.set_cursor(operands[0], operands[1]);
         self.next_address
     }
 
     fn set_text_style(&self, state: &mut State) -> usize {
-        let style = self.operand_value(state, 0);
+        let operands = self.operand_values(state);
 
-        state.set_text_style(style);
+        state.set_text_style(operands[0]);
         self.next_address
     }
 
     fn buffer_mode(&self, state: &mut State) -> usize {
-        let mode = self.operand_value(state, 0);
+        let operands = self.operand_values(state);
 
-        state.buffer_mode(mode == 1);
+        state.buffer_mode(operands[0] == 1);
         self.next_address
     }
 
     fn output_stream(&self, state: &mut State) -> usize {
-        let stream = self.operand_value(state, 0) as i16;
+        let operands = self.operand_values(state);
+
+        let stream = operands[0] as i16;
         if stream != 3 {
             state.output_stream(stream, 0);
         } else {
-            let table = self.operand_value(state, 1);
+            let table = operands[1];
             state.output_stream(stream, table as usize);
         }
 
@@ -1125,13 +1154,15 @@ impl Instruction {
     }
 
     fn read_char(&self, state: &mut State) -> usize {
-        let x = self.operand_value(state, 0);
+        let operands = self.operand_values(state);
+
+        let x = operands[0];
         if x != 1 {
             panic!("READ_CHAR first argument ({}) must be 1", x);
         }
         if self.operands.len() > 1 {
-            let time = self.operand_value(state, 1);
-            let routine = self.operand_value(state, 2);
+            let time = operands[1];
+            let routine = operands[2];
             let c = state.read_char(time) as u16;
             state.set_variable(self.store.unwrap(), c);
         } else {
