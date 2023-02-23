@@ -734,14 +734,34 @@ impl Instruction {
     }
 
     pub fn trace_instruction(&self, state: &State) {
-        trace!(
-            "${:05x}: {} {}{}{}",
-            self.address,
-            self.name(state),
-            self.format_operands(state),
-            self.format_branch(),
-            self.format_store()
-        );
+        match (&self.opcode.opcount, self.opcode.instruction) {
+            (OperandCount::_0OP, 0x2) | (OperandCount::_0OP, 0x3) => trace!(
+                "${:05x}: {} \"{}\"",
+                self.address,
+                self.name(state),
+                text::as_text(state, self.address + 1)
+            ),
+            (OperandCount::_1OP, 0xD) => {
+                trace!(
+                    "${:05x}: {} {} \"{}\"",
+                    self.address,
+                    self.name(state),
+                    self.format_operand(state, 0),
+                    text::as_text(
+                        state,
+                        state.packed_string_address(self.operands[0].operand_value)
+                    )
+                )
+            }
+            _ => trace!(
+                "${:05x}: {} {}{}{}",
+                self.address,
+                self.name(state),
+                self.format_operands(state),
+                self.format_branch(),
+                self.format_store()
+            ),
+        }
     }
 
     // 0OP
@@ -779,6 +799,7 @@ impl Instruction {
 
         let text = text::from_vec(state, &ztext);
         state.print(text);
+        state.new_line();
         state.return_fn(1)
     }
 
@@ -788,7 +809,14 @@ impl Instruction {
     }
 
     // Utility fn
-    fn call_fn(&self, state: &mut State, address: usize, return_addr: usize, arguments: &Vec<u16>, result: Option<u8>) -> usize {
+    fn call_fn(
+        &self,
+        state: &mut State,
+        address: usize,
+        return_addr: usize,
+        arguments: &Vec<u16>,
+        result: Option<u8>,
+    ) -> usize {
         if address == 0 || address == 1 {
             match result {
                 Some(v) => state.set_variable(v, address as u16),
@@ -880,7 +908,7 @@ impl Instruction {
 
         state.return_fn(operands[0])
     }
-    
+
     fn jump(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
@@ -918,7 +946,7 @@ impl Instruction {
 
     fn jl(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
-        
+
         self.execute_branch((operands[0] as i16) < (operands[1] as i16))
     }
 
@@ -933,7 +961,7 @@ impl Instruction {
 
         self.execute_branch(object::parent(state, operands[0] as usize) == operands[1] as usize)
     }
-    
+
     fn or(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
@@ -987,7 +1015,7 @@ impl Instruction {
 
     fn insert_obj(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
-        
+
         let object = operands[0] as usize;
         let new_parent = operands[1] as usize;
         trace!("Insert {} into {}", object, new_parent);
@@ -995,7 +1023,7 @@ impl Instruction {
         // Step 1: remove object from its current parent
         let old_parent = object::parent(state, object);
         trace!("Old parent {}", old_parent);
-        
+
         // If the old parent is not "nothing"
         if old_parent != 0 {
             let old_parent_child = object::child(state, old_parent);
@@ -1003,7 +1031,11 @@ impl Instruction {
 
             // If the old_parent's child is this object
             if old_parent_child == object {
-                trace!("Set {} child to {}", old_parent, object::sibling(state, object));
+                trace!(
+                    "Set {} child to {}",
+                    old_parent,
+                    object::sibling(state, object)
+                );
                 // Simply set the old parent's child to the object's sibling
                 object::set_child(state, old_parent, object::sibling(state, object));
             } else {
@@ -1019,13 +1051,21 @@ impl Instruction {
                     panic!("Inconsistent object tree state!")
                 }
 
-                trace!("Set previous sibling {} sibling to {}", sibling, object::sibling(state, object));
+                trace!(
+                    "Set previous sibling {} sibling to {}",
+                    sibling,
+                    object::sibling(state, object)
+                );
                 object::set_sibling(state, sibling, object::sibling(state, object));
             }
         }
 
         // Step 2: Set object's sibling to the new_parent's child
-        trace!("Set object {} sibling to {}", object, object::child(state, new_parent));
+        trace!(
+            "Set object {} sibling to {}",
+            object,
+            object::child(state, new_parent)
+        );
         object::set_sibling(state, object, object::child(state, new_parent));
 
         // Step 3: Set new_parent's child to the object
@@ -1075,7 +1115,6 @@ impl Instruction {
         let value = object::property_data_addr(state, operands[0] as usize, operands[1] as u8);
         state.set_variable(self.store.unwrap(), value as u16);
         self.next_address
-
     }
 
     fn add(&self, state: &mut State) -> usize {
@@ -1173,14 +1212,20 @@ impl Instruction {
     fn storew(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        state.set_word(operands[0] as usize + (operands[1] as usize * 2), operands[2]);
+        state.set_word(
+            operands[0] as usize + (operands[1] as usize * 2),
+            operands[2],
+        );
         self.next_address
     }
 
     fn storeb(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        state.set_byte(operands[0] as usize + operands[1] as usize, operands[2] as u8);
+        state.set_byte(
+            operands[0] as usize + operands[1] as usize,
+            operands[2] as u8,
+        );
         self.next_address
     }
 
@@ -1203,15 +1248,18 @@ impl Instruction {
             state.byte_value(text)
         };
 
-        if self.operands.len() > 2 {
+        trace!("Read up to {} characters", len);
+        
+        let input = if self.operands.len() > 2 {
             let time = operands[2] as u16;
             let routine = operands[3] as u16;
-            state.read(len, time);
+            state.read(len, time)
         } else {
-            state.read(len, 0);
-        }
+            state.read(len, 0)
+        };
 
-        panic!("read not implemented")
+        trace!("Read <= \"{:?}\"", input);
+        panic!("READ not fully implemented");
     }
 
     fn print_char(&self, state: &mut State) -> usize {
