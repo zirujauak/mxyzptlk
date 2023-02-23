@@ -311,17 +311,16 @@ impl Interpreter for State {
         self.interpreter.buffer_mode(mode);
     }
     fn erase_line(&mut self, value: u16) {
-        trace!("Dispatch ERASE_LINE {}", value)
+        self.interpreter.erase_line(value);
     }
     fn erase_window(&mut self, window: i16) {
         self.interpreter.erase_window(window);
     }
     fn get_cursor(&mut self) -> (u16, u16) {
-        trace!("Dispatch GET_CURSOR");
-        (1, 1)
+        self.interpreter.get_cursor()
     }
     fn input_stream(&mut self, stream: u16) {
-        trace!("Dispatch INPUT_STREAM {}", stream)
+        self.interpreter.input_stream(stream)
     }
     fn new_line(&mut self) {
         self.interpreter.new_line();
@@ -333,37 +332,32 @@ impl Interpreter for State {
         self.interpreter.print(text)
     }
     fn print_table(&mut self, text: String, width: u16, height: u16, skip: u16) {
-        trace!("Dispatch PRINT_TABLE {}, {}, {}", width, height, skip)
+        self.interpreter.print_table(text, width, height, skip);
     }
-    fn read(&mut self, length: u8, time: u16) -> String {
-        trace!("Dispatch READ {}, {}", length, time);
-
-        String::new()
+    fn read(&mut self, length: u8, time: u16) -> Vec<char> {
+        self.interpreter.read(length, time)
     }
     fn read_char(&mut self, time: u16) -> char {
         self.interpreter.read_char(time)
     }
 
     fn set_colour(&mut self, foreground: u16, background: u16) {
-        trace!("Dispatch SET_COLOUR {}, {}", foreground, background)
+        self.interpreter.set_colour(foreground, background)
     }
     fn set_cursor(&mut self, line: u16, column: u16) {
         self.interpreter.set_cursor(line, column);
     }
     fn set_text_style(&mut self, style: u16) {
-        trace!("Dipsatch SET_TEXT_STYLE {}", style)
+        self.interpreter.set_text_style(style);
     }
     fn set_window(&mut self, window: u16) {
-        trace!("Dispatch SET_WINDOW {}", window)
+        self.interpreter.set_window(window);
+    }
+    fn show_status(&mut self, location: &str, status: &str) {
+        self.interpreter.show_status(location, status)
     }
     fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8) {
-        trace!(
-            "Dipsatch SOUND_EFFECT {}, {}, {}, {}",
-            number,
-            effect,
-            volume,
-            repeats
-        )
+        self.interpreter.sound_effect(number, effect, volume, repeats)
     }
     fn split_window(&mut self, lines: u16) {
         self.interpreter.split_window(lines);
