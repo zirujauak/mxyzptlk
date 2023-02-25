@@ -177,7 +177,7 @@ fn property_address(state: &State, object: usize, property: u8) -> usize {
 
 fn default_property(state: &State, property: u8) -> u16 {
     let object_table = header::object_table(state);
-    let property_address = object_table + (property as usize * 2);
+    let property_address = object_table + ((property as usize - 1) * 2);
     state.word_value(property_address)
 }
 
