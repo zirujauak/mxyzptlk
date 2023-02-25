@@ -50,6 +50,7 @@ impl Frame {
         result: Option<u8>,
     ) -> Frame {
         let var_count = byte_value(memory_map, address) as usize;
+        trace!("{} local variables", var_count);
         let (initial_pc, mut local_variables) = match version {
             1 | 2 | 3 | 4 => {
                 let mut local_variables = Vec::new();
@@ -64,7 +65,9 @@ impl Frame {
         };
 
         for i in 0..arguments.len() {
-            local_variables[i] = arguments[i];
+            if local_variables.len() > i {
+                local_variables[i] = arguments[i];
+            }
         }
 
         Frame {
