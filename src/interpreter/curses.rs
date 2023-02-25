@@ -193,16 +193,24 @@ impl Interpreter for Curses {
     fn read_char(&mut self, time: u16) -> char {
         pancurses::noecho();
         if time > 0 {
+            // Current time, in seconds
             let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+            // Add the time offset (in seconds)
+            let end = start + time as u64;
+            // Add delay to getch() calls to avoid busy wait
             let delay = time::Duration::from_millis(250);
+            // Don't block on input
             self.current_window_mut().nodelay(true);
             let mut ch = self.current_window_mut().getch();
             let mut result = 0 as char;
-            while result == 0 as char && SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() - start < time as u64 {
+            // While no (acceptable) keypress and 'time' seconds haven't elapsed
+            while result == 0 as char && SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() < end {
+                // Brief sleep
                 thread::sleep(delay);
                 ch = self.current_window_mut().getch();
                 result = match ch {
                     Some(i) => match i {
+                        // Valid input
                         Input::Character(c) => c,
                         _ => 0 as char
                     }, 
@@ -210,7 +218,7 @@ impl Interpreter for Curses {
                 }
             }
 
-            trace!("READ_CHAR => {}", result as u8);
+            // Re-enable block on input
             self.current_window_mut().nodelay(false);
             result
         } else {
