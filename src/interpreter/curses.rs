@@ -8,44 +8,38 @@ use crate::executor::{
 
 pub struct Curses {
     version: u8,
-    window: Window,
+    window_0: Window,
+    window_1: Window,
     status_window: Option<Window>,
-    sub_windows: Vec<Window>,
-    lines: u16,
-    columns: u16,
+    lines: i32,
+    columns: i32,
     selected_window: u8,
-    split_line: Option<u16>,
     output_streams: Vec<bool>,
     buffering: bool,
 }
 
 impl Curses {
     pub fn new(version: u8) -> Curses {
-        let window = pancurses::initscr();
-        let mut sub_windows = Vec::new();
+        let window_0 = pancurses::initscr();
+        let lines = window_0.get_max_y();
+        let columns = window_0.get_max_x();
         let status_window = if version < 4 {
-            Some(window.subwin(1, window.get_max_x(), 0, 0).unwrap())
+            window_0.setscrreg(1, lines);
+            Some(window_0.subwin(1, columns, 0, 0).unwrap())
         } else {
+            window_0.setscrreg(0, 0);
             None
         };
+        window_0.scrollok(true);
 
-        if version < 4 {
-            let window_0 = window
-                .subwin(window.get_max_y() - 1, window.get_max_x(), 1, 0)
-                .unwrap();
-            let window_1 = window.subwin(0, 0, 1, 0).unwrap();
-            sub_windows.push(window_0);
-            sub_windows.push(window_1);
+        let window_1 = if version < 4 {
+            window_0.subwin(0, 0, 1, 0).unwrap()
         } else {
-            let window_0 = window
-                .subwin(window.get_max_y(), window.get_max_x(), 0, 0)
-                .unwrap();
-            let window_1 = window.subwin(0, 0, 0, 0).unwrap();
-            sub_windows.push(window_0);
-            sub_windows.push(window_1);
+            window_0.subwin(0, 0, 0, 0).unwrap()
         };
 
-        window.erase();
+        window_0.erase();
+        window_1.scrollok(false);
 
         let output_streams = if version < 3 {
             vec![true, false]
@@ -53,24 +47,24 @@ impl Curses {
             vec![true, false, false, false]
         };
 
-        let lines = window.get_max_y() as u16;
-        let columns = window.get_max_x() as u16;
         Self {
             version,
-            window,
+            window_0,
+            window_1,
             status_window,
-            sub_windows,
             lines,
             columns,
             selected_window: 0,
-            split_line: None,
             output_streams,
             buffering: true,
         }
     }
 
-    fn current_window(&mut self) -> &mut Window {
-        &mut self.sub_windows[self.selected_window as usize]
+    fn current_window_mut(&mut self) -> &mut Window {
+        match self.selected_window {
+            1 => &mut self.window_1,
+            _ => &mut self.window_0,
+        }
     }
 }
 
@@ -87,11 +81,13 @@ impl Interpreter for Curses {
         match window {
             -1 => {
                 self.selected_window = 0;
-                self.split_line = None;
-                self.current_window().erase();
+                self.window_1.resize(0,0);
+                // TODO: Account for status line window
+                self.window_0.setscrreg(0, self.lines - 1);
+                self.current_window_mut().erase();
             }
             -2 => {
-                self.current_window().erase();
+                self.current_window_mut().erase();
             }
             _ => {
                 trace!("TODO: ERASE_WINDOW {}", window)
@@ -101,8 +97,8 @@ impl Interpreter for Curses {
 
     fn get_cursor(&mut self) -> (u16, u16) {
         (
-            self.current_window().get_cur_y() as u16 + 1,
-            self.current_window().get_cur_x() as u16 + 1,
+            self.current_window_mut().get_cur_y() as u16 + 1,
+            self.current_window_mut().get_cur_x() as u16 + 1,
         )
     }
 
@@ -110,7 +106,8 @@ impl Interpreter for Curses {
         todo!()
     }
     fn new_line(&mut self) {
-        self.current_window().addch('\n');
+        self.current_window_mut().addch('\n');
+        self.current_window_mut().refresh();
     }
     fn output_stream(&mut self, stream: i16, table: usize) {
         let stream_index = stream.abs() as usize - 1;
@@ -124,28 +121,22 @@ impl Interpreter for Curses {
                 // Iterate over the fragments
                 for s in frags {
                     let position = (
-                        self.current_window().get_cur_y() + 1,
-                        self.current_window().get_cur_x() + 1,
+                        self.current_window_mut().get_cur_y() + 1,
+                        self.current_window_mut().get_cur_x() + 1,
                     );
                     trace!("buffer check: {} {}", position.1, s.len());
                     if self.columns as i32 - position.1 < s.len() as i32 {
-                        self.current_window().addch('\n');
-                        self.current_window().addstr(s);
+                        self.current_window_mut().addch('\n');
+                        self.current_window_mut().addstr(s);
                     } else {
-                        self.current_window().addstr(s);
+                        self.current_window_mut().addstr(s);
                     }
                 }
             } else {
-                self.current_window().addstr(text);
+                self.current_window_mut().addstr(text);
             }
-            self.current_window().refresh();
+            self.current_window_mut().refresh();
         };
-
-        trace!(
-            "cursor: {},{}",
-            self.current_window().get_cur_y() + 1,
-            self.current_window().get_cur_x() + 1
-        )
     }
 
     fn print_table(&mut self, text: String, width: u16, height: u16, skip: u16) {
@@ -153,16 +144,15 @@ impl Interpreter for Curses {
     }
 
     fn read(&mut self, length: u8, time: u16) -> Vec<char> {
+        self.window_1.refresh();
+        self.window_0.refresh();       
+        self.window_0.mv(self.window_0.get_cur_y(), self.window_0.get_cur_x());
         pancurses::curs_set(1);
-        self.window.mv(
-            self.sub_windows[0].get_cur_y(),
-            self.sub_windows[0].get_cur_x(),
-        );
 
         let mut input: Vec<char> = Vec::new();
         let mut done = false;
         while !done {
-            let c = self.window.getch().unwrap();
+            let c = self.window_0.getch().unwrap();
             match c {
                 Input::Character(ch) => match ch {
                     // Backspace
@@ -171,30 +161,36 @@ impl Interpreter for Curses {
                             // Remove from the input array
                             input.pop();
                             // Back cursor up and delete character
-                            self.window
-                                .mv(self.window.get_cur_y(), self.window.get_cur_x() - 1);
-                            self.window.delch();
+                            self.window_0
+                                .mv(self.window_0.get_cur_y(), self.window_0.get_cur_x() - 1);
+                            self.window_0.delch();
+                            self.window_0.refresh();
                         }
                     }
                     // 
                     _ => {
                         if input.len() < length as usize && text::valid_input(ch) {
                             input.push(ch);
-                            self.window.addstr(&format!("{}", ch));
+                            self.window_0.addstr(&format!("{}", ch));
+                            self.window_0.refresh();
                         }
-                        done = ch == '\n';
+                        if ch == '\n' {
+                            done = true;
+                            self.window_0.addch('\n');
+                        }
                     }
                 },
                 _ => {}
             }
         }
+
         pancurses::curs_set(0);
         input
     }
 
     fn read_char(&mut self, time: u16) -> char {
         pancurses::noecho();
-        match self.current_window().getch().unwrap() {
+        match self.current_window_mut().getch().unwrap() {
             Input::Character(c) => c,
             _ => ' ',
         }
@@ -205,11 +201,11 @@ impl Interpreter for Curses {
     }
 
     fn set_cursor(&mut self, line: u16, column: u16) {
-        self.current_window().mv(line as i32 - 1, column as i32 - 1);
+        self.current_window_mut().mv(line as i32 - 1, column as i32 - 1);
     }
 
     fn set_text_style(&mut self, style: u16) {
-        let win = &mut self.sub_windows[self.selected_window as usize];
+        let win = &mut self.current_window_mut();
         if style == 0 {
             win.attroff(Attribute::Reverse);
             win.attroff(Attribute::Bold);
@@ -228,11 +224,11 @@ impl Interpreter for Curses {
     }
 
     fn set_window(&mut self, window: u16) {
+        pancurses::curs_set(0);
         self.selected_window = window as u8;
-        self.window.mv(
-            self.sub_windows[window as usize].get_cur_y(),
-            self.sub_windows[window as usize].get_cur_x(),
-        );
+        if window == 1 {
+            self.current_window_mut().mv(0,0);
+        }
     }
     fn show_status(&mut self, location: &str, status: &str) {}
     fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8) {
@@ -240,33 +236,33 @@ impl Interpreter for Curses {
     }
     fn split_window(&mut self, lines: u16) {
         if lines == 0 {
-            self.sub_windows[1].resize(0, 0);
             // Unsplit
+            self.window_1.resize(0, 0);
+            // TODO: Account for status line window
+            self.window_0.setscrreg(0, self.lines - 1);
         } else {
             if self.version == 3 {
-                let win = &mut self.sub_windows[1];
-                // Resize windows 1
-                win.resize(lines as i32, self.columns as i32);
-                // Clear the upper window
-                win.clear();
-            } else {
-                trace!(
-                    "Window 0 cursor before split: {}, {}",
-                    self.sub_windows[0].get_cur_y(),
-                    self.sub_windows[0].get_cur_x()
-                );
-                self.sub_windows[1].resize(lines as i32, self.columns as i32);
-                trace!(
-                    "Window 0 cursor after split: {}, {}",
-                    self.sub_windows[0].get_cur_y(),
-                    self.sub_windows[0].get_cur_x()
-                );
-                // Resize window 1
+                // Resize and move window 0
+                self.window_0.setscrreg(lines as i32, self.lines - 1);
 
+                // Resize windows 1
+                self.window_1.resize(lines as i32, self.columns as i32);
+
+                // Clear the upper window
+                self.window_1.erase();
+            } else {
+                // Resize and move window 0
+                self.window_0.setscrreg(lines as i32, self.lines - 1);
+                // Resize window 1
+                self.window_1.resize(lines as i32, self.columns as i32);
                 // If cursor is in upper window, move cursor to first line
                 // in lower window (0)
             }
         }
+
+        self.window_0.refresh();
+        self.window_1.refresh();
+
     }
 }
 
@@ -303,9 +299,12 @@ impl Curses {
             None => 0,
         };
 
-        self.window.color_set(1);
-        self.sub_windows[0].color_set(1);
-        self.sub_windows[1].color_set(1);
+        self.window_0.color_set(1);
+        self.window_1.color_set(1);
+
+        // TODO: Account for status line window
+        self.window_0.setscrreg(0, 0);
+        self.window_0.scrollok(true);
 
         Spec {
             set_flags,
