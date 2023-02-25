@@ -34,6 +34,8 @@ impl Executor {
             if self.state.current_frame().pc == 0 {
                 self.state.interpreter.read_char(0);
                 self.state.new_line();
+                pancurses::reset_shell_mode();
+                pancurses::curs_set(1);
                 panic!("Ending execution")
             }
 
