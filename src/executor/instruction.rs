@@ -409,76 +409,85 @@ impl Instruction {
     }
 
     pub fn execute(&mut self, state: &mut State) -> usize {
-        match self.opcode.opcount {
-            OperandCount::_0OP => match self.opcode.instruction {
-                0x0 => self.rtrue(state),
-                0x1 => self.rfalse(state),
-                0x2 => self.print_literal(state),
-                0x3 => self.print_ret(state),
-                0xB => self.new_line(state),
-                _ => 0,
-            },
-            OperandCount::_1OP => match self.opcode.instruction {
-                0x0 => self.jz(state),
-                0x1 => self.get_sibling(state),
-                0x2 => self.get_child(state),
-                0x3 => self.get_parent(state),
-                0x4 => self.get_prop_len(state),
-                0x5 => self.inc(state),
-                0x6 => self.dec(state),
-                0x8 => self.call_1s(state),
-                0xA => self.print_obj(state),
-                0xB => self.ret(state),
-                0xC => self.jump(state),
-                0xD => self.print_paddr(state),
-                0xF => self.call_1n(state),
-                _ => 0,
-            },
-            OperandCount::_2OP => match self.opcode.instruction {
-                0x01 => self.je(state),
-                0x02 => self.jl(state),
-                0x03 => self.jg(state),
-                0x06 => self.jin(state),
-                0x08 => self.or(state),
-                0x09 => self.and(state),
-                0x0A => self.test_attr(state),
-                0x0B => self.set_attr(state),
-                0x0C => self.clear_attr(state),
-                0x0D => self.store(state),
-                0x0E => self.insert_obj(state),
-                0x0F => self.loadw(state),
-                0x10 => self.loadb(state),
-                0x11 => self.get_prop(state),
-                0x12 => self.get_prop_addr(state),
-                0x14 => self.add(state),
-                0x15 => self.sub(state),
-                0x16 => self.mul(state),
-                0x17 => self.div(state),
-                0x18 => self.modulus(state),
-                0x19 => self.call_2s(state),
-                0x1A => self.call_2n(state),
-                _ => 0,
-            },
-            OperandCount::_VAR => match self.opcode.instruction {
-                0x00 => self.call(state),
-                0x01 => self.storew(state),
-                0x02 => self.storeb(state),
-                0x03 => self.put_prop(state),
-                0x04 => self.read(state),
-                0x05 => self.print_char(state),
-                0x06 => self.print_num(state),
-                0x07 => self.random(state),
-                0x08 => self.push(state),
-                0x0A => self.split_window(state),
-                0x0B => self.set_window(state),
-                0x0D => self.erase_window(state),
-                0x0F => self.set_cursor(state),
-                0x11 => self.set_text_style(state),
-                0x12 => self.buffer_mode(state),
-                0x13 => self.output_stream(state),
-                0x16 => self.read_char(state),
-                0x19 => self.call_vn(state),
-                _ => 0,
+        match self.opcode.form {
+            OpcodeForm::Extended => {
+                match self.opcode.instruction {
+                    0x09 => self.save_undo(state),
+                    _ => 0
+                }
+            }
+            _ => match self.opcode.opcount {
+                OperandCount::_0OP => match self.opcode.instruction {
+                    0x0 => self.rtrue(state),
+                    0x1 => self.rfalse(state),
+                    0x2 => self.print_literal(state),
+                    0x3 => self.print_ret(state),
+                    0xB => self.new_line(state),
+                    _ => 0,
+                },
+                OperandCount::_1OP => match self.opcode.instruction {
+                    0x0 => self.jz(state),
+                    0x1 => self.get_sibling(state),
+                    0x2 => self.get_child(state),
+                    0x3 => self.get_parent(state),
+                    0x4 => self.get_prop_len(state),
+                    0x5 => self.inc(state),
+                    0x6 => self.dec(state),
+                    0x8 => self.call_1s(state),
+                    0x9 => self.remove_obj(state),
+                    0xA => self.print_obj(state),
+                    0xB => self.ret(state),
+                    0xC => self.jump(state),
+                    0xD => self.print_paddr(state),
+                    0xF => self.call_1n(state),
+                    _ => 0,
+                },
+                OperandCount::_2OP => match self.opcode.instruction {
+                    0x01 => self.je(state),
+                    0x02 => self.jl(state),
+                    0x03 => self.jg(state),
+                    0x06 => self.jin(state),
+                    0x08 => self.or(state),
+                    0x09 => self.and(state),
+                    0x0A => self.test_attr(state),
+                    0x0B => self.set_attr(state),
+                    0x0C => self.clear_attr(state),
+                    0x0D => self.store(state),
+                    0x0E => self.insert_obj(state),
+                    0x0F => self.loadw(state),
+                    0x10 => self.loadb(state),
+                    0x11 => self.get_prop(state),
+                    0x12 => self.get_prop_addr(state),
+                    0x14 => self.add(state),
+                    0x15 => self.sub(state),
+                    0x16 => self.mul(state),
+                    0x17 => self.div(state),
+                    0x18 => self.modulus(state),
+                    0x19 => self.call_2s(state),
+                    0x1A => self.call_2n(state),
+                    _ => 0,
+                },
+                OperandCount::_VAR => match self.opcode.instruction {
+                    0x00 => self.call(state),
+                    0x01 => self.storew(state),
+                    0x02 => self.storeb(state),
+                    0x03 => self.put_prop(state),
+                    0x04 => self.read(state),
+                    0x05 => self.print_char(state),
+                    0x06 => self.print_num(state),
+                    0x07 => self.random(state),
+                    0x08 => self.push(state),
+                    0x0A => self.split_window(state),
+                    0x0B => self.set_window(state),
+                    0x0D => self.erase_window(state),
+                    0x0F => self.set_cursor(state),
+                    0x11 => self.set_text_style(state),
+                    0x12 => self.buffer_mode(state),
+                    0x13 => self.output_stream(state),
+                    0x16 => self.read_char(state),
+                    0x19 => self.call_vn(state),
+                    _ => 0,
+                },
             },
         }
     }
@@ -742,6 +751,10 @@ impl Instruction {
                 text::as_text(state, self.address + 1)
             ),
             (OperandCount::_1OP, 0xD) => {
+                let a = match self.operands[0].operand_type {
+                    OperandType::SmallConstant | OperandType::LargeConstant => self.operands[0].operand_value,
+                    OperandType::Variable => state.peek_variable(self.operands[0].operand_value as u8),
+                };
                 trace!(
                     "${:05x}: {} {} \"{}\"",
                     self.address,
@@ -749,7 +762,7 @@ impl Instruction {
                     self.format_operand(state, 0),
                     text::as_text(
                         state,
-                        state.packed_string_address(self.operands[0].operand_value)
+                        state.packed_string_address(a)
                     )
                 )
             }
@@ -892,6 +905,39 @@ impl Instruction {
         let address = state.packed_routine_address(operands[0]);
 
         self.call_fn(state, address, self.next_address, &Vec::new(), self.store)
+    }
+
+    fn remove_obj(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let object = operands[0] as usize;
+        let parent = object::parent(state, object);
+        let parent_child = object::child(state, parent);
+
+        if parent_child == object {
+            // object is direct child of parent
+            // Set child of parent to the object's sibling
+            object::set_child(state, parent, object::sibling(state, object));
+        } else {
+            // scan the parent child list for the sibling prior to the object
+            let mut sibling = parent_child;
+            while sibling != 0 && object::sibling(state, sibling) != object {
+                sibling = object::sibling(state, sibling);
+            }
+
+            if sibling == 0 {
+                panic!("Inconsistent object tree state!")
+            }
+
+            // Set the previous sibling's sibling to the object's sibling
+            object::set_sibling(state, sibling, object::sibling(state, object));
+        }
+
+        // Set parent and sibling of object to 0
+        object::set_parent(state, object, 0);
+        object::set_sibling(state, object, 0);
+
+        self.next_address
     }
 
     fn print_obj(&self, state: &mut State) -> usize {
@@ -1249,7 +1295,7 @@ impl Instruction {
         };
 
         trace!("Read up to {} characters", len);
-        
+
         let input = if self.operands.len() > 2 {
             let time = operands[2] as u16;
             let routine = operands[3] as u16;
@@ -1259,7 +1305,86 @@ impl Instruction {
         };
 
         trace!("Read <= \"{:?}\"", input);
-        panic!("READ not fully implemented");
+
+        // Store input to the text buffer
+        if state.version < 5 {
+            for i in 0..input.len() {
+                state.set_byte(text + 1 + i, input[i].to_ascii_lowercase() as u8);
+            }
+            state.set_byte(text + 1 + input.len(), 0);
+        } else {
+            state.set_byte(text + 1, input.len() as u8);
+            for i in 0..input.len() {
+                state.set_byte(text + 2 + i, input[i].to_ascii_lowercase() as u8);
+            }
+        }
+
+        // Lexical analysis
+
+        if parse > 0 || state.version < 5 {
+            let separators = text::separators(state);
+            let mut word = Vec::new();
+            let mut word_start: usize = 0;
+            let mut word_count: usize = 0;
+            let max_words = state.byte_value(parse) as usize;
+
+            for i in 0..input.len() {
+                if word_count > max_words {
+                    break;
+                }
+
+                if separators.contains(&input[i]) {
+                    if word.len() > 0 {
+                        let entry = text::from_dictionary(state, &word);
+                        state.set_word(parse + 2 + (4 * word_count), entry as u16);
+                        state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
+                        state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 1);
+                        word_count = word_count + 1;
+                        trace!("{:?} => ${:05x}", word, entry);
+                    }
+                    let entry = text::from_dictionary(state, &vec![input[i]]);
+                    state.set_word(parse + 2 + (4 * word_count), entry as u16);
+                    state.set_byte(parse + 4 + (4 * word_count), 1);
+                    state.set_byte(parse + 5 + (4 * word_count), i as u8 + 1);
+                    word_count = word_count + 1;
+                    trace!("{} => ${:05x}", input[i], entry);
+
+                    word.clear();
+                    word_start = i + 1;
+                } else if input[i] == ' ' {
+                    if word.len() > 0 {
+                        let entry = text::from_dictionary(state, &word);
+                        state.set_word(parse + 2 + (4 * word_count), entry as u16);
+                        state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
+                        state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 1);
+                        word_count = word_count + 1;
+                        trace!("{:?} => ${:05x}", word, entry)
+                    }
+                    word.clear();
+                    word_start = i + 1;
+                } else {
+                    word.push(input[i].to_ascii_lowercase())
+                }
+            }
+
+            if word.len() > 0 && word_count < max_words {
+                let entry = text::from_dictionary(state, &word);
+                state.set_word(parse + 2 + (4 * word_count), entry as u16);
+                state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
+                state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 1);
+                word_count = word_count + 1;
+                trace!("{:?} => ${:05x}", word, entry)
+            }
+
+            state.set_byte(parse + 1, word_count as u8);
+            trace!("Parsed {} words", word_count);
+        }
+
+        if state.version > 4 {
+            state.set_variable(self.store.unwrap(), 13);
+        }
+
+        self.next_address
     }
 
     fn print_char(&self, state: &mut State) -> usize {
@@ -1391,5 +1516,10 @@ impl Instruction {
         }
 
         self.call_fn(state, address, self.next_address, &arguments, None)
+    }
+
+    fn save_undo(&self, state: &mut State) -> usize {
+        state.set_variable(self.store.unwrap(), 0xFFFF as u16);
+        self.next_address
     }
 }
