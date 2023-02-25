@@ -1,4 +1,4 @@
-use super::state::State;
+use super::{state::State, header};
 
 const ALPHABET_V3: [[char; 26]; 3] = [
     [
@@ -121,4 +121,90 @@ pub fn from_vec(state: &State, ztext: &Vec<u16>) -> String {
         i = i + 1;
     }
     s
+}
+
+pub fn separators(state: &State) -> Vec<char> {
+    let dictionary_address = header::dictionary_table(state) as usize;
+    let separator_count = state.byte_value(dictionary_address);
+    let mut sep = Vec::new();
+    for i in 1..=separator_count as usize {
+        sep.push(state.byte_value(dictionary_address + i) as char);
+    }
+
+    sep
+}
+
+fn find_char(c: &char) -> Vec<u8> {
+    for i in 0..26  {
+        if ALPHABET_V3[0][i] == *c {
+            return vec![i as u8 + 6]
+        }
+    }
+
+    for i in 0..26 {
+        if ALPHABET_V3[2][i] == *c {
+            return vec![5, i as u8 + 6]
+        }
+    }
+
+    panic!("Unknown input {}", c)
+}
+
+fn word_value(z1: u8, z2: u8, z3: u8) -> u16 {
+    (((z1 as u16) & 0x1F) << 10) |
+        (((z2 as u16) & 0x1F) << 5) |
+        (z3 as u16) & 0x1F
+}
+
+pub fn from_dictionary(state: &State, word: &Vec<char>) -> usize {
+    trace!("Dictionary search: {:?}", word);
+    let dictionary_address = header::dictionary_table(state) as usize;
+    let separator_count = state.byte_value(dictionary_address) as usize ;
+    let entry_size = state.byte_value(dictionary_address + 1 + separator_count) as usize;
+    let entry_count = state.word_value(dictionary_address + 1 + separator_count + 1) as usize;
+
+    if state.version < 4 {
+        todo!()
+    } else {
+        // Encode the input
+        let mut w:Vec<u8> = Vec::new();
+        for i in 0..9 {
+            match word.get(i) {
+                Some(c) => w.append(&mut find_char(c)),
+                None => w.push(5)
+            }
+        }
+
+        let w1 = word_value(w[0], w[1], w[2]);
+        let w2 = word_value(w[3], w[4], w[5]);
+        let w3 = word_value(w[6], w[7], w[8]) | 0x8000;
+    
+        for i in 0..entry_count {
+            let entry_address = dictionary_address + separator_count + 4 + (i * entry_size);
+            let e1 = state.word_value(entry_address);
+            if e1 == w1 {
+                let e2 = state.word_value(entry_address + 2);
+                if e2 == w2 {
+                    let e3 = state.word_value(entry_address + 4);
+                    if e3 == w3 {
+                        return entry_address;
+                    } else {
+                        if w3 < e3 {
+                            return 0;
+                        }
+                    }
+                } else {
+                    if w2 < e2 {
+                        return 0;
+                    }
+                }
+            } else {
+                if w1 < e1 {
+                    return 0;
+                }
+            }
+        }
+    }
+
+    0
 }

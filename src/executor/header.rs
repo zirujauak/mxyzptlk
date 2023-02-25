@@ -190,3 +190,7 @@ pub fn object_table(state: &State) -> usize {
 pub fn global_variable_table(state: &State) -> u16 {
     state.word_value(0x0c)
 }
+
+pub fn dictionary_table(state: &State) -> u16 {
+    state.word_value(0x08)
+}
