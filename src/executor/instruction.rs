@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, process};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::interpreter::Interpreter;
@@ -422,6 +422,7 @@ impl Instruction {
                     0x1 => self.rfalse(state),
                     0x2 => self.print_literal(state),
                     0x3 => self.print_ret(state),
+                    0xA => self.quit(state),
                     0xB => self.new_line(state),
                     _ => 0,
                 },
@@ -814,6 +815,14 @@ impl Instruction {
         state.print(text);
         state.new_line();
         state.return_fn(1)
+    }
+
+    fn quit(&self, state: &mut State) -> usize {
+        pancurses::reset_shell_mode();
+        pancurses::curs_set(1);
+        process::exit(0);
+
+        0
     }
 
     fn new_line(&self, state: &mut State) -> usize {
