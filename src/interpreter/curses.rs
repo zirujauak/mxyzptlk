@@ -1,4 +1,6 @@
-use pancurses::{Attribute, Input, Window, COLOR_BLACK, COLOR_GREEN, ToChtype, chtype};
+use std::{time::{UNIX_EPOCH, SystemTime, self}, thread};
+
+use pancurses::{Attribute, Input, Window, COLOR_BLACK, COLOR_GREEN};
 
 use super::{Interpreter, Spec};
 use crate::executor::{
@@ -190,9 +192,32 @@ impl Interpreter for Curses {
 
     fn read_char(&mut self, time: u16) -> char {
         pancurses::noecho();
-        match self.current_window_mut().getch().unwrap() {
-            Input::Character(c) => c,
-            _ => ' ',
+        if time > 0 {
+            let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+            let delay = time::Duration::from_millis(250);
+            self.current_window_mut().nodelay(true);
+            let mut ch = self.current_window_mut().getch();
+            let mut result = 0 as char;
+            while result == 0 as char && SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() - start < time as u64 {
+                thread::sleep(delay);
+                ch = self.current_window_mut().getch();
+                result = match ch {
+                    Some(i) => match i {
+                        Input::Character(c) => c,
+                        _ => 0 as char
+                    }, 
+                    _ => 0 as char
+                }
+            }
+
+            trace!("READ_CHAR => {}", result as u8);
+            self.current_window_mut().nodelay(false);
+            result
+        } else {
+            match self.current_window_mut().getch().unwrap() {
+                Input::Character(c) => c,
+                _ => ' ',
+            }
         }
     }
 
