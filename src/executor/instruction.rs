@@ -817,12 +817,10 @@ impl Instruction {
         state.return_fn(1)
     }
 
-    fn quit(&self, state: &mut State) -> usize {
+    fn quit(&self, _state: &mut State) -> usize {
         pancurses::reset_shell_mode();
         pancurses::curs_set(1);
         process::exit(0);
-
-        0
     }
 
     fn new_line(&self, state: &mut State) -> usize {
@@ -1502,10 +1500,30 @@ impl Instruction {
         if x != 1 {
             panic!("READ_CHAR first argument ({}) must be 1", x);
         }
-        if self.operands.len() > 1 {
+
+        // If state.read_char_interrupt == true
+        //   If state.read_char_interrupt_result == true
+        //      Set state.read_char_interrupt = false
+        //      Set result variable = 0
+        //      Return self.next_address
+        //   Else
+        //      Set state_read_char_interrupt = false
+        //      Continue
+        if state.read_char_interrupt() {
+            state.set_read_char_interrupt(false);
+            if state.read_char_interrupt_result() == 1 {
+                state.set_variable(self.store.unwrap(), 0);
+                return self.next_address
+            }
+        } else if self.operands.len() == 3  && operands[1] > 0 && operands[2] > 0 {
             let time = operands[1];
             let routine = operands[2];
-            let c = state.read_char(time) as u16;
+            let c = state.read_char(time / 10) as u16;
+            if c == 0 {
+                return state.call_read_char_interrupt(routine, self.address);
+                // Set state.read_char_interrupt = true
+                // Call routine, returning to address of this instruction
+            }
             state.set_variable(self.store.unwrap(), c);
         } else {
             let c = state.read_char(0) as u16;

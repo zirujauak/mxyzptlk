@@ -14,6 +14,8 @@ pub struct Frame {
     local_variables: Vec<u16>,
     stack: Vec<u16>,
     result: Option<u8>,
+    read_char_interrupt: bool,
+    read_char_interrupt_result: u16
 }
 
 fn word(high_byte: u8, low_byte: u8) -> u16 {
@@ -39,6 +41,8 @@ impl Frame {
             local_variables: Vec::new(),
             stack: Vec::new(),
             result: None,
+            read_char_interrupt: false,
+            read_char_interrupt_result: 0,
         }
     }
 
@@ -76,6 +80,8 @@ impl Frame {
             local_variables,
             stack: Vec::new(),
             result,
+            read_char_interrupt: false,
+            read_char_interrupt_result: 0,
         }
     }
 
@@ -190,14 +196,35 @@ impl State {
     }
 
     pub fn return_fn(&mut self, result: u16) -> usize {
-        let f = self.pop_frame();
-        match f.result {
-            Some(variable) => self.set_variable(variable, result),
-            None => {}
+        let mut f = self.pop_frame();
+        if f.read_char_interrupt {
+            f.read_char_interrupt_result = result;
+        } else {
+            match f.result {
+                Some(variable) => self.set_variable(variable, result),
+                None => {}
+            }
         }
 
         trace!("Return to ${:05x} with result #{:04x}", self.current_frame().pc, result);
         self.current_frame().pc
+    }
+
+    pub fn read_char_interrupt(&self) -> bool {
+        self.current_frame().read_char_interrupt
+    }
+
+    pub fn read_char_interrupt_result(&self) -> u16 {
+        self.current_frame().read_char_interrupt_result
+    }
+
+    pub fn set_read_char_interrupt(&mut self, value: bool) {
+        self.current_frame_mut().read_char_interrupt = value
+    }
+
+    pub fn call_read_char_interrupt(&mut self, address: u16, return_addr: usize) -> usize {
+        self.current_frame_mut().read_char_interrupt = true;
+        self.call(self.packed_routine_address(address), return_addr, &Vec::new(), None)
     }
 
     pub fn current_frame(&self) -> &Frame {
