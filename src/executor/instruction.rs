@@ -1355,7 +1355,7 @@ impl Instruction {
         state.set_colour(operands[0], operands[1]);
         self.next_address
     }
-    
+
     // VAR
     // aka call_vs
     fn call(&self, state: &mut State) -> usize {
@@ -1402,9 +1402,34 @@ impl Instruction {
             trace!("SHOW_STATUS before READ");
             self.show_status(state);
         }
+
         let operands = self.operand_values(state);
 
         let text = operands[0] as usize;
+        let mut existing_input = Vec::new();
+        let redraw = state.print_in_interrupt;
+        if state.read_interrupt() {
+            trace!("Return from interrupt: {}", state.read_interrupt_result());
+            state.set_read_interrupt(false);
+            if state.read_interrupt_result() == 1 {
+                // Clear the text buffer
+                let b = state.byte_value(text) as usize;
+                for i in 0..b {
+                    state.set_byte(text + 1 + i, 0);
+                }
+                // Return terminator 0
+                state.set_variable(self.store.unwrap(), 0);
+                return self.next_address;
+            } else {
+                // Read text buffer into existing input
+                trace!("Recovering {} bytes from previous READ", state.byte_value(text + 1));
+                let s = state.byte_value(text + 1) as usize;
+                for i in 0..s {
+                    existing_input.push(state.byte_value(text + 2 + i) as char);
+                }
+            }
+        }
+
         let parse = if operands.len() > 1 { 
             operands[1] as usize 
         } else { 
@@ -1419,25 +1444,42 @@ impl Instruction {
 
         trace!("Read up to {} characters", len);
 
-        let input = if self.operands.len() > 2 {
-            let time = operands[2] as u16;
-            let routine = operands[3] as u16;
-            state.read(len, time)
+        state.clear_read_input();
+        let time = if self.operands.len() > 2 {
+            operands[2] / 10
         } else {
-            state.read(len, 0)
+            0
+        };
+        let routine = if self.operands.len() > 2 {
+            operands[3] 
+        } else {
+            0
         };
 
-        trace!("Read <= \"{:?}\"", input);
+        let (input, interrupt) = state.read(len, time, &existing_input, redraw);
+        state.print_in_interrupt = false;
+        if interrupt {
+            trace!("READ interrupt: {} bytes in input buffer", input.len());
+            state.set_read_interrupt(true);
+            state.set_byte(text + 1, input.len() as u8);
+            for i in 0..input.len() {
+                state.set_byte(text + 2 + i, input[i] as u8);
+            }
+            return state.call_read_interrupt(routine, self.address);
+        }
+
+        trace!("Read <= \"{:?}\"", &input);
 
         // Store input to the text buffer
+        let terminator = input.last().unwrap();
         if state.version < 5 {
-            for i in 0..input.len() {
+            for i in 0..input.len()-1 {
                 state.set_byte(text + 1 + i, input[i].to_ascii_lowercase() as u8);
             }
             state.set_byte(text + 1 + input.len(), 0);
         } else {
-            state.set_byte(text + 1, input.len() as u8);
-            for i in 0..input.len() {
+            state.set_byte(text + 1, input.len() as u8 - 1);
+            for i in 0..input.len()-1 {
                 state.set_byte(text + 2 + i, input[i].to_ascii_lowercase() as u8);
             }
         }
@@ -1503,7 +1545,7 @@ impl Instruction {
         }
 
         if state.version > 4 {
-            state.set_variable(self.store.unwrap(), 13);
+            state.set_variable(self.store.unwrap(), *terminator as u16);
         }
 
         self.next_address

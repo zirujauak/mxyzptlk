@@ -1,12 +1,17 @@
-use std::{time::{UNIX_EPOCH, SystemTime, self}, thread, fs, io::Write};
+use std::{
+    fs,
+    io::Write,
+    thread,
+    time::{self, SystemTime, UNIX_EPOCH},
+};
 
-use pancurses::{Attribute, Input, Window, COLOR_BLACK, COLOR_GREEN, COLOR_RED, COLOR_MAGENTA, COLOR_CYAN, COLOR_YELLOW, COLOR_BLUE, COLOR_WHITE, ColorPair};
+use pancurses::{
+    Attribute, ColorPair, Input, Window, COLOR_BLACK, COLOR_BLUE, COLOR_CYAN, COLOR_GREEN,
+    COLOR_MAGENTA, COLOR_RED, COLOR_WHITE, COLOR_YELLOW,
+};
 
 use super::{Interpreter, Spec};
-use crate::executor::{
-    header::Flag,
-    text,
-};
+use crate::executor::{header::Flag, text};
 
 pub struct Curses {
     version: u8,
@@ -85,7 +90,7 @@ impl Interpreter for Curses {
         match window {
             -1 => {
                 self.selected_window = 0;
-                self.window_1.resize(0,0);
+                self.window_1.resize(0, 0);
                 self.window_0.setscrreg(self.top_line, self.lines - 1);
                 self.current_window_mut().erase();
             }
@@ -145,87 +150,144 @@ impl Interpreter for Curses {
         todo!()
     }
 
-    fn read(&mut self, length: u8, time: u16) -> Vec<char> {
+    fn read(&mut self, length: u8, time: u16, existing_input: &Vec<char>, redraw: bool) -> (Vec<char>, bool) {
         self.window_1.refresh();
-        self.window_0.refresh();       
-        self.window_0.mv(self.window_0.get_cur_y(), self.window_0.get_cur_x());
+        self.window_0.refresh();
+        self.window_0
+            .mv(self.window_0.get_cur_y(), self.window_0.get_cur_x());
         pancurses::curs_set(1);
         pancurses::noecho();
 
-        let mut input: Vec<char> = Vec::new();
+        if redraw {
+            for c in existing_input {
+                self.current_window_mut().addch(*c);
+            }
+        }
+        
+        // Current time, in seconds
+        let start = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        // Add the time offset (in seconds)
+        let end = if time > 0 {
+            start + (time as u128 * 1000)
+        } else {
+            0
+        };
+        let delay = time::Duration::from_millis(10);
+
+        let mut input: Vec<char> = existing_input.clone();
         let mut done = false;
+        self.current_window_mut().nodelay(true);
         while !done {
-            let c = self.window_0.getch().unwrap();
-            match c {
-                Input::Character(ch) => match ch {
-                    // Backspace
-                    '\u{7f}' => {
-                        if input.len() > 0 {
-                            // Remove from the input array
-                            input.pop();
-                            // Back cursor up and delete character
-                            self.window_0
-                                .mv(self.window_0.get_cur_y(), self.window_0.get_cur_x() - 1);
-                            self.window_0.delch();
-                            self.window_0.refresh();
+            if time > 0 && SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+                > end
+            {
+                return (input, true);
+            } else {
+                let c = self.window_0.getch();
+                match c {
+                    Some(ch) => {
+                        match ch {
+                            Input::Character(cx) => match cx {
+                                // Backspace
+                                '\u{7f}' => {
+                                    if input.len() > 0 {
+                                        // Remove from the input array
+                                        input.pop();
+                                        // Back cursor up and delete character
+                                        self.window_0.mv(
+                                            self.window_0.get_cur_y(),
+                                            self.window_0.get_cur_x() - 1,
+                                        );
+                                        self.window_0.delch();
+                                        self.window_0.refresh();
+                                    }
+                                }
+                                //
+                                _ => {
+                                    if input.len() < length as usize && text::valid_input(cx) {
+                                        input.push(cx);
+                                        self.window_0.addstr(&format!("{}", cx));
+                                        self.window_0.refresh();
+                                    }
+                                    if input.len() < length as usize && cx == '\n' {
+                                        input.push(cx);
+                                        done = true;
+                                        self.window_0.addch('\n');
+                                    }
+                                }
+                            },
+                            _ => {
+                                // Brief sleep
+                                thread::sleep(delay);
+                            }
                         }
                     }
-                    // 
-                    _ => {
-                        if input.len() < length as usize && text::valid_input(ch) {
-                            input.push(ch);
-                            self.window_0.addstr(&format!("{}", ch));
-                            self.window_0.refresh();
-                        }
-                        if ch == '\n' {
-                            done = true;
-                            self.window_0.addch('\n');
-                        }
+                    None => {
+                        // Brief sleep
+                        thread::sleep(delay);
                     }
-                },
-                _ => {}
+                }
             }
         }
 
         pancurses::curs_set(0);
-        input
+        (input, false)
     }
 
     fn read_char(&mut self, time: u16) -> char {
         pancurses::noecho();
         if time > 0 {
             // Current time, in seconds
-            let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+            let start = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
             // Add the time offset (in seconds)
             let end = start + time as u64;
             // Add delay to getch() calls to avoid busy wait
-            let delay = time::Duration::from_millis(250);
+            let delay = time::Duration::from_millis(10);
             // Don't block on input
             self.current_window_mut().nodelay(true);
             let mut ch = self.current_window_mut().getch();
             let mut result = 0 as char;
             // While no (acceptable) keypress and 'time' seconds haven't elapsed
-            while result == 0 as char && SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() < end {
-                // Brief sleep
-                thread::sleep(delay);
+            while result == 0 as char
+                && SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+                    < end
+            {
                 ch = self.current_window_mut().getch();
                 result = match ch {
                     Some(i) => match i {
                         // Valid input
                         Input::Character(c) => c,
-                        _ => 0 as char
-                    }, 
-                    _ => 0 as char
-                }
+                        _ => 0 as char,
+                    },
+                    _ => 0 as char,
+                };
+
+                // Brief sleep
+                thread::sleep(delay);
             }
 
             // Re-enable block on input
-            self.current_window_mut().nodelay(false);
             result
         } else {
-            match self.current_window_mut().getch().unwrap() {
-                Input::Character(c) => c,
-                _ => ' ',
+            self.current_window_mut().nodelay(false);
+            match self.current_window_mut().getch() {
+                Some(ch) => match ch {
+                    Input::Character(c) => c,
+                    _ => ' ',
+                },
+                None => ' ',
             }
         }
     }
@@ -240,7 +302,7 @@ impl Interpreter for Curses {
             7 => self.foreground = COLOR_MAGENTA,
             8 => self.foreground = COLOR_CYAN,
             9 => self.foreground = COLOR_WHITE,
-            _ => {},
+            _ => {}
         };
         match background {
             1 | 2 => self.background = COLOR_BLACK,
@@ -260,7 +322,8 @@ impl Interpreter for Curses {
     }
 
     fn set_cursor(&mut self, line: u16, column: u16) {
-        self.current_window_mut().mv(line as i32 - 1, column as i32 - 1);
+        self.current_window_mut()
+            .mv(line as i32 - 1, column as i32 - 1);
     }
 
     fn set_text_style(&mut self, style: u16) {
@@ -286,13 +349,19 @@ impl Interpreter for Curses {
         pancurses::curs_set(0);
         self.selected_window = window as u8;
         if window == 1 {
-            self.current_window_mut().mv(0,0);
+            self.current_window_mut().mv(0, 0);
         }
     }
     fn show_status(&mut self, location: &str, status: &str) {
         self.status_window.as_mut().unwrap().mv(0, 0);
-        self.status_window.as_mut().unwrap().addstr(String::from_utf8(vec![32; self.columns as usize]).unwrap());
-        self.status_window.as_mut().unwrap().mvaddstr(0, 1, location);
+        self.status_window
+            .as_mut()
+            .unwrap()
+            .addstr(String::from_utf8(vec![32; self.columns as usize]).unwrap());
+        self.status_window
+            .as_mut()
+            .unwrap()
+            .mvaddstr(0, 1, location);
         let x = self.columns - 1 - status.len() as i32;
         self.status_window.as_mut().unwrap().mvaddstr(0, x, status);
         self.status_window.as_mut().unwrap().refresh();
@@ -309,7 +378,8 @@ impl Interpreter for Curses {
         } else {
             if self.version < 4 {
                 // Resize and move window 0
-                self.window_0.setscrreg(lines as i32 + self.top_line, self.lines - 1);
+                self.window_0
+                    .setscrreg(lines as i32 + self.top_line, self.lines - 1);
 
                 // Resize windows 1
                 self.window_1.resize(lines as i32, self.columns as i32);
@@ -333,9 +403,14 @@ impl Interpreter for Curses {
     fn save(&mut self, name: &String, data: &Vec<u8>) {
         let filename = format!("{}.ifzs", name);
         trace!("Save to: {}", filename);
-        
-        let mut file = fs::OpenOptions::new().create(true).truncate(true).write(true).open(filename).unwrap();
-        
+
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(filename)
+            .unwrap();
+
         file.write_all(&data).unwrap();
         file.flush().unwrap();
     }
@@ -348,7 +423,7 @@ impl Interpreter for Curses {
     }
 }
 
-const COLOR_TABLE:[i16;8] = [
+const COLOR_TABLE: [i16; 8] = [
     COLOR_BLACK,
     COLOR_RED,
     COLOR_GREEN,
@@ -372,7 +447,7 @@ impl Curses {
                 Flag::ItalicAvailable,
                 Flag::FixedSpaceAvailable,
                 Flag::TimedInputAvailable,
-                Flag::ColoursAvailable
+                Flag::ColoursAvailable,
             ],
             _ => vec![],
         };

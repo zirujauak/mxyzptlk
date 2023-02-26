@@ -19,7 +19,10 @@ pub struct Frame {
     pub result: Option<u8>,
     pub return_address: usize,
     read_char_interrupt: bool,
-    read_char_interrupt_result: u16
+    read_char_interrupt_result: u16,
+    read_interrupt: bool,
+    read_interrupt_result: u16,
+    read_input: Vec<char>,
 }
 
 fn word(high_byte: u8, low_byte: u8) -> u16 {
@@ -27,7 +30,7 @@ fn word(high_byte: u8, low_byte: u8) -> u16 {
 }
 
 fn word_value(memory_map: &Vec<u8>, address: usize) -> u16 {
-    State::word(
+    word(
         byte_value(memory_map, address),
         byte_value(memory_map, address + 1),
     )
@@ -59,9 +62,13 @@ impl Frame {
             },
             return_address: frame.return_address as usize,
             read_char_interrupt: false,
-            read_char_interrupt_result: 0
+            read_char_interrupt_result: 0,
+            read_interrupt: false,
+            read_interrupt_result: 0,
+            read_input: Vec::new(),
         }
     }
+
     fn initial(_memory_map: &Vec<u8>, address: usize) -> Frame {
         Frame {
             address,
@@ -73,6 +80,9 @@ impl Frame {
             return_address: 0,
             read_char_interrupt: false,
             read_char_interrupt_result: 0,
+            read_interrupt: false,
+            read_interrupt_result: 0,
+            read_input: Vec::new(),
         }
     }
 
@@ -115,6 +125,9 @@ impl Frame {
             return_address,
             read_char_interrupt: false,
             read_char_interrupt_result: 0,
+            read_interrupt: false,
+            read_interrupt_result: 0,
+            read_input: Vec::new(),
         }
     }
 
@@ -143,6 +156,9 @@ pub struct State {
     pub version: u8,
     pub frames: Vec<Frame>,
     pub interpreter: Box<dyn Interpreter>,
+    pub print_in_interrupt: bool,
+    pub read_interrupt: bool,
+    pub read_char_interrupt: bool,
 }
 
 impl State {
@@ -168,6 +184,9 @@ impl State {
             version: memory_map[0],
             frames,
             interpreter,
+            print_in_interrupt: false,
+            read_interrupt: false,
+            read_char_interrupt: false,
         }
     }
 
@@ -234,6 +253,8 @@ impl State {
 
         if f.read_char_interrupt {
             f.read_char_interrupt_result = result;
+        } else if f.read_interrupt {
+            f.read_interrupt_result = result;
         } else {
             match f.result {
                 Some(variable) => self.set_variable(variable, result),
@@ -254,11 +275,43 @@ impl State {
     }
 
     pub fn set_read_char_interrupt(&mut self, value: bool) {
-        self.current_frame_mut().read_char_interrupt = value
+        self.current_frame_mut().read_char_interrupt = value;
+        self.read_char_interrupt = value
     }
 
     pub fn call_read_char_interrupt(&mut self, address: u16, return_addr: usize) -> usize {
         self.current_frame_mut().read_char_interrupt = true;
+        self.read_char_interrupt = true;
+        self.call(self.packed_routine_address(address), return_addr, &Vec::new(), None)
+    }
+
+    pub fn read_interrupt(&self) -> bool {
+        self.current_frame().read_interrupt
+    }
+
+    pub fn read_interrupt_result(&self) -> u16 {
+        self.current_frame().read_interrupt_result
+    }
+
+    pub fn read_input(&self) -> &Vec<char> {
+        &self.current_frame().read_input
+    }
+
+    pub fn set_read_interrupt(&mut self, value: bool) {
+        self.current_frame_mut().read_interrupt = value;
+        self.read_interrupt = value;
+    }
+
+    pub fn set_read_input(&mut self, input: &Vec<char>) {
+        self.current_frame_mut().read_input = input.clone()
+    }
+    pub fn clear_read_input(&mut self) {
+        self.current_frame_mut().read_input.clear()
+    }
+
+    pub fn call_read_interrupt(&mut self, address: u16, return_addr: usize) -> usize {
+        self.current_frame_mut().read_interrupt = true;
+        self.read_interrupt = true;
         self.call(self.packed_routine_address(address), return_addr, &Vec::new(), None)
     }
 
@@ -397,6 +450,10 @@ impl State {
 
         q.ifhd.pc as usize
     }
+
+    pub fn print_in_interrupt(&mut self) {
+        self.print_in_interrupt = self.print_in_interrupt || self.read_char_interrupt || self.read_interrupt
+    }
 }
 
 impl Interpreter for State {
@@ -405,9 +462,11 @@ impl Interpreter for State {
     }
     fn erase_line(&mut self, value: u16) {
         self.interpreter.erase_line(value);
+        self.print_in_interrupt()
     }
     fn erase_window(&mut self, window: i16) {
         self.interpreter.erase_window(window);
+        self.print_in_interrupt()
     }
     fn get_cursor(&mut self) -> (u16, u16) {
         self.interpreter.get_cursor()
@@ -417,23 +476,25 @@ impl Interpreter for State {
     }
     fn new_line(&mut self) {
         self.interpreter.new_line();
+        self.print_in_interrupt()
     }
     fn output_stream(&mut self, stream: i16, table: usize) {
         self.interpreter.output_stream(stream, table);
     }
     fn print(&mut self, text: String) {
-        self.interpreter.print(text)
+        self.interpreter.print(text);
+        self.print_in_interrupt()
     }
     fn print_table(&mut self, text: String, width: u16, height: u16, skip: u16) {
         self.interpreter.print_table(text, width, height, skip);
+        self.print_in_interrupt()
     }
-    fn read(&mut self, length: u8, time: u16) -> Vec<char> {
-        self.interpreter.read(length, time)
+    fn read(&mut self, length: u8, time: u16, existing_input: &Vec<char>, redraw: bool) -> (Vec<char>, bool) {
+        self.interpreter.read(length, time, existing_input, redraw)
     }
     fn read_char(&mut self, time: u16) -> char {
         self.interpreter.read_char(time)
     }
-
     fn set_colour(&mut self, foreground: u16, background: u16) {
         self.interpreter.set_colour(foreground, background)
     }
@@ -458,7 +519,6 @@ impl Interpreter for State {
     fn save(&mut self, _name: &String, data: &Vec<u8>) {
         self.interpreter.save(&self.name, data);
     }
-
     fn restore(&mut self, _name: &String) -> Vec<u8> {
         self.interpreter.restore(&self.name)
     }
