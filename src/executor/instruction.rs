@@ -552,6 +552,15 @@ impl Instruction {
         }
     }
 
+    fn store_result(&self, state: &mut State, value: u16) {
+        match self.store {
+            Some(v) => {
+                state.set_variable(v, value);
+            },
+            None => {}
+        }
+    }
+
     fn format_variable(&self, var: u8) -> String {
         if var == 0 {
             "(SP+)".to_string()
@@ -955,7 +964,7 @@ impl Instruction {
         let sibling = object::sibling(state, operands[0] as usize) as u16;
         let condition = sibling != 0;
 
-        state.set_variable(self.store.unwrap(), sibling);
+        self.store_result(state, sibling);
         self.execute_branch(state, condition)
     }
 
@@ -964,7 +973,7 @@ impl Instruction {
         let child = object::child(state, operands[0] as usize) as u16;
         let condition = child != 0;
 
-        state.set_variable(self.store.unwrap(), child);
+        self.store_result(state, child);
         self.execute_branch(state, condition)
     }
 
@@ -972,7 +981,7 @@ impl Instruction {
         let operands = self.operand_values(state);
         let parent = object::parent(state, operands[0] as usize) as u16;
 
-        state.set_variable(self.store.unwrap(), parent);
+        self.store_result(state, parent);
         self.next_address
     }
 
@@ -986,20 +995,19 @@ impl Instruction {
 
     fn inc(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
-        let val = state.variable(operands[0] as u8) as i16;
+        let val = state.peek_variable(operands[0] as u8) as i16;
         let new_val = i16::overflowing_add(val, 1);
-
-        state.set_variable(operands[0] as u8, new_val.0 as u16);
+    
+        state.set_variable_indirect(operands[0] as u8, new_val.0 as u16);
         self.next_address
     }
 
     fn dec(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
-        let val = state.variable(operands[0] as u8) as i16;
-        trace!("{}", val);
+        let val = state.peek_variable(operands[0] as u8) as i16;
         let new_val = i16::overflowing_sub(val, 1);
 
-        state.set_variable(operands[0] as u8, new_val.0 as u16);
+        state.set_variable_indirect(operands[0] as u8, new_val.0 as u16);
         self.next_address
     }
 
@@ -1088,8 +1096,9 @@ impl Instruction {
     fn load(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        let value = state.variable(operands[0] as u8);
-        state.set_variable(self.store.unwrap(), value);
+        let value = state.peek_variable(operands[0] as u8);
+        self.store_result(state, value);
+        // state.set_variable(self.store.unwrap(), value);
         self.next_address
     }
 
@@ -1135,9 +1144,9 @@ impl Instruction {
     fn dec_chk(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        let val = state.variable(operands[0] as u8) as i16;
+        let val = state.peek_variable(operands[0] as u8) as i16;
         let new_val = i16::overflowing_sub(val, 1);
-        state.set_variable(operands[0] as u8, new_val.0 as u16);
+        state.set_variable_indirect(operands[0] as u8, new_val.0 as u16);
 
         self.execute_branch(state, new_val.0 < operands[1] as i16)
     }
@@ -1145,9 +1154,9 @@ impl Instruction {
     fn inc_chk(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        let val = state.variable(operands[0] as u8) as i16;
+        let val = state.peek_variable(operands[0] as u8) as i16;
         let new_val = i16::overflowing_add(val, 1);
-        state.set_variable(operands[0] as u8, new_val.0 as u16);
+        state.set_variable_indirect(operands[0] as u8, new_val.0 as u16);
 
         self.execute_branch(state, new_val.0 > operands[1] as i16)
     }
@@ -1213,7 +1222,7 @@ impl Instruction {
     fn store(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        state.set_variable(operands[0] as u8, operands[1]);
+        state.set_variable_indirect(operands[0] as u8, operands[1]);
         self.next_address
     }
 
@@ -1682,6 +1691,10 @@ impl Instruction {
     fn pull(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
         let value = state.variable(0);
+
+        if operands[0] == 0 {
+            state.current_frame_mut().pop();
+        }
 
         state.set_variable(operands[0] as u8, value);
         self.next_address
