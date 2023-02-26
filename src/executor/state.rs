@@ -1,6 +1,7 @@
 use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
 use crate::executor::header;
 
@@ -153,12 +154,17 @@ impl Frame {
 pub struct State {
     pub name: String,
     memory_map: Vec<u8>,
+    pristine_memory_map: Vec<u8>,
     pub version: u8,
     pub frames: Vec<Frame>,
     pub interpreter: Box<dyn Interpreter>,
     pub print_in_interrupt: bool,
     pub read_interrupt: bool,
     pub read_char_interrupt: bool,
+    rng: ChaCha8Rng,
+    pub random_predictable: bool,
+    pub random_predictable_range: u16,
+    pub random_predictable_next: u16,
 }
 
 impl State {
@@ -181,12 +187,17 @@ impl State {
         State {
             name,
             memory_map: memory_map.clone(),
+            pristine_memory_map: memory_map.clone(),
             version: memory_map[0],
             frames,
             interpreter,
             print_in_interrupt: false,
             read_interrupt: false,
             read_char_interrupt: false,
+            rng: ChaCha8Rng::from_entropy(),
+            random_predictable: false,
+            random_predictable_range: 0,
+            random_predictable_next: 0,
         }
     }
 
@@ -363,14 +374,14 @@ impl State {
         }
     }
 
-    pub fn random(&self, range: u16) -> u16 {
-        let v = rand::thread_rng().gen_range(1..=range);
+    pub fn random(&mut self, range: u16) -> u16 {
+        let v = &self.rng.gen_range(1..=range);
         trace!("Random 1..{}: {}", range, v);
-        v
+        *v
     }
 
     pub fn seed(&mut self, seed: u64) {
-        StdRng::seed_from_u64(seed as u64);
+        self.rng = ChaCha8Rng::seed_from_u64(seed as u64);
     }
 
     pub fn packed_routine_address(&self, address: u16) -> usize {
@@ -421,6 +432,22 @@ impl State {
         self.memory_map[address] = value;
 
         debug!("memory: set ${:05x} to #{:02x}", address, value)
+    }
+
+    pub fn checksum(&self) -> u16 {
+        let mut checksum = 0 as u16;
+        let size = header::length(self) as usize *
+            match self.version {
+                1 | 2 | 3 => 2,
+                4 | 5 => 4,
+                6 | 7 | 8 => 8,
+                _ => 0
+            };
+        for i in 0x40..size {
+            checksum = u16::overflowing_add(checksum, self.pristine_memory_map[i] as u16).0;
+        }
+
+        checksum as u16
     }
 
     pub fn prepare_save(&self, address: usize) -> Vec<u8> {
@@ -475,6 +502,7 @@ impl Interpreter for State {
         self.interpreter.input_stream(stream)
     }
     fn new_line(&mut self) {
+        trace!(target: "app::transcript", "\n");
         self.interpreter.new_line();
         self.print_in_interrupt()
     }
@@ -482,6 +510,7 @@ impl Interpreter for State {
         self.interpreter.output_stream(stream, table);
     }
     fn print(&mut self, text: String) {
+        trace!(target: "app::transcript", "{}", text);
         self.interpreter.print(text);
         self.print_in_interrupt()
     }

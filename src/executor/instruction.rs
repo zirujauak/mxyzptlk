@@ -390,7 +390,12 @@ impl Instruction {
                     }
                     _ => (address, None),
                 },
-                OperandCount::_VAR => (address, None),
+                OperandCount::_VAR => match opcode.instruction {
+                    0x17 | 0x1F => {
+                        Self::decode_branch(state, address)
+                    },
+                    _ => (address, None),
+                }
             },
         }
     }
@@ -415,6 +420,8 @@ impl Instruction {
     pub fn execute(&mut self, state: &mut State) -> usize {
         match self.opcode.form {
             OpcodeForm::Extended => match self.opcode.instruction {
+                0x02 => self.log_shift(state),
+                0x03 => self.art_shift(state),
                 0x09 => self.save_undo(state),
                 _ => 0,
             },
@@ -430,6 +437,8 @@ impl Instruction {
                     0xA => self.quit(state),
                     0xB => self.new_line(state),
                     0xC => self.show_status(state),
+                    0xD => self.verify(state),
+                    0xF => self.piracy(state),
                     _ => 0,
                 },
                 OperandCount::_1OP => match self.opcode.instruction {
@@ -447,7 +456,12 @@ impl Instruction {
                     0xB => self.ret(state),
                     0xC => self.jump(state),
                     0xD => self.print_paddr(state),
-                    0xF => self.call_1n(state),
+                    0xE => self.load(state),
+                    0xF => if state.version < 5 {
+                        self.not(state)
+                    } else {
+                        self.call_1n(state)
+                    },
                     _ => 0,
                 },
                 OperandCount::_2OP => match self.opcode.instruction {
@@ -469,6 +483,7 @@ impl Instruction {
                     0x10 => self.loadb(state),
                     0x11 => self.get_prop(state),
                     0x12 => self.get_prop_addr(state),
+                    0x13 => self.get_next_prop(state),
                     0x14 => self.add(state),
                     0x15 => self.sub(state),
                     0x16 => self.mul(state),
@@ -492,13 +507,17 @@ impl Instruction {
                     0x09 => self.pull(state),
                     0x0A => self.split_window(state),
                     0x0B => self.set_window(state),
+                    0x0C => self.call_vs2(state),
                     0x0D => self.erase_window(state),
                     0x0F => self.set_cursor(state),
                     0x11 => self.set_text_style(state),
                     0x12 => self.buffer_mode(state),
                     0x13 => self.output_stream(state),
                     0x16 => self.read_char(state),
+                    0x18 => self.not(state),
                     0x19 => self.call_vn(state),
+                    0x1A => self.call_vn2(state),
+                    0x1F => self.check_arg_count(state),
                     _ => 0,
                 },
             },
@@ -892,6 +911,18 @@ impl Instruction {
         self.next_address
     }
 
+    fn verify(&self, state: &mut State) -> usize {
+        let expected = header::checksum(state);
+        let checksum = state.checksum();
+
+        trace!("verify: {:#04x} -- {:#04x}", expected, checksum);
+        self.execute_branch(state, expected == checksum)
+    }
+
+    fn piracy(&self, state: &mut State) -> usize {
+        self.execute_branch(state, true)
+    }
+    
     // Utility fn
     fn call_fn(
         &self,
@@ -955,19 +986,20 @@ impl Instruction {
 
     fn inc(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
-        let val = state.variable(operands[0] as u8);
-        let new_val = val as i16 + 1;
+        let val = state.variable(operands[0] as u8) as i16;
+        let new_val = i16::overflowing_add(val, 1);
 
-        state.set_variable(operands[0] as u8, new_val as u16);
+        state.set_variable(operands[0] as u8, new_val.0 as u16);
         self.next_address
     }
 
     fn dec(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
-        let val = state.variable(operands[0] as u8);
-        let new_val = val as i16 - 1;
+        let val = state.variable(operands[0] as u8) as i16;
+        trace!("{}", val);
+        let new_val = i16::overflowing_sub(val, 1);
 
-        state.set_variable(operands[0] as u8, new_val as u16);
+        state.set_variable(operands[0] as u8, new_val.0 as u16);
         self.next_address
     }
 
@@ -1053,6 +1085,22 @@ impl Instruction {
         self.next_address
     }
 
+    fn load(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let value = state.variable(operands[0] as u8);
+        state.set_variable(self.store.unwrap(), value);
+        self.next_address
+    }
+
+    fn not(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+        
+        let value = !operands[0];
+        state.set_variable(self.store.unwrap(), value);
+        self.next_address
+    }
+
     fn call_1n(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
         let address = state.packed_routine_address(operands[0]);
@@ -1087,19 +1135,21 @@ impl Instruction {
     fn dec_chk(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        let val = state.variable(operands[0] as u8) as i16 - 1;
-        state.set_variable(operands[0] as u8, val as u16);
+        let val = state.variable(operands[0] as u8) as i16;
+        let new_val = i16::overflowing_sub(val, 1);
+        state.set_variable(operands[0] as u8, new_val.0 as u16);
 
-        self.execute_branch(state, val < operands[1] as i16)
+        self.execute_branch(state, new_val.0 < operands[1] as i16)
     }
 
     fn inc_chk(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        let val = state.variable(operands[0] as u8) as i16 + 1;
-        state.set_variable(operands[0] as u8, val as u16);
+        let val = state.variable(operands[0] as u8) as i16;
+        let new_val = i16::overflowing_add(val, 1);
+        state.set_variable(operands[0] as u8, new_val.0 as u16);
 
-        self.execute_branch(state, val > operands[1] as i16)
+        self.execute_branch(state, new_val.0 > operands[1] as i16)
     }
 
     fn jin(&self, state: &mut State) -> usize {
@@ -1271,12 +1321,20 @@ impl Instruction {
         self.next_address
     }
 
+    fn get_next_prop(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let prop = object::next_property(state, operands[0] as usize, operands[1] as u8);
+        state.set_variable(self.store.unwrap(), prop as u16);
+        self.next_address
+    }
+
     fn add(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
         let mut value = operands[0] as i16;
         for i in 1..operands.len() {
-            value = value + operands[i] as i16;
+            value = i16::overflowing_add(value, operands[i] as i16).0;
         }
 
         state.set_variable(self.store.unwrap(), value as u16);
@@ -1288,7 +1346,7 @@ impl Instruction {
 
         let mut value = operands[0] as i16;
         for i in 1..operands.len() {
-            value = value - operands[i] as i16;
+            value = i16::overflowing_sub(value, operands[i] as i16).0
         }
 
         state.set_variable(self.store.unwrap(), value as u16);
@@ -1300,7 +1358,7 @@ impl Instruction {
 
         let mut value = operands[0] as i16;
         for i in 1..operands.len() {
-            value = value * operands[i] as i16;
+            value = i16::overflowing_mul(value, operands[i] as i16).0;
         }
 
         state.set_variable(self.store.unwrap(), value as u16);
@@ -1574,9 +1632,20 @@ impl Instruction {
 
         let range = operands[0] as i16;
         let v = if range < 0 {
-            state.seed(range as u64);
+            if range.abs() < 1000 {
+                trace!("RNG predictable 1..{}", range.abs());
+                state.random_predictable = true;
+                state.random_predictable_range = range.abs() as u16;
+                state.random_predictable_next = 1;
+            } else {
+                trace!("Re-seeding RNG: {:#04x}", range);
+                state.random_predictable = false;
+                state.seed(range as u64 & 0xFFFF);
+            }
             0
         } else if range == 0 {
+            trace!("Re-seeding RNG with current time");
+            state.random_predictable = false;
             state.seed(
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -1585,7 +1654,18 @@ impl Instruction {
             );
             0
         } else {
-            state.random(range as u16)
+            if state.random_predictable {
+                let v = state.random_predictable_next;
+                let next = v + 1;
+                if next > state.random_predictable_range {
+                    state.random_predictable_next = 1;
+                } else {
+                    state.random_predictable_next = v
+                }
+                v.max(range as u16)
+            } else {
+                state.random(range as u16)
+            }
         };
 
         state.set_variable(self.store.unwrap(), v);
@@ -1619,6 +1699,18 @@ impl Instruction {
 
         state.set_window(operands[0]);
         self.next_address
+    }
+
+    fn call_vs2(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let address = state.packed_routine_address(operands[0]);
+        let mut arguments = Vec::new();
+        for i in 1..operands.len() {
+            arguments.push(operands[i]);
+        }
+
+        self.call_fn(state, address, self.next_address, &arguments, self.store)
     }
 
     fn erase_window(&self, state: &mut State) -> usize {
@@ -1715,6 +1807,71 @@ impl Instruction {
         }
 
         self.call_fn(state, address, self.next_address, &arguments, None)
+    }
+
+    fn call_vn2(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let address = state.packed_routine_address(operands[0]);
+        let mut arguments = Vec::new();
+        for i in 1..operands.len() {
+            arguments.push(operands[i]);
+        }
+
+        self.call_fn(state, address, self.next_address, &arguments, None)
+    }
+
+    fn check_arg_count(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+        
+        self.execute_branch(state, state.current_frame().argument_count >= operands[0] as u8)
+    }
+
+    // EXT
+    fn log_shift(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let value = operands[0];
+        let places = operands[1] as i16;
+
+        let new_value = if places < 0 && places > -16 {
+            u16::overflowing_shr(value, places.abs() as u32).0
+            // value >> places
+        } else if places > 0 && places < 16 {
+            u16::overflowing_shl(value, places as u32).0
+            // value << places
+        } else if places == 0 {
+            value 
+        } else {
+            error!("LOG_SHIFT places {} is out of range [-15,15]", places);
+            value
+        };
+
+        state.set_variable(self.store.unwrap(), new_value as u16);
+        self.next_address
+    }
+
+    fn art_shift(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let value = operands[0] as i16;
+        let places = operands[1] as i16;
+
+        let new_value = if places < 0 && places > -16 {
+            i16::overflowing_shr(value, places.abs() as u32).0
+            // value >> places
+        } else if places > 0 && places < 16 {
+            i16::overflowing_shl(value, places as u32).0
+            // value << places
+        } else if places == 0 {
+            value 
+        } else {
+            error!("ART_SHIFT places {} is out of range [-15,15]", places);
+            value
+        };
+
+        state.set_variable(self.store.unwrap(), new_value as u16);
+        self.next_address
     }
 
     fn save_undo(&self, state: &mut State) -> usize {
