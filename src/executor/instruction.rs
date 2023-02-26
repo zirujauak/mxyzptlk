@@ -1487,7 +1487,7 @@ impl Instruction {
                     state.set_byte(text + i, 0);
                 }
                 // Return terminator 0
-                state.set_variable(self.store.unwrap(), 0);
+                self.store_result(state, 0);
                 return self.next_address;
             } 
         }
@@ -1786,7 +1786,7 @@ impl Instruction {
         if state.read_char_interrupt() {
             state.set_read_char_interrupt(false);
             if state.read_char_interrupt_result() == 1 {
-                state.set_variable(self.store.unwrap(), 0);
+                self.store_result(state, 0);
                 return self.next_address;
             }
         }
