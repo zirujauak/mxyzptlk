@@ -1,4 +1,4 @@
-# mxyzpltk
+# mxyzptlk
 
 An inform (zmachine) virtual machine implemented in Rust.
 
