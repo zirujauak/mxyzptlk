@@ -391,11 +391,9 @@ impl Instruction {
                     _ => (address, None),
                 },
                 OperandCount::_VAR => match opcode.instruction {
-                    0x17 | 0x1F => {
-                        Self::decode_branch(state, address)
-                    },
+                    0x17 | 0x1F => Self::decode_branch(state, address),
                     _ => (address, None),
-                }
+                },
             },
         }
     }
@@ -420,9 +418,34 @@ impl Instruction {
     pub fn execute(&mut self, state: &mut State) -> usize {
         match self.opcode.form {
             OpcodeForm::Extended => match self.opcode.instruction {
+                0x00 => self.save(state),
+                0x01 => self.restore(state),
                 0x02 => self.log_shift(state),
                 0x03 => self.art_shift(state),
+                0x04 => self.set_font(state),
+                0x05 => self.draw_picture(state),
+                0x06 => self.picture_data(state),
+                0x07 => self.erase_picture(state),
+                0x08 => self.set_margins(state),
                 0x09 => self.save_undo(state),
+                0x0A => self.restore_undo(state),
+                0x0B => self.print_unicode(state),
+                0x0C => self.check_unicode(state),
+                0x0D => self.set_true_colour(state),
+                0x10 => self.move_window(state),
+                0x11 => self.window_size(state),
+                0x12 => self.window_style(state),
+                0x13 => self.get_wind_prop(state),
+                0x14 => self.scroll_window(state),
+                0x15 => self.pop_stack(state),
+                0x16 => self.read_mouse(state),
+                0x17 => self.mouse_window(state),
+                0x18 => self.push_stack(state),
+                0x19 => self.put_wind_prop(state),
+                0x1A => self.print_form(state),
+                0x1B => self.make_menu(state),
+                0x1C => self.picture_table(state),
+                0x1D => self.buffer_screen(state),
                 _ => 0,
             },
             _ => match self.opcode.opcount {
@@ -433,7 +456,15 @@ impl Instruction {
                     0x3 => self.print_ret(state),
                     0x5 => self.save(state),
                     0x6 => self.restore(state),
+                    0x7 => self.restart(state),
                     0x8 => self.ret_popped(state),
+                    0x9 => {
+                        if state.version < 5 {
+                            self.pop(state)
+                        } else {
+                            self.catch(state)
+                        }
+                    }
                     0xA => self.quit(state),
                     0xB => self.new_line(state),
                     0xC => self.show_status(state),
@@ -457,11 +488,13 @@ impl Instruction {
                     0xC => self.jump(state),
                     0xD => self.print_paddr(state),
                     0xE => self.load(state),
-                    0xF => if state.version < 5 {
-                        self.not(state)
-                    } else {
-                        self.call_1n(state)
-                    },
+                    0xF => {
+                        if state.version < 5 {
+                            self.not(state)
+                        } else {
+                            self.call_1n(state)
+                        }
+                    }
                     _ => 0,
                 },
                 OperandCount::_2OP => match self.opcode.instruction {
@@ -492,6 +525,7 @@ impl Instruction {
                     0x19 => self.call_2s(state),
                     0x1A => self.call_2n(state),
                     0x1B => self.set_colour(state),
+                    0x1C => self.throw(state),
                     _ => 0,
                 },
                 OperandCount::_VAR => match self.opcode.instruction {
@@ -509,14 +543,20 @@ impl Instruction {
                     0x0B => self.set_window(state),
                     0x0C => self.call_vs2(state),
                     0x0D => self.erase_window(state),
+                    0x0E => self.erase_line(state),
                     0x0F => self.set_cursor(state),
                     0x11 => self.set_text_style(state),
                     0x12 => self.buffer_mode(state),
                     0x13 => self.output_stream(state),
                     0x16 => self.read_char(state),
+                    0x17 => self.scan_table(state),
                     0x18 => self.not(state),
                     0x19 => self.call_vn(state),
                     0x1A => self.call_vn2(state),
+                    0x1B => self.tokenise(state),
+                    0x1C => self.encode_text(state),
+                    0x1D => self.copy_table(state),
+                    0x1E => self.print_table(state),
                     0x1F => self.check_arg_count(state),
                     _ => 0,
                 },
@@ -556,7 +596,7 @@ impl Instruction {
         match self.store {
             Some(v) => {
                 state.set_variable(v, value);
-            },
+            }
             None => {}
         }
     }
@@ -885,9 +925,24 @@ impl Instruction {
             self.next_address
         }
     }
+
+    fn restart(&mut self, state: &mut State) -> usize {
+        todo!()
+    }
+
     fn ret_popped(&self, state: &mut State) -> usize {
         let v = state.variable(0);
         state.return_fn(v)
+    }
+
+    fn pop(&self, state: &mut State) -> usize {
+        state.variable(0);
+
+        self.next_address
+    }
+
+    fn catch(&self, state: &mut State) -> usize {
+        todo!()
     }
 
     fn quit(&self, _state: &mut State) -> usize {
@@ -931,7 +986,7 @@ impl Instruction {
     fn piracy(&self, state: &mut State) -> usize {
         self.execute_branch(state, true)
     }
-    
+
     // Utility fn
     fn call_fn(
         &self,
@@ -997,7 +1052,7 @@ impl Instruction {
         let operands = self.operand_values(state);
         let val = state.peek_variable(operands[0] as u8) as i16;
         let new_val = i16::overflowing_add(val, 1);
-    
+
         state.set_variable_indirect(operands[0] as u8, new_val.0 as u16);
         self.next_address
     }
@@ -1103,7 +1158,7 @@ impl Instruction {
 
     fn not(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
-        
+
         let value = !operands[0];
         self.store_result(state, value);
         self.next_address
@@ -1422,6 +1477,10 @@ impl Instruction {
         self.next_address
     }
 
+    pub fn throw(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
     // VAR
     // aka call_vs
     fn call(&self, state: &mut State) -> usize {
@@ -1489,20 +1548,23 @@ impl Instruction {
                 // Return terminator 0
                 self.store_result(state, 0);
                 return self.next_address;
-            } 
+            }
         }
         if state.version > 4 {
             // Read text buffer into existing input
-            trace!("Recovering {} bytes from text buffer", state.byte_value(text + 1));
+            trace!(
+                "Recovering {} bytes from text buffer",
+                state.byte_value(text + 1)
+            );
             let s = state.byte_value(text + 1) as usize;
             for i in 0..s {
                 existing_input.push(state.byte_value(text + 2 + i) as char);
             }
         }
 
-        let parse = if operands.len() > 1 { 
-            operands[1] as usize 
-        } else { 
+        let parse = if operands.len() > 1 {
+            operands[1] as usize
+        } else {
             0
         };
 
@@ -1521,7 +1583,7 @@ impl Instruction {
             0
         };
         let routine = if self.operands.len() > 2 {
-            operands[3] 
+            operands[3]
         } else {
             0
         };
@@ -1543,13 +1605,13 @@ impl Instruction {
         // Store input to the text buffer
         let terminator = input.last().unwrap();
         if state.version < 5 {
-            for i in 0..input.len()-1 {
+            for i in 0..input.len() - 1 {
                 state.set_byte(text + 1 + i, input[i].to_ascii_lowercase() as u8);
             }
             state.set_byte(text + 1 + input.len(), 0);
         } else {
             state.set_byte(text + 1, input.len() as u8 - 1);
-            for i in 0..input.len()-1 {
+            for i in 0..input.len() - 1 {
                 state.set_byte(text + 2 + i, input[i].to_ascii_lowercase() as u8);
             }
         }
@@ -1562,7 +1624,7 @@ impl Instruction {
             let mut word_count: usize = 0;
             let max_words = state.byte_value(parse) as usize;
 
-            let data = input[0..input.len()-1].to_vec();
+            let data = input[0..input.len() - 1].to_vec();
             for i in 0..data.len() {
                 if word_count > max_words {
                     break;
@@ -1733,6 +1795,10 @@ impl Instruction {
         self.next_address
     }
 
+    fn erase_line(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
     fn set_cursor(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
@@ -1810,6 +1876,10 @@ impl Instruction {
         self.next_address
     }
 
+    fn scan_table(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
     fn call_vn(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
@@ -1834,13 +1904,34 @@ impl Instruction {
         self.call_fn(state, address, self.next_address, &arguments, None)
     }
 
+    fn tokenise(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn encode_text(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn copy_table(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn print_table(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
     fn check_arg_count(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
-        
-        self.execute_branch(state, state.current_frame().argument_count >= operands[0] as u8)
+
+        self.execute_branch(
+            state,
+            state.current_frame().argument_count >= operands[0] as u8,
+        )
     }
 
     // EXT
+    // save is implemented in 0OP
+    // restore is implement in 0OP
     fn log_shift(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
@@ -1854,7 +1945,7 @@ impl Instruction {
             u16::overflowing_shl(value, places as u32).0
             // value << places
         } else if places == 0 {
-            value 
+            value
         } else {
             error!("LOG_SHIFT places {} is out of range [-15,15]", places);
             value
@@ -1877,7 +1968,7 @@ impl Instruction {
             i16::overflowing_shl(value, places as u32).0
             // value << places
         } else if places == 0 {
-            value 
+            value
         } else {
             error!("ART_SHIFT places {} is out of range [-15,15]", places);
             value
@@ -1887,8 +1978,100 @@ impl Instruction {
         self.next_address
     }
 
+    fn set_font(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn draw_picture(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn picture_data(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn erase_picture(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn set_margins(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
     fn save_undo(&self, state: &mut State) -> usize {
         self.store_result(state, 0xFFFF as u16);
         self.next_address
+    }
+
+    fn restore_undo(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn print_unicode(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn check_unicode(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn set_true_colour(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn move_window(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn window_size(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn window_style(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn get_wind_prop(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn scroll_window(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn pop_stack(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn read_mouse(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn mouse_window(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn push_stack(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn put_wind_prop(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn print_form(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn make_menu(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn picture_table(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn buffer_screen(&self, state: &mut State) -> usize {
+        todo!()
     }
 }
