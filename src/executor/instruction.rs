@@ -1562,12 +1562,13 @@ impl Instruction {
             let mut word_count: usize = 0;
             let max_words = state.byte_value(parse) as usize;
 
-            for i in 0..input.len() {
+            let data = input[0..input.len()-1].to_vec();
+            for i in 0..data.len() {
                 if word_count > max_words {
                     break;
                 }
 
-                if separators.contains(&input[i]) {
+                if separators.contains(&data[i]) {
                     if word.len() > 0 {
                         let entry = text::from_dictionary(state, &word);
                         state.set_word(parse + 2 + (4 * word_count), entry as u16);
@@ -1576,16 +1577,16 @@ impl Instruction {
                         word_count = word_count + 1;
                         trace!("{:?} => ${:05x}", word, entry);
                     }
-                    let entry = text::from_dictionary(state, &vec![input[i]]);
+                    let entry = text::from_dictionary(state, &vec![data[i]]);
                     state.set_word(parse + 2 + (4 * word_count), entry as u16);
                     state.set_byte(parse + 4 + (4 * word_count), 1);
                     state.set_byte(parse + 5 + (4 * word_count), i as u8 + 1);
                     word_count = word_count + 1;
-                    trace!("{} => ${:05x}", input[i], entry);
+                    trace!("{} => ${:05x}", data[i], entry);
 
                     word.clear();
                     word_start = i + 1;
-                } else if input[i] == ' ' {
+                } else if data[i] == ' ' {
                     if word.len() > 0 {
                         let entry = text::from_dictionary(state, &word);
                         state.set_word(parse + 2 + (4 * word_count), entry as u16);
@@ -1597,7 +1598,7 @@ impl Instruction {
                     word.clear();
                     word_start = i + 1;
                 } else {
-                    word.push(input[i].to_ascii_lowercase())
+                    word.push(data[i].to_ascii_lowercase())
                 }
             }
 
