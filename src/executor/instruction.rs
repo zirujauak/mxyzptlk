@@ -1,11 +1,11 @@
-use std::{fmt, process};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{fmt, process};
 
 use crate::interpreter::Interpreter;
 
-use super::object;
 use super::state::State;
 use super::text;
+use super::{header, object};
 
 #[derive(Debug)]
 pub enum OperandType {
@@ -30,7 +30,9 @@ pub struct Instruction {
     opcode: Opcode,
     operands: Vec<Operand>,
     store: Option<u8>,
+    store_byte_address: usize,
     branch: Option<Branch>,
+    branch_byte_address: usize,
     next_address: usize,
 }
 
@@ -395,35 +397,39 @@ impl Instruction {
 
     pub fn from_address(state: &State, address: usize) -> Instruction {
         let (next_address, opcode) = Self::opcode(state, address);
-        let (next_address, operands) = Self::operands(state, next_address, &opcode);
-        let (next_address, store) = Self::decode_store(state, next_address, &opcode);
-        let (next_address, branch) = Self::branch(state, next_address, &opcode);
+        let (store_byte_address, operands) = Self::operands(state, next_address, &opcode);
+        let (branch_byte_address, store) = Self::decode_store(state, store_byte_address, &opcode);
+        let (next_address, branch) = Self::branch(state, branch_byte_address, &opcode);
         Instruction {
             address,
             opcode,
             operands,
             store,
+            store_byte_address,
             branch,
+            branch_byte_address,
             next_address,
         }
     }
 
     pub fn execute(&mut self, state: &mut State) -> usize {
         match self.opcode.form {
-            OpcodeForm::Extended => {
-                match self.opcode.instruction {
-                    0x09 => self.save_undo(state),
-                    _ => 0
-                }
-            }
+            OpcodeForm::Extended => match self.opcode.instruction {
+                0x09 => self.save_undo(state),
+                _ => 0,
+            },
             _ => match self.opcode.opcount {
                 OperandCount::_0OP => match self.opcode.instruction {
                     0x0 => self.rtrue(state),
                     0x1 => self.rfalse(state),
                     0x2 => self.print_literal(state),
                     0x3 => self.print_ret(state),
+                    0x5 => self.save(state),
+                    0x6 => self.restore(state),
+                    0x8 => self.ret_popped(state),
                     0xA => self.quit(state),
                     0xB => self.new_line(state),
+                    0xC => self.show_status(state),
                     _ => 0,
                 },
                 OperandCount::_1OP => match self.opcode.instruction {
@@ -434,6 +440,7 @@ impl Instruction {
                     0x4 => self.get_prop_len(state),
                     0x5 => self.inc(state),
                     0x6 => self.dec(state),
+                    0x7 => self.print_addr(state),
                     0x8 => self.call_1s(state),
                     0x9 => self.remove_obj(state),
                     0xA => self.print_obj(state),
@@ -447,7 +454,10 @@ impl Instruction {
                     0x01 => self.je(state),
                     0x02 => self.jl(state),
                     0x03 => self.jg(state),
+                    0x04 => self.dec_chk(state),
+                    0x05 => self.inc_chk(state),
                     0x06 => self.jin(state),
+                    0x07 => self.test(state),
                     0x08 => self.or(state),
                     0x09 => self.and(state),
                     0x0A => self.test_attr(state),
@@ -478,6 +488,7 @@ impl Instruction {
                     0x06 => self.print_num(state),
                     0x07 => self.random(state),
                     0x08 => self.push(state),
+                    0x09 => self.pull(state),
                     0x0A => self.split_window(state),
                     0x0B => self.set_window(state),
                     0x0D => self.erase_window(state),
@@ -509,9 +520,13 @@ impl Instruction {
         v
     }
 
-    fn execute_branch(&self, condition: bool) -> usize {
+    fn execute_branch(&self, state: &mut State, condition: bool) -> usize {
         if condition == self.branch.as_ref().unwrap().condition {
-            self.branch.as_ref().unwrap().address
+            match self.branch.as_ref().unwrap().address {
+                0 => state.return_fn(0),
+                1 => state.return_fn(1),
+                _ => self.branch.as_ref().unwrap().address,
+            }
         } else {
             self.next_address
         }
@@ -560,13 +575,15 @@ impl Instruction {
 
     fn format_branch(&self) -> String {
         match &self.branch {
-            Some(b) => {
-                format!(
+            Some(b) => match b.address {
+                0 => format!(" [{}] => RFALSE", b.condition.to_string().to_uppercase()),
+                1 => format!(" [{}] => RTRUE", b.condition.to_string().to_uppercase()),
+                _ => format!(
                     " [{}] => ${:05x}",
                     b.condition.to_string().to_uppercase(),
                     b.address
-                )
-            }
+                ),
+            },
             None => String::new(),
         }
     }
@@ -753,18 +770,19 @@ impl Instruction {
             ),
             (OperandCount::_1OP, 0xD) => {
                 let a = match self.operands[0].operand_type {
-                    OperandType::SmallConstant | OperandType::LargeConstant => self.operands[0].operand_value,
-                    OperandType::Variable => state.peek_variable(self.operands[0].operand_value as u8),
+                    OperandType::SmallConstant | OperandType::LargeConstant => {
+                        self.operands[0].operand_value
+                    }
+                    OperandType::Variable => {
+                        state.peek_variable(self.operands[0].operand_value as u8)
+                    }
                 };
                 trace!(
                     "${:05x}: {} {} \"{}\"",
                     self.address,
                     self.name(state),
                     self.format_operand(state, 0),
-                    text::as_text(
-                        state,
-                        state.packed_string_address(a)
-                    )
+                    text::as_text(state, state.packed_string_address(a))
                 )
             }
             _ => trace!(
@@ -817,6 +835,32 @@ impl Instruction {
         state.return_fn(1)
     }
 
+    fn save(&self, state: &mut State) -> usize {
+        if state.version < 4 {
+            let data = state.prepare_save(self.branch_byte_address);
+            state.save(&String::new(), &data);
+            // TODO: branch condition should depend on whether save succeeded or not
+            self.execute_branch(state, true)
+        } else {
+            self.next_address
+        }
+    }
+
+    fn restore(&mut self, state: &mut State) -> usize {
+        let instruction_address = state.prepare_restore();
+        if state.version < 4 {
+            let (_address, branch) = Self::decode_branch(state, instruction_address);
+            self.branch = branch;
+            self.execute_branch(state, true)
+        } else {
+            self.next_address
+        }
+    }
+    fn ret_popped(&self, state: &mut State) -> usize {
+        let v = state.variable(0);
+        state.return_fn(v)
+    }
+
     fn quit(&self, _state: &mut State) -> usize {
         pancurses::reset_shell_mode();
         pancurses::curs_set(1);
@@ -825,6 +869,25 @@ impl Instruction {
 
     fn new_line(&self, state: &mut State) -> usize {
         state.interpreter.new_line();
+        self.next_address
+    }
+
+    fn show_status(&self, state: &mut State) -> usize {
+        if state.version < 4 {
+            let loc_obj = state.variable(16) as usize;
+            let location = text::from_vec(state, &object::short_name(state, loc_obj));
+            let stat_1 = state.variable(17) as i16;
+            let stat_2 = state.variable(18);
+            let status =
+                if state.version == 3 && header::flag(state, header::Flag::StatusLineType) == 1 {
+                    format!("{:02}:{:02}", stat_1, stat_2)
+                } else {
+                    format!("Score: {:>3}  Turn: {:>4}", stat_1, stat_2)
+                };
+
+            trace!("{} / {}", location, status);
+            state.show_status(&location, &status);
+        }
         self.next_address
     }
 
@@ -852,7 +915,7 @@ impl Instruction {
     fn jz(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        self.execute_branch(operands[0] == 0)
+        self.execute_branch(state, operands[0] == 0)
     }
 
     fn get_sibling(&self, state: &mut State) -> usize {
@@ -861,7 +924,7 @@ impl Instruction {
         let condition = sibling != 0;
 
         state.set_variable(self.store.unwrap(), sibling);
-        self.execute_branch(condition)
+        self.execute_branch(state, condition)
     }
 
     fn get_child(&self, state: &mut State) -> usize {
@@ -870,7 +933,7 @@ impl Instruction {
         let condition = child != 0;
 
         state.set_variable(self.store.unwrap(), child);
-        self.execute_branch(condition)
+        self.execute_branch(state, condition)
     }
 
     fn get_parent(&self, state: &mut State) -> usize {
@@ -907,6 +970,15 @@ impl Instruction {
         self.next_address
     }
 
+    fn print_addr(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+        let address = operands[0] as usize;
+
+        let text = text::as_text(state, address);
+        state.print(text);
+        self.next_address
+    }
+
     fn call_1s(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
         let address = state.packed_routine_address(operands[0]);
@@ -919,27 +991,29 @@ impl Instruction {
 
         let object = operands[0] as usize;
         let parent = object::parent(state, object);
-        let parent_child = object::child(state, parent);
 
-        if parent_child == object {
-            // object is direct child of parent
-            // Set child of parent to the object's sibling
-            object::set_child(state, parent, object::sibling(state, object));
-        } else {
-            // scan the parent child list for the sibling prior to the object
-            let mut sibling = parent_child;
-            while sibling != 0 && object::sibling(state, sibling) != object {
-                sibling = object::sibling(state, sibling);
+        if parent != 0 {
+            let parent_child = object::child(state, parent);
+
+            if parent_child == object {
+                // object is direct child of parent
+                // Set child of parent to the object's sibling
+                object::set_child(state, parent, object::sibling(state, object));
+            } else {
+                // scan the parent child list for the sibling prior to the object
+                let mut sibling = parent_child;
+                while sibling != 0 && object::sibling(state, sibling) != object {
+                    sibling = object::sibling(state, sibling);
+                }
+
+                if sibling == 0 {
+                    panic!("Inconsistent object tree state!")
+                }
+
+                // Set the previous sibling's sibling to the object's sibling
+                object::set_sibling(state, sibling, object::sibling(state, object));
             }
-
-            if sibling == 0 {
-                panic!("Inconsistent object tree state!")
-            }
-
-            // Set the previous sibling's sibling to the object's sibling
-            object::set_sibling(state, sibling, object::sibling(state, object));
         }
-
         // Set parent and sibling of object to 0
         object::set_parent(state, object, 0);
         object::set_sibling(state, object, 0);
@@ -994,27 +1068,53 @@ impl Instruction {
             condition = condition || (operands[0] as i16 == operands[i] as i16);
         }
 
-        self.execute_branch(condition)
+        self.execute_branch(state, condition)
     }
 
     fn jl(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        self.execute_branch((operands[0] as i16) < (operands[1] as i16))
+        self.execute_branch(state, (operands[0] as i16) < (operands[1] as i16))
     }
 
     fn jg(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        self.execute_branch((operands[0] as i16) > (operands[1] as i16))
+        self.execute_branch(state, (operands[0] as i16) > (operands[1] as i16))
+    }
+
+    fn dec_chk(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let val = state.variable(operands[0] as u8) as i16 - 1;
+        state.set_variable(operands[0] as u8, val as u16);
+
+        self.execute_branch(state, val < operands[1] as i16)
+    }
+
+    fn inc_chk(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let val = state.variable(operands[0] as u8) as i16 + 1;
+        state.set_variable(operands[0] as u8, val as u16);
+
+        self.execute_branch(state, val > operands[1] as i16)
     }
 
     fn jin(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        self.execute_branch(object::parent(state, operands[0] as usize) == operands[1] as usize)
+        self.execute_branch(
+            state,
+            object::parent(state, operands[0] as usize) == operands[1] as usize,
+        )
     }
 
+    fn test(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        self.execute_branch(state, operands[0] & operands[1] == operands[1])
+    }
     fn or(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
@@ -1137,7 +1237,7 @@ impl Instruction {
 
         let condition = object::attribute(state, operands[0] as usize, operands[1] as u8);
 
-        self.execute_branch(condition)
+        self.execute_branch(state, condition)
     }
 
     fn set_attr(&self, state: &mut State) -> usize {
@@ -1290,6 +1390,10 @@ impl Instruction {
     }
 
     pub fn read(&self, state: &mut State) -> usize {
+        if state.version < 4 {
+            trace!("SHOW_STATUS before READ");
+            self.show_status(state);
+        }
         let operands = self.operand_values(state);
 
         let text = operands[0] as usize;
@@ -1437,6 +1541,15 @@ impl Instruction {
         state.current_frame_mut().push(operands[0]);
         self.next_address
     }
+
+    fn pull(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+        let value = state.variable(0);
+
+        state.set_variable(operands[0] as u8, value);
+        self.next_address
+    }
+
     fn split_window(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
@@ -1513,9 +1626,9 @@ impl Instruction {
             state.set_read_char_interrupt(false);
             if state.read_char_interrupt_result() == 1 {
                 state.set_variable(self.store.unwrap(), 0);
-                return self.next_address
+                return self.next_address;
             }
-        } else if self.operands.len() == 3  && operands[1] > 0 && operands[2] > 0 {
+        } else if self.operands.len() == 3 && operands[1] > 0 && operands[2] > 0 {
             let time = operands[1];
             let routine = operands[2];
             let c = state.read_char(time / 10) as u16;
