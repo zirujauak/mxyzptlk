@@ -75,6 +75,188 @@ impl Curses {
             _ => &mut self.window_0,
         }
     }
+
+    fn getch(&mut self) -> Option<(char, char)> {
+        let gc = self.current_window_mut().getch();
+        match gc {
+            Some(input) => {
+                match input {
+                    Input::Character(c) => match c as u16 as u32 {
+                        // Cursor keys
+                        0x1b => {
+                            // Control character
+                            let c1 = self.current_window_mut().getch().unwrap();
+                            let c2 = self.current_window_mut().getch().unwrap();
+                            match (c1, c2) {
+                                (Input::Character('['),Input::Character('A')) => Some((129 as char, 129 as char)),
+                                (Input::Character('['),Input::Character('B')) => Some((130 as char, 130 as char)),
+                                (Input::Character('['),Input::Character('D')) => Some((131 as char, 131 as char)),
+                                (Input::Character('['),Input::Character('C')) => Some((132 as char, 132 as char)),
+                                _ => None
+                            }
+                        },
+                        0xe4 => Some((c, 155 as char)),
+                        0xf6 => Some((c, 156 as char)),
+                        0xfc => Some((c, 157 as char)),
+                        0xc4 => Some((c, 158 as char)),
+                        0xd6 => Some((c, 159 as char)),
+                        0xdc => Some((c, 160 as char)),
+                        0xdf => Some((c, 161 as char)),
+                        0xbb => Some((c, 162 as char)),
+                        0xab => Some((c, 163 as char)),
+                        0xeb => Some((c, 164 as char)),
+                        0xef => Some((c, 165 as char)),
+                        0xff => Some((c, 166 as char)),
+                        0xcb => Some((c, 167 as char)),
+                        0xcf => Some((c, 168 as char)),
+                        0xe1 => Some((c, 169 as char)),
+                        0xe9 => Some((c, 170 as char)),
+                        0xed => Some((c, 171 as char)),
+                        0xf3 => Some((c, 172 as char)),
+                        0xfa => Some((c, 173 as char)),
+                        0xfd => Some((c, 174 as char)),
+                        0xc1 => Some((c, 175 as char)),
+                        0xc9 => Some((c, 176 as char)),
+                        0xcd => Some((c, 177 as char)),
+                        0xd3 => Some((c, 178 as char)),
+                        0xda => Some((c, 179 as char)),
+                        0xdd => Some((c, 180 as char)),
+                        0xe0 => Some((c, 181 as char)),
+                        0xe8 => Some((c, 182 as char)),
+                        0xec => Some((c, 183 as char)),
+                        0xf2 => Some((c, 184 as char)),
+                        0xf9 => Some((c, 185 as char)),
+                        0xc0 => Some((c, 186 as char)),
+                        0xc8 => Some((c, 187 as char)),
+                        0xcc => Some((c, 188 as char)),
+                        0xd2 => Some((c, 189 as char)),
+                        0xd9 => Some((c, 190 as char)),
+                        0xe2 => Some((c, 191 as char)),
+                        0xea => Some((c, 192 as char)),
+                        0xee => Some((c, 193 as char)),
+                        0xf4 => Some((c, 194 as char)),
+                        0xfb => Some((c, 195 as char)),
+                        0xc2 => Some((c, 196 as char)),
+                        0xca => Some((c, 197 as char)),
+                        0xce => Some((c, 198 as char)),
+                        0xd4 => Some((c, 199 as char)),
+                        0xdb => Some((c, 200 as char)),
+                        0xe5 => Some((c, 201 as char)),
+                        0xc5 => Some((c, 202 as char)),
+                        0xf8 => Some((c, 203 as char)),
+                        0xd8 => Some((c, 204 as char)),
+                        0xe3 => Some((c, 205 as char)),
+                        0xf1 => Some((c, 206 as char)),
+                        0xf5 => Some((c, 207 as char)),
+                        0xc3 => Some((c, 208 as char)),
+                        0xd1 => Some((c, 209 as char)),
+                        0xd5 => Some((c, 210 as char)),
+                        0xe6 => Some((c, 211 as char)),
+                        0xc6 => Some((c, 212 as char)),
+                        0xe7 => Some((c, 213 as char)),
+                        0xc7 => Some((c, 214 as char)),
+                        0xfe => Some((c, 215 as char)),
+                        0xf0 => Some((c, 216 as char)),
+                        0xde => Some((c, 217 as char)),
+                        0xd0 => Some((c, 218 as char)),
+                        0xa3 => Some((c, 219 as char)),
+                        0x153 => Some((c, 220 as char)),
+                        0x152 => Some((c, 221 as char)),
+                        0xa1 => Some((c, 222 as char)),
+                        0xbf => Some((c, 223 as char)),
+                        _ => Some((c, c)),
+                    },
+                    _ => None,
+                }
+            },
+            _ => None
+        }
+    }
+}
+
+
+fn addch(window: &mut Window, c: u16) {
+    let ch = match c {
+        155 => 0xe4,
+        156 => 0xf6,
+        157 => 0xfc,
+        158 => 0xc6,
+        159 => 0xd6,
+        160 => 0xdc,
+        161 => 0xdf,
+        162 => 0xbb,
+        163 => 0xab,
+        164 => 0xeb,
+        165 => 0xef,
+        166 => 0xff,
+        167 => 0xcb,
+        168 => 0xcf,
+        169 => 0xe1,
+        170 => 0xe9,
+        171 => 0xed,
+        172 => 0xf3,
+        173 => 0xfa,
+        174 => 0xfd,
+        175 => 0xc1,
+        176 => 0xc9,
+        177 => 0xcd,
+        178 => 0xd3,
+        179 => 0xda,
+        180 => 0xdd,
+        181 => 0xe0,
+        182 => 0xe8,
+        183 => 0xec,
+        184 => 0xf2,
+        185 => 0xf9,
+        186 => 0xc0,
+        187 => 0xc8,
+        188 => 0xcc,
+        189 => 0xd2,
+        190 => 0xd9,
+        191 => 0xe2,
+        192 => 0xea,
+        193 => 0xee,
+        194 => 0xf4,
+        195 => 0xfb,
+        196 => 0xc2,
+        197 => 0xca,
+        198 => 0xce,
+        199 => 0xd4,
+        200 => 0xdb,
+        201 => 0xe5,
+        202 => 0xc5,
+        203 => 0xf8,
+        204 => 0xd8,
+        205 => 0xe3,
+        206 => 0xf1,
+        207 => 0xf5,
+        208 => 0xc3,
+        209 => 0xd1,
+        210 => 0xd5,
+        211 => 0xe6,
+        212 => 0xc6,
+        213 => 0xe7,
+        214 => 0xc7,
+        215 => 0xfe,
+        216 => 0xf0,
+        217 => 0xde,
+        218 => 0xd0,
+        219 => 0xa3,
+        220 => 0x153,
+        221 => 0x152,
+        222 => 0xa1,
+        223 => 0xbf,
+        _ => c
+    } as u16;
+    
+    window.addstr(format!("{}", char::from_u32(ch as u32).unwrap()));
+}
+
+fn addstr(window: &mut Window, s: &str) {
+    let chars:Vec<char> = s.chars().collect();
+    for c in chars {
+        addch(window, c as u16)
+    }
 }
 
 impl Interpreter for Curses {
@@ -114,7 +296,9 @@ impl Interpreter for Curses {
         todo!()
     }
     fn new_line(&mut self) {
-        self.current_window_mut().addch('\n');
+        //let win = self.current_window_mut();
+        addch(self.current_window_mut(), '\n' as u16);
+        // self.current_window_mut().addch('\n');
         self.current_window_mut().refresh();
     }
     fn output_stream(&mut self, stream: i16, table: usize) {
@@ -128,19 +312,23 @@ impl Interpreter for Curses {
                 let frags = text.split_inclusive(&[' ']);
                 // Iterate over the fragments
                 for s in frags {
+                    trace!("Fragment: {}", s);
                     let position = (
                         self.current_window_mut().get_cur_y() + 1,
                         self.current_window_mut().get_cur_x() + 1,
                     );
                     if self.columns as i32 - position.1 < s.len() as i32 {
-                        self.current_window_mut().addch('\n');
-                        self.current_window_mut().addstr(s);
+                        addch(self.current_window_mut(), '\n' as u16);
+                        addstr(self.current_window_mut(), s);
+                        // self.current_window_mut().addstr(s);
                     } else {
-                        self.current_window_mut().addstr(s);
+                        addstr(self.current_window_mut(), s);
+                        // self.current_window_mut().addstr(s);
                     }
                 }
             } else {
-                self.current_window_mut().addstr(text);
+                addstr(self.current_window_mut(), text.as_str());
+                // self.current_window_mut().addstr(text);
             }
             self.current_window_mut().refresh();
         };
@@ -160,10 +348,10 @@ impl Interpreter for Curses {
 
         if redraw {
             for c in existing_input {
-                self.current_window_mut().addch(*c);
+                addch(self.current_window_mut(), *c as u16);
             }
         }
-        
+
         // Current time, in seconds
         let start = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -189,45 +377,39 @@ impl Interpreter for Curses {
             {
                 return (input, true);
             } else {
-                let c = self.window_0.getch();
+                let c = self.getch();
                 match c {
                     Some(ch) => {
                         match ch {
-                            Input::Character(cx) => match cx {
-                                // Backspace
-                                '\u{7f}' => {
-                                    if input.len() > 0 {
-                                        // Remove from the input array
-                                        input.pop();
-                                        // Back cursor up and delete character
-                                        self.window_0.mv(
-                                            self.window_0.get_cur_y(),
-                                            self.window_0.get_cur_x() - 1,
-                                        );
-                                        self.window_0.delch();
-                                        self.window_0.refresh();
-                                    }
+                            // Backspace
+                            ('\u{7f}',_) => {
+                                if input.len() > 0 {
+                                    // Remove from the input array
+                                    input.pop();
+                                    // Back cursor up and delete character
+                                    self.window_0.mv(
+                                        self.window_0.get_cur_y(),
+                                        self.window_0.get_cur_x() - 1,
+                                    );
+                                    self.window_0.delch();
+                                    self.window_0.refresh();
                                 }
-                                //
-                                _ => {
-                                    if input.len() < length as usize && text::valid_input(cx) {
-                                        input.push(cx);
-                                        self.window_0.addstr(&format!("{}", cx));
-                                        self.window_0.refresh();
-                                    }
-                                    if input.len() < length as usize && cx == '\n' {
-                                        input.push(cx);
-                                        done = true;
-                                        self.window_0.addch('\n');
-                                    }
+                            }
+                            //
+                            (_, _) => {
+                                if input.len() < length as usize && text::valid_input(ch.1) {
+                                    input.push(ch.1);
+                                    addch(&mut self.window_0, ch.1 as u16);
+                                    self.window_0.refresh();
                                 }
-                            },
-                            _ => {
-                                // Brief sleep
-                                thread::sleep(delay);
+                                if input.len() < length as usize && ch.0 == '\n' {
+                                    input.push(ch.0);
+                                    done = true;
+                                    addch(&mut self.window_0, '\n' as u16);
+                                }
                             }
                         }
-                    }
+                    },
                     None => {
                         // Brief sleep
                         thread::sleep(delay);
@@ -254,7 +436,7 @@ impl Interpreter for Curses {
             let delay = time::Duration::from_millis(10);
             // Don't block on input
             self.current_window_mut().nodelay(true);
-            let mut ch = self.current_window_mut().getch();
+            let mut ch = self.getch();
             let mut result = 0 as char;
             // While no (acceptable) keypress and 'time' seconds haven't elapsed
             while result == 0 as char
@@ -264,13 +446,9 @@ impl Interpreter for Curses {
                     .as_secs()
                     < end
             {
-                ch = self.current_window_mut().getch();
+                ch = self.getch();
                 result = match ch {
-                    Some(i) => match i {
-                        // Valid input
-                        Input::Character(c) => c,
-                        _ => 0 as char,
-                    },
+                    Some(c) => c.1,
                     _ => 0 as char,
                 };
 
@@ -282,11 +460,8 @@ impl Interpreter for Curses {
             result
         } else {
             self.current_window_mut().nodelay(false);
-            match self.current_window_mut().getch() {
-                Some(ch) => match ch {
-                    Input::Character(c) => c,
-                    _ => ' ',
-                },
+            match self.getch() {
+                Some(ch) => ch.1,
                 None => ' ',
             }
         }
