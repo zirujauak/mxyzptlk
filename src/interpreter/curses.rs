@@ -1,4 +1,4 @@
-use std::{time::{UNIX_EPOCH, SystemTime, self}, thread};
+use std::{time::{UNIX_EPOCH, SystemTime, self}, thread, fs, io::Write};
 
 use pancurses::{Attribute, Input, Window, COLOR_BLACK, COLOR_GREEN};
 
@@ -18,6 +18,7 @@ pub struct Curses {
     selected_window: u8,
     output_streams: Vec<bool>,
     buffering: bool,
+    top_line: i32,
 }
 
 impl Curses {
@@ -25,22 +26,18 @@ impl Curses {
         let window_0 = pancurses::initscr();
         let lines = window_0.get_max_y();
         let columns = window_0.get_max_x();
+        let top_line = if version < 4 { 1 } else { 0 };
+        window_0.setscrreg(top_line, lines - 1);
         let status_window = if version < 4 {
-            window_0.setscrreg(1, lines);
             Some(window_0.subwin(1, columns, 0, 0).unwrap())
         } else {
-            window_0.setscrreg(0, 0);
             None
         };
         window_0.scrollok(true);
-
-        let window_1 = if version < 4 {
-            window_0.subwin(0, 0, 1, 0).unwrap()
-        } else {
-            window_0.subwin(0, 0, 0, 0).unwrap()
-        };
-
         window_0.erase();
+
+        let window_1 = window_0.subwin(0, 0, top_line, 0).unwrap();
+
         window_1.scrollok(false);
 
         let output_streams = if version < 3 {
@@ -59,6 +56,7 @@ impl Curses {
             selected_window: 0,
             output_streams,
             buffering: true,
+            top_line,
         }
     }
 
@@ -84,8 +82,7 @@ impl Interpreter for Curses {
             -1 => {
                 self.selected_window = 0;
                 self.window_1.resize(0,0);
-                // TODO: Account for status line window
-                self.window_0.setscrreg(0, self.lines - 1);
+                self.window_0.setscrreg(self.top_line, self.lines - 1);
                 self.current_window_mut().erase();
             }
             -2 => {
@@ -150,6 +147,7 @@ impl Interpreter for Curses {
         self.window_0.refresh();       
         self.window_0.mv(self.window_0.get_cur_y(), self.window_0.get_cur_x());
         pancurses::curs_set(1);
+        pancurses::noecho();
 
         let mut input: Vec<char> = Vec::new();
         let mut done = false;
@@ -263,7 +261,15 @@ impl Interpreter for Curses {
             self.current_window_mut().mv(0,0);
         }
     }
-    fn show_status(&mut self, location: &str, status: &str) {}
+    fn show_status(&mut self, location: &str, status: &str) {
+        self.status_window.as_mut().unwrap().mv(0, 0);
+        self.status_window.as_mut().unwrap().addstr(String::from_utf8(vec![32; self.columns as usize]).unwrap());
+        self.status_window.as_mut().unwrap().mvaddstr(0, 1, location);
+        let x = self.columns - 1 - status.len() as i32;
+        self.status_window.as_mut().unwrap().mvaddstr(0, x, status);
+        self.status_window.as_mut().unwrap().refresh();
+    }
+
     fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8) {
         todo!()
     }
@@ -271,12 +277,11 @@ impl Interpreter for Curses {
         if lines == 0 {
             // Unsplit
             self.window_1.resize(0, 0);
-            // TODO: Account for status line window
-            self.window_0.setscrreg(0, self.lines - 1);
+            self.window_0.setscrreg(self.top_line, self.lines - 1);
         } else {
-            if self.version == 3 {
+            if self.version < 4 {
                 // Resize and move window 0
-                self.window_0.setscrreg(lines as i32, self.lines - 1);
+                self.window_0.setscrreg(lines as i32 + self.top_line, self.lines - 1);
 
                 // Resize windows 1
                 self.window_1.resize(lines as i32, self.columns as i32);
@@ -295,7 +300,23 @@ impl Interpreter for Curses {
 
         self.window_0.refresh();
         self.window_1.refresh();
+    }
 
+    fn save(&mut self, name: &String, data: &Vec<u8>) {
+        let filename = format!("{}.ifzs", name);
+        trace!("Save to: {}", filename);
+        
+        let mut file = fs::OpenOptions::new().create(true).truncate(true).write(true).open(filename).unwrap();
+        
+        file.write_all(&data).unwrap();
+        file.flush().unwrap();
+    }
+
+    fn restore(&mut self, name: &String) -> Vec<u8> {
+        let filename = format!("{}.ifzs", name);
+        trace!("Restore from: {}", filename);
+
+        fs::read(filename).unwrap()
     }
 }
 
@@ -335,8 +356,7 @@ impl Curses {
         self.window_0.color_set(1);
         self.window_1.color_set(1);
 
-        // TODO: Account for status line window
-        self.window_0.setscrreg(0, 0);
+        self.window_0.setscrreg(self.top_line, 0);
         self.window_0.scrollok(true);
 
         Spec {
