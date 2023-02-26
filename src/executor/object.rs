@@ -231,16 +231,27 @@ pub fn property_length(state: &State, property_data_address: usize) -> usize {
 }
 
 pub fn next_property(state: &State, object: usize, property: u8) -> u8 {
-    let prop_data_addr = property_data_addr(state, object, property);
-    if prop_data_addr == 0 {
-        0
-    } else {
-        let prop_len = property_length(state, prop_data_addr);
-        let next_prop = state.byte_value(prop_data_addr + prop_len);
+    if property == 0 {
+        let prop_table = property_table_address(state, object);
+        let header_size = state.byte_value(prop_table) as usize;
+        let p1 = state.byte_value(prop_table + 1 + (header_size * 2));
         if state.version < 4 {
-            next_prop & 0x1F
+            p1 & 0x1F
         } else {
-            next_prop & 0x3F
+            p1 & 0x3F
+        }
+    } else {
+        let prop_data_addr = property_data_addr(state, object, property);
+        if prop_data_addr == 0 {
+            0
+        } else {
+            let prop_len = property_length(state, prop_data_addr);
+            let next_prop = state.byte_value(prop_data_addr + prop_len);
+            if state.version < 4 {
+                next_prop & 0x1F
+            } else {
+                next_prop & 0x3F
+            }
         }
     }
 }
@@ -264,11 +275,13 @@ pub fn set_property(state: &mut State, object: usize, property: u8, value: u16) 
             property, object
         );
     }
+
     let property_size = property_size(state, property_address);
+    trace!("Object {} property {} size {}", object, property, property_size);
     let property_data = match state.version {
         1 | 2 | 3 => property_address + 1,
         4 | 5 | 6 | 7 | 8 => {
-            if property_address & 0x80 == 0x80 {
+            if state.byte_value(property_address) & 0x80 == 0x80 {
                 property_address + 2
             } else {
                 property_address + 1
