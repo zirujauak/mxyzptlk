@@ -374,6 +374,18 @@ impl State {
         }
     }
 
+    pub fn set_variable_indirect(&mut self, var: u8, value: u16) {
+        trace!("variable indirect: set #{:02x} to #{:04x}", var, value);
+        if var == 0 {
+            self.current_frame_mut().pop();
+            self.current_frame_mut().push(value)
+        } else if var < 16 {
+            self.current_frame_mut().local_variables[var as usize - 1] = value
+        } else {
+            let address = header::global_variable_table(self) as usize + ((var as usize - 16) * 2);
+            self.set_word(address, value)
+        }
+    }
     pub fn random(&mut self, range: u16) -> u16 {
         let v = &self.rng.gen_range(1..=range);
         trace!("Random 1..{}: {}", range, v);
