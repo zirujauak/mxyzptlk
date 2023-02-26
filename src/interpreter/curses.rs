@@ -1,6 +1,6 @@
 use std::{time::{UNIX_EPOCH, SystemTime, self}, thread, fs, io::Write};
 
-use pancurses::{Attribute, Input, Window, COLOR_BLACK, COLOR_GREEN};
+use pancurses::{Attribute, Input, Window, COLOR_BLACK, COLOR_GREEN, COLOR_RED, COLOR_MAGENTA, COLOR_CYAN, COLOR_YELLOW, COLOR_BLUE, COLOR_WHITE, ColorPair};
 
 use super::{Interpreter, Spec};
 use crate::executor::{
@@ -19,6 +19,8 @@ pub struct Curses {
     output_streams: Vec<bool>,
     buffering: bool,
     top_line: i32,
+    foreground: i16,
+    background: i16,
 }
 
 impl Curses {
@@ -57,6 +59,8 @@ impl Curses {
             output_streams,
             buffering: true,
             top_line,
+            foreground: COLOR_GREEN,
+            background: COLOR_BLACK,
         }
     }
 
@@ -123,7 +127,6 @@ impl Interpreter for Curses {
                         self.current_window_mut().get_cur_y() + 1,
                         self.current_window_mut().get_cur_x() + 1,
                     );
-                    trace!("buffer check: {} {}", position.1, s.len());
                     if self.columns as i32 - position.1 < s.len() as i32 {
                         self.current_window_mut().addch('\n');
                         self.current_window_mut().addstr(s);
@@ -228,7 +231,32 @@ impl Interpreter for Curses {
     }
 
     fn set_colour(&mut self, foreground: u16, background: u16) {
-        todo!()
+        match foreground {
+            2 => self.foreground = COLOR_BLACK,
+            3 => self.foreground = COLOR_RED,
+            1 | 4 => self.foreground = COLOR_GREEN,
+            5 => self.foreground = COLOR_YELLOW,
+            6 => self.foreground = COLOR_BLUE,
+            7 => self.foreground = COLOR_MAGENTA,
+            8 => self.foreground = COLOR_CYAN,
+            9 => self.foreground = COLOR_WHITE,
+            _ => {},
+        };
+        match background {
+            1 | 2 => self.background = COLOR_BLACK,
+            3 => self.background = COLOR_RED,
+            4 => self.background = COLOR_GREEN,
+            5 => self.background = COLOR_YELLOW,
+            6 => self.background = COLOR_BLUE,
+            7 => self.background = COLOR_MAGENTA,
+            8 => self.background = COLOR_CYAN,
+            9 => self.background = COLOR_WHITE,
+            _ => {}
+        };
+
+        let pair = Curses::color_pair(self.foreground as i16, self.background as i16);
+        self.window_0.color_set(pair);
+        self.window_1.color_set(pair);
     }
 
     fn set_cursor(&mut self, line: u16, column: u16) {
@@ -240,7 +268,7 @@ impl Interpreter for Curses {
         if style == 0 {
             win.attroff(Attribute::Reverse);
             win.attroff(Attribute::Bold);
-            win.attroff(Attribute::Italic);
+            win.attroff(Attribute::Underline);
         } else {
             if style & 0x1 == 0x1 {
                 win.attron(Attribute::Reverse);
@@ -249,7 +277,7 @@ impl Interpreter for Curses {
                 win.attron(Attribute::Bold);
             }
             if style & 0x4 == 0x4 {
-                win.attron(Attribute::Italic);
+                win.attron(Attribute::Underline);
             }
         }
     }
@@ -320,41 +348,67 @@ impl Interpreter for Curses {
     }
 }
 
+const COLOR_TABLE:[i16;8] = [
+    COLOR_BLACK,
+    COLOR_RED,
+    COLOR_GREEN,
+    COLOR_YELLOW,
+    COLOR_BLUE,
+    COLOR_MAGENTA,
+    COLOR_CYAN,
+    COLOR_WHITE,
+];
+
 impl Curses {
+    fn color_pair(fg: i16, bg: i16) -> i16 {
+        (fg * 8) + bg
+    }
+
     pub fn spec(&self, version: u8) -> Spec {
         let set_flags = match version {
             1 | 2 | 3 => vec![Flag::ScreenSplittingAvailable],
             4 | 5 | 6 | 7 | 8 => vec![
-                Flag::ColoursAvailable,
                 Flag::BoldfaceAvailable,
                 Flag::ItalicAvailable,
                 Flag::FixedSpaceAvailable,
+                Flag::TimedInputAvailable,
+                Flag::ColoursAvailable
             ],
             _ => vec![],
         };
         let clear_flags = match version {
             1 | 2 | 3 => vec![Flag::StatusLineNotAvailable, Flag::VariablePitchDefaultFont],
             4 | 5 | 6 | 7 | 8 => vec![
+                Flag::GameWantsUndo,
+                Flag::GameWantsSoundEffects,
+                Flag::GameWantsPictures,
+                Flag::GameWantsMenus,
+                Flag::GameWantsMouse,
                 Flag::PicturesAvailable,
                 Flag::SoundEffectsAvailable,
-                Flag::TimedInputAvailable,
             ],
             _ => vec![],
         };
 
-        pancurses::curs_set(0);
+        // Initialize color pairs for all fg/bg comobos
         pancurses::start_color();
-        pancurses::init_pair(1, COLOR_GREEN, COLOR_BLACK);
-        pancurses::init_pair(2, COLOR_GREEN, COLOR_BLACK);
-        pancurses::init_pair(3, COLOR_BLACK, COLOR_GREEN);
+        for i in 0..COLOR_TABLE.len() {
+            for j in 0..COLOR_TABLE.len() {
+                let pair = Curses::color_pair(i as i16, j as i16);
+                pancurses::init_pair(pair as i16, COLOR_TABLE[i], COLOR_TABLE[j]);
+            }
+        }
+
+        pancurses::curs_set(0);
 
         match &self.status_window {
-            Some(w) => w.color_set(3),
+            Some(w) => w.color_set(Curses::color_pair(COLOR_BLACK, COLOR_GREEN)),
             None => 0,
         };
 
-        self.window_0.color_set(1);
-        self.window_1.color_set(1);
+        let pair = Curses::color_pair(COLOR_GREEN, COLOR_BLACK);
+        self.window_0.color_set(pair);
+        self.window_1.color_set(pair);
 
         self.window_0.setscrreg(self.top_line, 0);
         self.window_0.scrollok(true);
