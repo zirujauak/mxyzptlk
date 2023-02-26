@@ -36,6 +36,7 @@ impl Executor {
                 self.state.new_line();
                 pancurses::reset_shell_mode();
                 pancurses::curs_set(1);
+                trace!("Unimplemented instruction ... ending execution");
                 panic!("Ending execution")
             }
 
