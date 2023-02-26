@@ -1407,7 +1407,10 @@ impl Instruction {
 
         let text = operands[0] as usize;
         let mut existing_input = Vec::new();
+
+        // If text was printed in an interrupt, let the interpreter know
         let redraw = state.print_in_interrupt;
+
         if state.read_interrupt() {
             trace!("Return from interrupt: {}", state.read_interrupt_result());
             state.set_read_interrupt(false);
@@ -1415,18 +1418,19 @@ impl Instruction {
                 // Clear the text buffer
                 let b = state.byte_value(text) as usize;
                 for i in 0..b {
-                    state.set_byte(text + 1 + i, 0);
+                    state.set_byte(text + i, 0);
                 }
                 // Return terminator 0
                 state.set_variable(self.store.unwrap(), 0);
                 return self.next_address;
-            } else {
-                // Read text buffer into existing input
-                trace!("Recovering {} bytes from previous READ", state.byte_value(text + 1));
-                let s = state.byte_value(text + 1) as usize;
-                for i in 0..s {
-                    existing_input.push(state.byte_value(text + 2 + i) as char);
-                }
+            } 
+        }
+        if state.version > 4 {
+            // Read text buffer into existing input
+            trace!("Recovering {} bytes from text buffer", state.byte_value(text + 1));
+            let s = state.byte_value(text + 1) as usize;
+            for i in 0..s {
+                existing_input.push(state.byte_value(text + 2 + i) as char);
             }
         }
 
