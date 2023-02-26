@@ -164,7 +164,37 @@ pub fn from_dictionary(state: &State, word: &Vec<char>) -> usize {
     let entry_count = state.word_value(dictionary_address + 1 + separator_count + 1) as usize;
 
     if state.version < 4 {
-        todo!()
+        // Encode the input
+        let mut w:Vec<u8> = Vec::new();
+        for i in 0..6 {
+            match word.get(i) {
+                Some(c) => w.append(&mut find_char(c)),
+                None => w.push(5)
+            }
+        }
+
+        let w1 = word_value(w[0], w[1], w[2]);
+        let w2 = word_value(w[3], w[4], w[5]) | 0x8000;
+    
+        for i in 0..entry_count {
+            let entry_address = dictionary_address + separator_count + 4 + (i * entry_size);
+            let e1 = state.word_value(entry_address);
+            if e1 == w1 {
+                let e2 = state.word_value(entry_address + 2);
+                if e2 == w2 {
+                    trace!("Entry {}", i + 1);
+                    return entry_address;
+                } else {
+                    if w2 < e2 {
+                        return 0;
+                    }
+                }
+            } else {
+                if w1 < e1 {
+                    return 0;
+                }
+            }
+        }
     } else {
         // Encode the input
         let mut w:Vec<u8> = Vec::new();
@@ -187,6 +217,7 @@ pub fn from_dictionary(state: &State, word: &Vec<char>) -> usize {
                 if e2 == w2 {
                     let e3 = state.word_value(entry_address + 4);
                     if e3 == w3 {
+                        trace!("Entry {}", i + 1);
                         return entry_address;
                     } else {
                         if w3 < e3 {
