@@ -12,7 +12,7 @@ pub trait Interpreter {
     fn output_stream(&mut self, stream: i16, table: usize);
     fn print(&mut self, text: String);
     fn print_table(&mut self, text: String, width: u16, height: u16, skip: u16);
-    fn read(&mut self, length: u8, time: u16) -> Vec<char>;
+    fn read(&mut self, length: u8, time: u16, existing_input: &Vec<char>, redraw: bool) -> (Vec<char>, bool);
     fn read_char(&mut self, time: u16) -> char;
     fn set_colour(&mut self, foreground: u16, background: u16);
     fn set_cursor(&mut self, line: u16, column: u16);
