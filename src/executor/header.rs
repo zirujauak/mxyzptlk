@@ -171,6 +171,14 @@ pub fn clear_flag(state: &mut State, flag: Flag) {
     }
 }
 
+pub fn release_number(state: &State) -> u16 {
+    state.word_value(0x02)
+}
+
+pub fn serial_number(state: &State) -> Vec<u8> {
+    state.memory_map()[0x12..0x18].to_vec()
+}
+
 pub fn initial_pc(state: &State) -> u16 {
     state.word_value(0x06)
 }
@@ -193,4 +201,12 @@ pub fn global_variable_table(state: &State) -> u16 {
 
 pub fn dictionary_table(state: &State) -> u16 {
     state.word_value(0x08)
+}
+
+pub fn static_memory_base(state: &State) -> u16 {
+    state.word_value(0x0e)
+}
+
+pub fn checksum(state: &State) -> u16 {
+    state.word_value(0x1c)
 }
