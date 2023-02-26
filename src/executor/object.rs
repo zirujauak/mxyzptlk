@@ -101,7 +101,14 @@ fn property_size(state: &State, property_address: usize) -> usize {
             match size_byte & 0xC0 {
                 0x40 => 2,
                 0x20 => 1,
-                _ => state.byte_value(property_address + 1) as usize & 0x3F
+                _ => {
+                    let size = state.byte_value(property_address + 1) as usize & 0x3F;
+                    if size == 0 {
+                        64
+                    } else {
+                        size
+                    }
+                }
 
             }
         },
@@ -144,14 +151,16 @@ fn property_address(state: &State, object: usize, property: u8) -> usize {
                 }
             }
             4 | 5 | 6 | 7 | 8 => {
-                trace!("property_address: ${:04x}", property_address);
-                trace!("size byte: ${:02x}", size_byte);
                 let prop_num = size_byte & 0x3F;
-                trace!("property #{}", prop_num);
                 let mut prop_data = 1;
                 let prop_size = if size_byte & 0x80 == 0x80 {
                     prop_data = 2;
-                    state.byte_value(property_address + 1) as usize & 0x3F
+                    let size = state.byte_value(property_address + 1) as usize & 0x3F;
+                    if size == 0 {
+                        64
+                    } else {
+                        size
+                    }
                 } else {
                     if size_byte & 0x40 == 0x40 {
                         2
@@ -159,7 +168,6 @@ fn property_address(state: &State, object: usize, property: u8) -> usize {
                         1
                     }
                 };
-                trace!("property size: {} bytes", prop_size);
                 if prop_num == property {
                     return property_address;
                 } else if prop_num < property {
@@ -221,6 +229,22 @@ pub fn property_length(state: &State, property_data_address: usize) -> usize {
         }
     }
 }
+
+pub fn next_property(state: &State, object: usize, property: u8) -> u8 {
+    let prop_data_addr = property_data_addr(state, object, property);
+    if prop_data_addr == 0 {
+        0
+    } else {
+        let prop_len = property_length(state, prop_data_addr);
+        let next_prop = state.byte_value(prop_data_addr + prop_len);
+        if state.version < 4 {
+            next_prop & 0x1F
+        } else {
+            next_prop & 0x3F
+        }
+    }
+}
+
 pub fn set_property(state: &mut State, object: usize, property: u8, value: u16) {
     trace!(
         "Set property #{:02} on object #{:04x} to #{:04x}",
@@ -237,7 +261,7 @@ pub fn set_property(state: &mut State, object: usize, property: u8, value: u16) 
         );
         panic!(
             "Set property #{:02x} on object #{:04x} - property does not exist",
-            object, property
+            property, object
         );
     }
     let property_size = property_size(state, property_address);
