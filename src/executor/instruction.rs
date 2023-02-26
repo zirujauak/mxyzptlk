@@ -476,6 +476,7 @@ impl Instruction {
                     0x18 => self.modulus(state),
                     0x19 => self.call_2s(state),
                     0x1A => self.call_2n(state),
+                    0x1B => self.set_colour(state),
                     _ => 0,
                 },
                 OperandCount::_VAR => match self.opcode.instruction {
@@ -1340,7 +1341,7 @@ impl Instruction {
     }
 
     pub fn call_2n(&self, state: &mut State) -> usize {
-        let operands: Vec<u16> = self.operand_values(state);
+        let operands = self.operand_values(state);
 
         let address = state.packed_routine_address(operands[0]);
         let arguments = vec![operands[1]];
@@ -1348,6 +1349,13 @@ impl Instruction {
         self.call_fn(state, address, self.next_address, &arguments, None)
     }
 
+    pub fn set_colour(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        state.set_colour(operands[0], operands[1]);
+        self.next_address
+    }
+    
     // VAR
     // aka call_vs
     fn call(&self, state: &mut State) -> usize {
@@ -1397,7 +1405,11 @@ impl Instruction {
         let operands = self.operand_values(state);
 
         let text = operands[0] as usize;
-        let parse = operands[1] as usize;
+        let parse = if operands.len() > 1 { 
+            operands[1] as usize 
+        } else { 
+            0
+        };
 
         let len = if state.version < 5 {
             state.byte_value(text) - 1
@@ -1431,7 +1443,6 @@ impl Instruction {
         }
 
         // Lexical analysis
-
         if parse > 0 || state.version < 5 {
             let separators = text::separators(state);
             let mut word = Vec::new();
@@ -1628,7 +1639,9 @@ impl Instruction {
                 state.set_variable(self.store.unwrap(), 0);
                 return self.next_address;
             }
-        } else if self.operands.len() == 3 && operands[1] > 0 && operands[2] > 0 {
+        }
+
+        if self.operands.len() == 3 && operands[1] > 0 && operands[2] > 0 {
             let time = operands[1];
             let routine = operands[2];
             let c = state.read_char(time / 10) as u16;
