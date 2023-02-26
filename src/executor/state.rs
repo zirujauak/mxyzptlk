@@ -6,14 +6,18 @@ use crate::executor::header;
 
 use crate::interpreter::Interpreter;
 use crate::interpreter::Spec;
+use crate::quetzal::Quetzal;
+use crate::quetzal::StackFrame;
 
 #[derive(Debug)]
 pub struct Frame {
     address: usize,
     pub pc: usize,
-    local_variables: Vec<u16>,
-    stack: Vec<u16>,
-    result: Option<u8>,
+    pub local_variables: Vec<u16>,
+    pub argument_count: u8,
+    pub stack: Vec<u16>,
+    pub result: Option<u8>,
+    pub return_address: usize,
     read_char_interrupt: bool,
     read_char_interrupt_result: u16
 }
@@ -34,13 +38,39 @@ fn byte_value(memory_map: &Vec<u8>, address: usize) -> u8 {
 }
 
 impl Frame {
+    fn from_stack_frame(frame: StackFrame) -> Frame {
+        let mut argument_count = 0;
+        let mut a = frame.arguments;
+        while a & 1 == 1 {
+            argument_count = argument_count + 1;
+            a = a >> 1;
+        }
+
+        Frame {
+            address: 0,
+            pc: 0,
+            local_variables: frame.local_variables.clone(),
+            argument_count,
+            stack: frame.stack.clone(),
+            result: if frame.flags & 0x10 == 0x10 {
+                None
+            } else {
+                Some(frame.result_variable)
+            },
+            return_address: frame.return_address as usize,
+            read_char_interrupt: false,
+            read_char_interrupt_result: 0
+        }
+    }
     fn initial(_memory_map: &Vec<u8>, address: usize) -> Frame {
         Frame {
             address,
             pc: address,
             local_variables: Vec::new(),
+            argument_count: 0,
             stack: Vec::new(),
             result: None,
+            return_address: 0,
             read_char_interrupt: false,
             read_char_interrupt_result: 0,
         }
@@ -52,6 +82,7 @@ impl Frame {
         address: usize,
         arguments: &Vec<u16>,
         result: Option<u8>,
+        return_address: usize,
     ) -> Frame {
         let var_count = byte_value(memory_map, address) as usize;
         trace!("{} local variables", var_count);
@@ -78,8 +109,10 @@ impl Frame {
             address,
             pc: initial_pc,
             local_variables,
+            argument_count: arguments.len() as u8,
             stack: Vec::new(),
             result,
+            return_address,
             read_char_interrupt: false,
             read_char_interrupt_result: 0,
         }
@@ -105,21 +138,22 @@ impl Frame {
 }
 
 pub struct State {
+    pub name: String,
     memory_map: Vec<u8>,
     pub version: u8,
-    frames: Vec<Frame>,
+    pub frames: Vec<Frame>,
     pub interpreter: Box<dyn Interpreter>,
 }
 
 impl State {
-    pub fn new(memory_map: &Vec<u8>, interpreter: Box<dyn Interpreter>) -> State {
+    pub fn new(name: String, memory_map: &Vec<u8>, interpreter: Box<dyn Interpreter>) -> State {
         let version = byte_value(memory_map, 0);
         let f = {
             let pc = word_value(memory_map, 0x06) as usize;
             match version {
                 6 => {
                     let addr = pc * 4 + word_value(memory_map, 0x28) as usize * 8;
-                    Frame::call(memory_map, version, addr, &Vec::new(), None)
+                    Frame::call(memory_map, version, addr, &Vec::new(), None, 0)
                 }
                 _ => Frame::initial(memory_map, pc),
             }
@@ -129,6 +163,7 @@ impl State {
         frames.push(f);
 
         State {
+            name,
             memory_map: memory_map.clone(),
             version: memory_map[0],
             frames,
@@ -189,14 +224,14 @@ impl State {
             arguments.len()
         );
 
-        self.current_frame_mut().pc = return_address;
-        let f = Frame::call(&self.memory_map(), self.version, address, arguments, result);
+        let f = Frame::call(&self.memory_map(), self.version, address, arguments, result, return_address);
         self.frames.push(f);
         self.current_frame().pc
     }
 
     pub fn return_fn(&mut self, result: u16) -> usize {
         let mut f = self.pop_frame();
+
         if f.read_char_interrupt {
             f.read_char_interrupt_result = result;
         } else {
@@ -206,8 +241,8 @@ impl State {
             }
         }
 
-        trace!("Return to ${:05x} with result #{:04x}", self.current_frame().pc, result);
-        self.current_frame().pc
+        trace!("Return to ${:05x} with result #{:04x}", f.return_address, result);
+        f.return_address
     }
 
     pub fn read_char_interrupt(&self) -> bool {
@@ -334,6 +369,34 @@ impl State {
 
         debug!("memory: set ${:05x} to #{:02x}", address, value)
     }
+
+    pub fn prepare_save(&self, address: usize) -> Vec<u8> {
+        let q = Quetzal::from_state(self, address);
+        trace!("Quetzal: {:05x} bytes, {} stack frames", q.umem.data.len(), q.stks.stks.len());
+        q.to_vec()
+    }
+
+    pub fn prepare_restore(&mut self) -> usize {
+        let iff = self.interpreter.restore(&self.name);
+        let q = Quetzal::from_vec(iff);
+        trace!("Quetzal: {:05x} bytes, {} stack frames", q.umem.data.len(), q.stks.stks.len());
+
+        // TODO: Verify IFhd metadata
+        // Replace dynamic memory
+        let static_address = header::static_memory_base(self) as usize;
+        let mut static_memory = self.memory_map[static_address..].to_vec();
+        self.memory_map = q.umem.data.clone();
+        self.memory_map.append(&mut static_memory);
+
+        // Rebuild frame stack
+        self.frames.clear();
+        for f in q.stks.stks {
+            let frame = Frame::from_stack_frame(f);
+            self.frames.push(frame);
+        }
+
+        q.ifhd.pc as usize
+    }
 }
 
 impl Interpreter for State {
@@ -391,5 +454,12 @@ impl Interpreter for State {
     }
     fn split_window(&mut self, lines: u16) {
         self.interpreter.split_window(lines);
+    }
+    fn save(&mut self, _name: &String, data: &Vec<u8>) {
+        self.interpreter.save(&self.name, data);
+    }
+
+    fn restore(&mut self, _name: &String) -> Vec<u8> {
+        self.interpreter.restore(&self.name)
     }
 }
