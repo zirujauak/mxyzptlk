@@ -18,7 +18,7 @@ const ALPHABET_V3: [[char; 26]; 3] = [
 pub fn valid_input(c: char) -> bool {
     if c as u8 >= 32 && c as u8 <= 126 {
         true
-    } else if c as u8 >= 129 && c as u8 <= 254 {
+    } else if c as u8 >= 145 && c as u8 <= 254 {
         true
     } else {
         false
