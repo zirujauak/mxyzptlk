@@ -154,7 +154,7 @@ pub fn set_flag(state: &mut State, flag: Flag) {
         state.set_byte(0x01, state.byte_value(1) | mask);
     } else {
         let mask = ((1 as u16) << bit) & 0xFFFF;
-        state.set_word(0x0a, state.word_value(10) | mask);
+        state.set_word(0x10, state.word_value(0x10) | mask);
     }
 }
 
@@ -167,7 +167,7 @@ pub fn clear_flag(state: &mut State, flag: Flag) {
         state.set_byte(0x01, state.byte_value(1) & mask);
     } else {
         let mask = !(((1 as u16) << bit) & 0xFFFF);
-        state.set_word(0x0a, state.word_value(10) & mask);
+        state.set_word(0x10, state.word_value(0x10) & mask);
     }
 }
 
@@ -205,6 +205,10 @@ pub fn dictionary_table(state: &State) -> u16 {
 
 pub fn static_memory_base(state: &State) -> u16 {
     state.word_value(0x0e)
+}
+
+pub fn length(state: &State) -> u16 {
+    state.word_value(0x1a)
 }
 
 pub fn checksum(state: &State) -> u16 {
