@@ -1,5 +1,6 @@
 use super::state::State;
 
+#[derive(Debug)]
 pub enum Flag {
     // Flags 1, v1 - 3
     StatusLineType,           // bit 1
@@ -75,9 +76,11 @@ fn flag_bit(version: u8, flag: &Flag) -> u8 {
         5 | 7 | 8 => {
             match flag {
                 Flag::ColoursAvailable => 0,
+                Flag::PicturesAvailable => 1,
                 Flag::BoldfaceAvailable => 2,
                 Flag::ItalicAvailable => 3,
                 Flag::FixedSpaceAvailable => 4,
+                Flag::SoundEffectsAvailable => 5,
                 Flag::TimedInputAvailable => 7,
                 Flag::Transcripting => 0,
                 Flag::ForceFixedPitch => 1,
