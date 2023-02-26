@@ -989,7 +989,7 @@ impl Instruction {
         let operands = self.operand_values(state);
 
         let len = object::property_length(state, operands[0] as usize);
-        state.set_variable(self.store.unwrap(), len as u16);
+        self.store_result(state, len as u16);
         self.next_address
     }
 
@@ -1098,7 +1098,6 @@ impl Instruction {
 
         let value = state.peek_variable(operands[0] as u8);
         self.store_result(state, value);
-        // state.set_variable(self.store.unwrap(), value);
         self.next_address
     }
 
@@ -1106,7 +1105,7 @@ impl Instruction {
         let operands = self.operand_values(state);
         
         let value = !operands[0];
-        state.set_variable(self.store.unwrap(), value);
+        self.store_result(state, value);
         self.next_address
     }
 
@@ -1183,7 +1182,7 @@ impl Instruction {
             v = v | operands[i]
         }
 
-        state.set_variable(self.store.unwrap(), v);
+        self.store_result(state, v);
         self.next_address
     }
 
@@ -1195,7 +1194,7 @@ impl Instruction {
             v = v & operands[i];
         }
 
-        state.set_variable(self.store.unwrap(), v);
+        self.store_result(state, v);
         self.next_address
     }
 
@@ -1205,7 +1204,7 @@ impl Instruction {
         let address = operands[0] as usize + (operands[1] as usize * 2);
         let value = state.word_value(address);
 
-        state.set_variable(self.store.unwrap(), value);
+        self.store_result(state, value);
         self.next_address
     }
 
@@ -1215,7 +1214,7 @@ impl Instruction {
         let address = operands[0] as usize + operands[1] as usize;
         let value = state.byte_value(address) as u16;
 
-        state.set_variable(self.store.unwrap(), value);
+        self.store_result(state, value);
         self.next_address
     }
 
@@ -1318,7 +1317,7 @@ impl Instruction {
         let operands = self.operand_values(state);
 
         let value = object::property(state, operands[0] as usize, operands[1] as u8);
-        state.set_variable(self.store.unwrap(), value);
+        self.store_result(state, value);
         self.next_address
     }
 
@@ -1326,7 +1325,7 @@ impl Instruction {
         let operands = self.operand_values(state);
 
         let value = object::property_data_addr(state, operands[0] as usize, operands[1] as u8);
-        state.set_variable(self.store.unwrap(), value as u16);
+        self.store_result(state, value as u16);
         self.next_address
     }
 
@@ -1334,7 +1333,7 @@ impl Instruction {
         let operands = self.operand_values(state);
 
         let prop = object::next_property(state, operands[0] as usize, operands[1] as u8);
-        state.set_variable(self.store.unwrap(), prop as u16);
+        self.store_result(state, prop as u16);
         self.next_address
     }
 
@@ -1346,7 +1345,7 @@ impl Instruction {
             value = i16::overflowing_add(value, operands[i] as i16).0;
         }
 
-        state.set_variable(self.store.unwrap(), value as u16);
+        self.store_result(state, value as u16);
         self.next_address
     }
 
@@ -1358,7 +1357,7 @@ impl Instruction {
             value = i16::overflowing_sub(value, operands[i] as i16).0
         }
 
-        state.set_variable(self.store.unwrap(), value as u16);
+        self.store_result(state, value as u16);
         self.next_address
     }
 
@@ -1370,7 +1369,7 @@ impl Instruction {
             value = i16::overflowing_mul(value, operands[i] as i16).0;
         }
 
-        state.set_variable(self.store.unwrap(), value as u16);
+        self.store_result(state, value as u16);
         self.next_address
     }
 
@@ -1379,10 +1378,10 @@ impl Instruction {
 
         let mut value = operands[0] as i16;
         for i in 1..operands.len() {
-            value = value / operands[i] as i16;
+            value = i16::overflowing_div(value, operands[i] as i16).0;
         }
 
-        state.set_variable(self.store.unwrap(), value as u16);
+        self.store_result(state, value as u16);
         self.next_address
     }
 
@@ -1391,10 +1390,10 @@ impl Instruction {
 
         let mut value = operands[0] as i16;
         for i in 1..operands.len() {
-            value = value % operands[i] as i16;
+            value = i16::overflowing_rem(value, operands[i] as i16).0;
         }
 
-        state.set_variable(self.store.unwrap(), value as u16);
+        self.store_result(state, value as u16);
         self.next_address
     }
 
@@ -1616,7 +1615,7 @@ impl Instruction {
         }
 
         if state.version > 4 {
-            state.set_variable(self.store.unwrap(), *terminator as u16);
+            self.store_result(state, *terminator as u16);
         }
 
         self.next_address
@@ -1677,7 +1676,7 @@ impl Instruction {
             }
         };
 
-        state.set_variable(self.store.unwrap(), v);
+        self.store_result(state, v);
         self.next_address
     }
 
@@ -1801,10 +1800,10 @@ impl Instruction {
                 // Set state.read_char_interrupt = true
                 // Call routine, returning to address of this instruction
             }
-            state.set_variable(self.store.unwrap(), c);
+            self.store_result(state, c);
         } else {
             let c = state.read_char(0) as u16;
-            state.set_variable(self.store.unwrap(), c);
+            self.store_result(state, c);
         }
 
         self.next_address
@@ -1860,7 +1859,7 @@ impl Instruction {
             value
         };
 
-        state.set_variable(self.store.unwrap(), new_value as u16);
+        self.store_result(state, new_value as u16);
         self.next_address
     }
 
@@ -1883,12 +1882,12 @@ impl Instruction {
             value
         };
 
-        state.set_variable(self.store.unwrap(), new_value as u16);
+        self.store_result(state, new_value as u16);
         self.next_address
     }
 
     fn save_undo(&self, state: &mut State) -> usize {
-        state.set_variable(self.store.unwrap(), 0xFFFF as u16);
+        self.store_result(state, 0xFFFF as u16);
         self.next_address
     }
 }
