@@ -911,6 +911,9 @@ impl Instruction {
             // TODO: branch condition should depend on whether save succeeded or not
             self.execute_branch(state, true)
         } else {
+            let data = state.prepare_save(self.store_byte_address);
+            state.save(&String::new(), &data.to_vec());
+            self.store_result(state, 1);
             self.next_address
         }
     }
@@ -923,7 +926,9 @@ impl Instruction {
             self.branch = branch;
             self.execute_branch(state, true)
         } else {
-            self.next_address
+            let var = state.byte_value(instruction_address);
+            state.set_variable(var, 1);
+            instruction_address + 1
         }
     }
 
