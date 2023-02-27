@@ -2,11 +2,15 @@ use super::header;
 use super::state::State;
 
 fn object_address(state: &State, object: usize) -> usize {
-    match state.version {
-        1 | 2 | 3 => header::object_table(state) + 62 + (9 * (object - 1)),
-        4 | 5 | 6 | 7 | 8 => header::object_table(state) + 126 + (14 * (object - 1)),
-        // TODO: Error
-        _ => 0,
+    if object == 0 {
+        0
+    } else {
+        match state.version {
+            1 | 2 | 3 => header::object_table(state) + 62 + (9 * (object - 1)),
+            4 | 5 | 6 | 7 | 8 => header::object_table(state) + 126 + (14 * (object - 1)),
+            // TODO: Error
+            _ => 0,
+        }
     }
 }
 
@@ -94,26 +98,21 @@ fn property_table_address(state: &State, object: usize) -> usize {
 fn property_size(state: &State, property_address: usize) -> usize {
     let size_byte = state.byte_value(property_address);
     match state.version {
-        1 | 2 | 3 => {
-            (size_byte as usize / 32) + 1
-        },
-        4 | 5 | 6 | 7 | 8 => {
-            match size_byte & 0xC0 {
-                0x40 => 2,
-                0x20 => 1,
-                _ => {
-                    let size = state.byte_value(property_address + 1) as usize & 0x3F;
-                    if size == 0 {
-                        64
-                    } else {
-                        size
-                    }
+        1 | 2 | 3 => (size_byte as usize / 32) + 1,
+        4 | 5 | 6 | 7 | 8 => match size_byte & 0xC0 {
+            0x40 => 2,
+            0x20 => 1,
+            _ => {
+                let size = state.byte_value(property_address + 1) as usize & 0x3F;
+                if size == 0 {
+                    64
+                } else {
+                    size
                 }
-
             }
         },
-        _ => 0
-    }    
+        _ => 0,
+    }
 }
 
 fn property_data_address(state: &State, property_address: usize) -> usize {
@@ -125,8 +124,8 @@ fn property_data_address(state: &State, property_address: usize) -> usize {
             } else {
                 property_address + 1
             }
-        },
-        _ => 0
+        }
+        _ => 0,
     }
 }
 
@@ -199,7 +198,7 @@ pub fn property(state: &State, object: usize, property: u8) -> u16 {
         match size {
             1 => state.byte_value(property_data_address) as u16,
             2 => state.word_value(property_data_address),
-            _ => panic!("GET_PROP for property with length > 2")
+            _ => panic!("GET_PROP for property with length > 2"),
         }
     }
 }
@@ -220,12 +219,14 @@ pub fn property_length(state: &State, property_data_address: usize) -> usize {
         let size_byte = state.byte_value(property_data_address - 1);
         match state.version {
             1 | 2 | 3 => property_size(state, property_data_address - 1),
-            4 | 5 | 6 | 7 | 8 => if size_byte & 0x80 == 0x80 {
-                property_size(state, property_data_address - 2)
-            } else {
-                property_size(state, property_data_address - 1)
-            },
-            _ => 0
+            4 | 5 | 6 | 7 | 8 => {
+                if size_byte & 0x80 == 0x80 {
+                    property_size(state, property_data_address - 2)
+                } else {
+                    property_size(state, property_data_address - 1)
+                }
+            }
+            _ => 0,
         }
     }
 }
@@ -277,7 +278,12 @@ pub fn set_property(state: &mut State, object: usize, property: u8, value: u16) 
     }
 
     let property_size = property_size(state, property_address);
-    trace!("Object {} property {} size {}", object, property, property_size);
+    trace!(
+        "Object {} property {} size {}",
+        object,
+        property,
+        property_size
+    );
     let property_data = match state.version {
         1 | 2 | 3 => property_address + 1,
         4 | 5 | 6 | 7 | 8 => {
@@ -328,7 +334,7 @@ pub fn parent(state: &State, object: usize) -> usize {
             1 | 2 | 3 => state.byte_value(object_address + 4) as usize,
             4 | 5 | 6 | 7 | 8 => state.word_value(object_address + 6) as usize,
             _ => 0,
-        }   
+        }
     }
 }
 
@@ -388,4 +394,3 @@ pub fn set_sibling(state: &mut State, object: usize, sibling: usize) {
         _ => {}
     }
 }
-
