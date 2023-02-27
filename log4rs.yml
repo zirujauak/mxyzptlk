@@ -9,7 +9,7 @@ appenders:
     path: "trace.log"
     append: false
     encoder:
-      pattern: "{d} - {m}{n}"
+      pattern: "{d}:{f}/{L} - {m}{n}"
 
   transcript:
     kind: file
@@ -28,3 +28,4 @@ loggers:
     level: trace
     appenders:
       - transcript
+    additive: false
