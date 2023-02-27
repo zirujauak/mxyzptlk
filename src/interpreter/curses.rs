@@ -312,7 +312,6 @@ impl Interpreter for Curses {
                 let frags = text.split_inclusive(&[' ']);
                 // Iterate over the fragments
                 for s in frags {
-                    trace!("Fragment: {}", s);
                     let position = (
                         self.current_window_mut().get_cur_y() + 1,
                         self.current_window_mut().get_cur_x() + 1,
