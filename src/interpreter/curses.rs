@@ -629,7 +629,6 @@ impl Curses {
         let clear_flags = match version {
             1 | 2 | 3 => vec![Flag::StatusLineNotAvailable, Flag::VariablePitchDefaultFont],
             4 | 5 | 6 | 7 | 8 => vec![
-                Flag::GameWantsUndo,
                 Flag::GameWantsSoundEffects,
                 Flag::GameWantsPictures,
                 Flag::GameWantsMenus,

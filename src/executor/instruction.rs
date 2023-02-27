@@ -907,7 +907,7 @@ impl Instruction {
     fn save(&self, state: &mut State) -> usize {
         if state.version < 4 {
             let data = state.prepare_save(self.branch_byte_address);
-            state.save(&String::new(), &data);
+            state.save(&String::new(), &data.to_vec());
             // TODO: branch condition should depend on whether save succeeded or not
             self.execute_branch(state, true)
         } else {
@@ -916,7 +916,8 @@ impl Instruction {
     }
 
     fn restore(&mut self, state: &mut State) -> usize {
-        let instruction_address = state.prepare_restore();
+        let q = state.restore_file();
+        let instruction_address = state.prepare_restore(&q);
         if state.version < 4 {
             let (_address, branch) = Self::decode_branch(state, instruction_address);
             self.branch = branch;
@@ -1999,12 +2000,24 @@ impl Instruction {
     }
 
     fn save_undo(&self, state: &mut State) -> usize {
-        self.store_result(state, 0xFFFF as u16);
+        let q = state.prepare_save(self.store_byte_address);
+        state.save_undo(q);
+        self.store_result(state, 1 as u16);
         self.next_address
     }
 
     fn restore_undo(&self, state: &mut State) -> usize {
-        todo!()
+        match state.restore_undo() {
+            Some(addr) => {
+                let store_var = state.byte_value(addr);
+                state.set_variable(store_var, 2);
+                addr + 1
+            },
+            None => {
+                self.store_result(state, 0);
+                self.next_address
+            }
+        }
     }
 
     fn print_unicode(&self, state: &mut State) -> usize {

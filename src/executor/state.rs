@@ -42,7 +42,7 @@ fn byte_value(memory_map: &Vec<u8>, address: usize) -> u8 {
 }
 
 impl Frame {
-    fn from_stack_frame(frame: StackFrame) -> Frame {
+    fn from_stack_frame(frame: &StackFrame) -> Frame {
         let mut argument_count = 0;
         let mut a = frame.arguments;
         while a & 1 == 1 {
@@ -165,6 +165,7 @@ pub struct State {
     pub random_predictable: bool,
     pub random_predictable_range: u16,
     pub random_predictable_next: u16,
+    undo: Option<Quetzal>,
 }
 
 impl State {
@@ -198,6 +199,7 @@ impl State {
             random_predictable: false,
             random_predictable_range: 0,
             random_predictable_next: 0,
+            undo: None,
         }
     }
 
@@ -462,34 +464,66 @@ impl State {
         checksum as u16
     }
 
-    pub fn prepare_save(&self, address: usize) -> Vec<u8> {
+    pub fn prepare_save(&self, address: usize) -> Quetzal {
         let q = Quetzal::from_state(self, address);
         trace!("Quetzal: {:05x} bytes, {} stack frames", q.umem.data.len(), q.stks.stks.len());
-        q.to_vec()
+        q
     }
 
-    pub fn prepare_restore(&mut self) -> usize {
-        let iff = self.interpreter.restore(&self.name);
-        let q = Quetzal::from_vec(iff);
-        trace!("Quetzal: {:05x} bytes, {} stack frames", q.umem.data.len(), q.stks.stks.len());
+    pub fn restore_file(&mut self) -> Quetzal {
+        let data = self.interpreter.restore(&self.name);
+        Quetzal::from_vec(data)
+    }
+
+    pub fn prepare_restore(&mut self, data: &Quetzal) -> usize {
+        trace!("Quetzal: {:05x} bytes, {} stack frames", data.umem.data.len(), data.stks.stks.len());
 
         // TODO: Verify IFhd metadata
         // Replace dynamic memory
         let static_address = header::static_memory_base(self) as usize;
         let mut static_memory = self.memory_map[static_address..].to_vec();
-        self.memory_map = q.umem.data.clone();
+        self.memory_map = data.umem.data.clone();
         self.memory_map.append(&mut static_memory);
 
         // Rebuild frame stack
         self.frames.clear();
-        for f in q.stks.stks {
+        for f in &data.stks.stks {
             let frame = Frame::from_stack_frame(f);
             self.frames.push(frame);
         }
 
-        q.ifhd.pc as usize
+        data.ifhd.pc as usize
     }
 
+    pub fn save_undo(&mut self, q: Quetzal) {
+        self.undo = Some(q)
+    }
+
+    pub fn undo(&self) -> Option<&Quetzal> {
+        self.undo.as_ref()
+    }
+
+    pub fn restore_undo(&mut self) -> Option<usize> {
+        let u = self.undo.as_ref().unwrap();
+        trace!("Quetzal: {:05x} bytes, {} stack frames", u.umem.data.len(), u.stks.stks.len());
+
+        // TODO: Verify IFhd metadata
+        // Replace dynamic memory
+        let static_address = header::static_memory_base(self) as usize;
+        let mut static_memory = self.memory_map[static_address..].to_vec();
+        self.memory_map = u.umem.data.clone();
+        self.memory_map.append(&mut static_memory);
+
+        // Rebuild frame stack
+        self.frames.clear();
+        for f in &u.stks.stks {
+            let frame = Frame::from_stack_frame(f);
+            self.frames.push(frame);
+        }
+
+        Some(u.ifhd.pc as usize)
+    }
+    
     pub fn print_in_interrupt(&mut self) {
         self.print_in_interrupt = self.print_in_interrupt || self.read_char_interrupt || self.read_interrupt
     }
