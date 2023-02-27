@@ -905,7 +905,12 @@ impl Instruction {
     }
 
     fn save(&self, state: &mut State) -> usize {
-        if state.version < 4 {
+        let operands = self.operand_values(state);
+        if operands.len() > 0 {
+            error!("SAVE with operands not yet supported.");
+            self.store_result(state, 0);
+            self.next_address
+        } else if state.version < 4 {
             let data = state.prepare_save(self.branch_byte_address);
             state.save(&String::new(), &data.to_vec());
             // TODO: branch condition should depend on whether save succeeded or not
@@ -919,16 +924,23 @@ impl Instruction {
     }
 
     fn restore(&mut self, state: &mut State) -> usize {
-        let q = state.restore_file();
-        let instruction_address = state.prepare_restore(&q);
-        if state.version < 4 {
-            let (_address, branch) = Self::decode_branch(state, instruction_address);
-            self.branch = branch;
-            self.execute_branch(state, true)
+        let operands = self.operand_values(state);
+        if operands.len() > 0 {
+            error!("RESTORE with operands not supported yet");
+            self.store_result(state, 0);
+            self.next_address
         } else {
-            let var = state.byte_value(instruction_address);
-            state.set_variable(var, 1);
-            instruction_address + 1
+            let q = state.restore_file();
+            let instruction_address = state.prepare_restore(&q);
+            if state.version < 4 {
+                let (_address, branch) = Self::decode_branch(state, instruction_address);
+                self.branch = branch;
+                self.execute_branch(state, true)
+            } else {
+                let var = state.byte_value(instruction_address);
+                state.set_variable(var, 1);
+                instruction_address + 1
+            }
         }
     }
 
