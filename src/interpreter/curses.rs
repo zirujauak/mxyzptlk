@@ -95,6 +95,7 @@ impl Curses {
                                 _ => None
                             }
                         },
+                        0x0a => Some((c, 0x0d as char)),
                         0xe4 => Some((c, 155 as char)),
                         0xf6 => Some((c, 156 as char)),
                         0xfc => Some((c, 157 as char)),
@@ -423,6 +424,8 @@ impl Interpreter for Curses {
 
     fn read_char(&mut self, time: u16) -> char {
         pancurses::noecho();
+        pancurses::curs_set(1);
+
         if time > 0 {
             // Current time, in seconds
             let start = SystemTime::now()
@@ -456,13 +459,16 @@ impl Interpreter for Curses {
             }
 
             // Re-enable block on input
+            pancurses::curs_set(0);
             result
         } else {
             self.current_window_mut().nodelay(false);
-            match self.getch() {
+            let result = match self.getch() {
                 Some(ch) => ch.1,
                 None => ' ',
-            }
+            };
+            pancurses::curs_set(0);
+            result
         }
     }
 
@@ -542,8 +548,18 @@ impl Interpreter for Curses {
     }
 
     fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8) {
-        todo!()
+        match number {
+            1 => {
+                pancurses::beep();
+            },
+            2 => {
+                pancurses::beep();
+                pancurses::beep();
+            },
+            _ => trace!("sound_effect > 2 not implemented yet."),
+        }
     }
+
     fn split_window(&mut self, lines: u16) {
         if lines == 0 {
             // Unsplit
