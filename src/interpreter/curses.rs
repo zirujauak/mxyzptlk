@@ -21,7 +21,7 @@ pub struct Curses {
     lines: i32,
     columns: i32,
     selected_window: u8,
-    output_streams: Vec<bool>,
+    output_streams: u8,
     buffering: bool,
     top_line: i32,
     foreground: i16,
@@ -47,12 +47,6 @@ impl Curses {
 
         window_1.scrollok(false);
 
-        let output_streams = if version < 3 {
-            vec![true, false]
-        } else {
-            vec![true, false, false, false]
-        };
-
         Self {
             version,
             window_0,
@@ -61,7 +55,7 @@ impl Curses {
             lines,
             columns,
             selected_window: 0,
-            output_streams,
+            output_streams: 1,
             buffering: true,
             top_line,
             foreground: COLOR_GREEN,
@@ -303,11 +297,19 @@ impl Interpreter for Curses {
         self.current_window_mut().refresh();
     }
     fn output_stream(&mut self, stream: i16, table: usize) {
-        let stream_index = stream.abs() as usize - 1;
-        self.output_streams[stream_index] = stream > 0;
+        if stream < 0 {
+            let bits = stream.abs() - 1;
+            let mask = !((1 as u8) << bits);
+            self.output_streams = self.output_streams & mask;
+        } else if stream > 0 {
+            let bits = stream - 1;
+            let mask = (1 as u8) << bits;
+            self.output_streams = self.output_streams | mask;
+        }
     }
+
     fn print(&mut self, text: String) {
-        if self.output_streams[0] {
+        if self.output_streams & 1 == 1 && self.output_streams & 4 == 0 {
             if self.buffering || self.selected_window == 1 {
                 // Split the text string on spaces
                 let frags = text.split_inclusive(&[' ']);

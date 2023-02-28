@@ -151,6 +151,30 @@ impl Frame {
     }
 }
 
+struct OutputStreamTable {
+    address: usize,
+    data: Vec<u8>,
+}
+
+impl OutputStreamTable {
+    fn new(address: usize) -> OutputStreamTable {
+        OutputStreamTable { address, data: Vec::new() }
+    }
+
+    fn write(&mut self, text: String) {
+        for c in text.chars() {
+            self.data.push(c as u8);
+        }
+    }
+
+    fn close(&mut self, state: &mut State) {
+        state.set_word(self.address, self.data.len() as u16);
+        for i in 0..self.data.len() {
+            state.set_byte(self.address + 2 + i, self.data[i]);
+        }
+    }
+}
+
 pub struct State {
     pub name: String,
     memory_map: Vec<u8>,
@@ -166,6 +190,8 @@ pub struct State {
     pub random_predictable_range: u16,
     pub random_predictable_next: u16,
     undo: Option<Quetzal>,
+    stream_3: Vec<OutputStreamTable>,
+    output_stream: u8,
 }
 
 impl State {
@@ -200,6 +226,8 @@ impl State {
             random_predictable_range: 0,
             random_predictable_next: 0,
             undo: None,
+            stream_3: Vec::new(),
+            output_stream: 1,
         }
     }
 
@@ -527,6 +555,10 @@ impl State {
     pub fn print_in_interrupt(&mut self) {
         self.print_in_interrupt = self.print_in_interrupt || self.read_char_interrupt || self.read_interrupt
     }
+
+    fn stream_3_mut(&mut self) -> &mut OutputStreamTable {
+        self.stream_3.last_mut().unwrap()
+    }
 }
 
 impl Interpreter for State {
@@ -553,12 +585,52 @@ impl Interpreter for State {
         self.print_in_interrupt()
     }
     fn output_stream(&mut self, stream: i16, table: usize) {
+        if stream < 0 && stream > -3 {
+            trace!("Disable output stream {}", stream.abs());
+            let bits = stream.abs() - 1;
+            let mask = !((1 as u8) << bits);
+            self.output_stream = self.output_stream & mask;
+        } else if stream > 0 && stream < 3 {
+            trace!("Enable output stream {}", stream.abs());
+            let bits = stream - 1;
+            let mask = (1 as u8) << bits;
+            self.output_stream = self.output_stream | mask;
+        }
+
+        if stream == -3 {
+            let s = self.stream_3.pop();
+            match s {
+                Some(mut st) => {
+                    trace!("Closing output stream 3 @ {:#06x} [{:#04x}]", st.address, st.data.len());
+                    st.close(self)
+                },
+                None => {}
+            }
+            if !self.stream_3.is_empty() {
+                trace!("Output stream 3 @ {:#06x} reactivated", self.stream_3.last().unwrap().address);
+            } else {
+                self.output_stream = self.output_stream & 0xB;
+            }
+        }
+        if stream == 3 {
+            trace!("Output stream 3 opened @ {:#06x}", table);
+            let s = OutputStreamTable::new(table);
+            self.output_stream = self.output_stream | 4;
+            self.stream_3.push(s);
+        }
+
         self.interpreter.output_stream(stream, table);
     }
+
     fn print(&mut self, text: String) {
-        trace!(target: "app::transcript", "{}", text);
-        self.interpreter.print(text);
-        self.print_in_interrupt()
+        trace!(target: "app::transcript", "[{:#04b}] {}", self.output_stream, text);
+        if self.output_stream & 0x4 == 0x4 {
+            trace!("Printing to stream 3");
+            self.stream_3_mut().write(text);
+        } else {
+            self.interpreter.print(text);
+            self.print_in_interrupt()
+        }
     }
     fn print_table(&mut self, text: String, width: u16, height: u16, skip: u16) {
         self.interpreter.print_table(text, width, height, skip);
