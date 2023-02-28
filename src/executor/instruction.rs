@@ -548,6 +548,8 @@ impl Instruction {
                     0x11 => self.set_text_style(state),
                     0x12 => self.buffer_mode(state),
                     0x13 => self.output_stream(state),
+                    0x14 => self.input_stream(state),
+                    0x15 => self.sound_effect(state),
                     0x16 => self.read_char(state),
                     0x17 => self.scan_table(state),
                     0x18 => self.not(state),
@@ -1140,6 +1142,7 @@ impl Instruction {
         let ztext = object::short_name(state, operands[0] as usize);
 
         let text = text::from_vec(state, &ztext);
+        trace!("{}", text);
         state.print(text);
         self.next_address
     }
@@ -1852,7 +1855,19 @@ impl Instruction {
         self.next_address
     }
 
+    fn input_stream(&self, state: &mut State) -> usize {
+        todo!()
+    }
+
+    fn sound_effect(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+        state.sound_effect(operands[0], 0, 0, 0);
+
+        self.next_address
+    }
+
     fn read_char(&self, state: &mut State) -> usize {
+        pancurses::curs_set(1);
         let operands = self.operand_values(state);
 
         let x = operands[0];
@@ -1895,7 +1910,45 @@ impl Instruction {
     }
 
     fn scan_table(&self, state: &mut State) -> usize {
-        todo!()
+        let operands = self.operand_values(state);
+
+        // Default is table of words
+        let scan = if operands.len() == 4 && operands[3] & 0x80 == 0 {
+            1
+        } else {
+            2
+        };
+        let entry_size = if operands.len() == 4 {
+            operands[3] & 0x3f
+        } else {
+            2
+        };
+
+        let len = operands[2] as usize;
+        let mut condition = false;
+        for i in 0..len {
+            let address = operands[1] as usize + (i * entry_size as usize);
+            let value = if scan == 2 {
+                trace!("Checking word @ {:#06x}", address);
+                state.word_value(address)
+            } else {
+                trace!("Checking byte @ {:#06x}", address);
+                state.byte_value(address) as u16
+            };
+
+            trace!("{:#04x} <-> {:#04x}", operands[0], value);
+            if value == operands[0] {
+                self.store_result(state, address as u16);
+                condition = true;
+                break;
+            }
+        }
+
+        if condition == false {
+            self.store_result(state, 0);
+        }
+
+        self.execute_branch(state, condition)
     }
 
     fn call_vn(&self, state: &mut State) -> usize {
