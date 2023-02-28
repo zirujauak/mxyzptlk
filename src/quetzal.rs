@@ -158,24 +158,27 @@ impl Stks {
             trace!("Result variable: {}", result_variable);
             trace!("Arguments: {:#08b}", arguments);
 
-            let offset = position + 6;
-            let stack_size = vec_as_usize(chunk[offset..offset+2].to_vec(), 2) as u16;
+            position = position + 6;
+            let stack_size = vec_as_usize(chunk[position..position+2].to_vec(), 2) as u16;
             trace!("Stack size: {}", stack_size);
+            position = position + 2;
 
             let mut local_variables = Vec::new();
             for i in 0..flags as usize & 0xF {
-                let offset = position + 8 + (i * 2);
+                let offset = position + (i * 2);
                 local_variables.push(vec_as_usize(chunk[offset..offset+2].to_vec(), 2) as u16);
             }
             trace!("Local variable count: {}", local_variables.len());
+            position = position + (local_variables.len() * 2);
 
+            trace!("Stack data @ {}", position);
             let mut stack = Vec::new();
             for i in 0..stack_size as usize {
-                let offset = position + 10 + (local_variables.len() * 2) + (i * 2);
+                let offset = position  + (i * 2);
                 stack.push(vec_as_usize(chunk[offset..offset+2].to_vec(), 2) as u16)
             }
             trace!("Stack count: {}", stack.len());
-            position = position + 8 + (local_variables.len() * 2) + (stack_size as usize * 2);
+            position = position + (stack_size as usize * 2);
 
             stks.push(StackFrame {
                 return_address,
