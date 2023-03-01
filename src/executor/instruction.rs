@@ -946,7 +946,7 @@ impl Instruction {
         }
     }
 
-    fn restart(&mut self, state: &mut State) -> usize {
+    fn restart(&mut self, _state: &mut State) -> usize {
         todo!()
     }
 
@@ -961,7 +961,7 @@ impl Instruction {
         self.next_address
     }
 
-    fn catch(&self, state: &mut State) -> usize {
+    fn catch(&self, _state: &mut State) -> usize {
         todo!()
     }
 
@@ -1498,7 +1498,7 @@ impl Instruction {
         self.next_address
     }
 
-    pub fn throw(&self, state: &mut State) -> usize {
+    pub fn throw(&self, _state: &mut State) -> usize {
         todo!()
     }
 
@@ -1816,7 +1816,7 @@ impl Instruction {
         self.next_address
     }
 
-    fn erase_line(&self, state: &mut State) -> usize {
+    fn erase_line(&self, _state: &mut State) -> usize {
         todo!()
     }
 
@@ -1855,7 +1855,7 @@ impl Instruction {
         self.next_address
     }
 
-    fn input_stream(&self, state: &mut State) -> usize {
+    fn input_stream(&self, _state: &mut State) -> usize {
         todo!()
     }
 
@@ -1975,19 +1975,19 @@ impl Instruction {
         self.call_fn(state, address, self.next_address, &arguments, None)
     }
 
-    fn tokenise(&self, state: &mut State) -> usize {
+    fn tokenise(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn encode_text(&self, state: &mut State) -> usize {
+    fn encode_text(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn copy_table(&self, state: &mut State) -> usize {
+    fn copy_table(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn print_table(&self, state: &mut State) -> usize {
+    fn print_table(&self, _state: &mut State) -> usize {
         todo!()
     }
 
@@ -2049,23 +2049,23 @@ impl Instruction {
         self.next_address
     }
 
-    fn set_font(&self, state: &mut State) -> usize {
+    fn set_font(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn draw_picture(&self, state: &mut State) -> usize {
+    fn draw_picture(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn picture_data(&self, state: &mut State) -> usize {
+    fn picture_data(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn erase_picture(&self, state: &mut State) -> usize {
+    fn erase_picture(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn set_margins(&self, state: &mut State) -> usize {
+    fn set_margins(&self, _state: &mut State) -> usize {
         todo!()
     }
 
@@ -2090,71 +2090,71 @@ impl Instruction {
         }
     }
 
-    fn print_unicode(&self, state: &mut State) -> usize {
+    fn print_unicode(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn check_unicode(&self, state: &mut State) -> usize {
+    fn check_unicode(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn set_true_colour(&self, state: &mut State) -> usize {
+    fn set_true_colour(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn move_window(&self, state: &mut State) -> usize {
+    fn move_window(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn window_size(&self, state: &mut State) -> usize {
+    fn window_size(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn window_style(&self, state: &mut State) -> usize {
+    fn window_style(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn get_wind_prop(&self, state: &mut State) -> usize {
+    fn get_wind_prop(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn scroll_window(&self, state: &mut State) -> usize {
+    fn scroll_window(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn pop_stack(&self, state: &mut State) -> usize {
+    fn pop_stack(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn read_mouse(&self, state: &mut State) -> usize {
+    fn read_mouse(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn mouse_window(&self, state: &mut State) -> usize {
+    fn mouse_window(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn push_stack(&self, state: &mut State) -> usize {
+    fn push_stack(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn put_wind_prop(&self, state: &mut State) -> usize {
+    fn put_wind_prop(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn print_form(&self, state: &mut State) -> usize {
+    fn print_form(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn make_menu(&self, state: &mut State) -> usize {
+    fn make_menu(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn picture_table(&self, state: &mut State) -> usize {
+    fn picture_table(&self, _state: &mut State) -> usize {
         todo!()
     }
 
-    fn buffer_screen(&self, state: &mut State) -> usize {
+    fn buffer_screen(&self, _state: &mut State) -> usize {
         todo!()
     }
 }
