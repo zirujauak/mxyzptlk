@@ -1,4 +1,3 @@
-use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -12,7 +11,7 @@ use crate::quetzal::StackFrame;
 
 #[derive(Debug)]
 pub struct Frame {
-    address: usize,
+    _address: usize,
     pub pc: usize,
     pub local_variables: Vec<u16>,
     pub argument_count: u8,
@@ -51,7 +50,7 @@ impl Frame {
         }
 
         Frame {
-            address: 0,
+            _address: 0,
             pc: 0,
             local_variables: frame.local_variables.clone(),
             argument_count,
@@ -72,7 +71,7 @@ impl Frame {
 
     fn initial(_memory_map: &Vec<u8>, address: usize) -> Frame {
         Frame {
-            address,
+            _address: address,
             pc: address,
             local_variables: Vec::new(),
             argument_count: 0,
@@ -117,7 +116,7 @@ impl Frame {
         }
 
         Frame {
-            address,
+            _address: address,
             pc: initial_pc,
             local_variables,
             argument_count: arguments.len() as u8,
@@ -472,9 +471,9 @@ impl State {
         }
     }
 
-    fn word(high_byte: u8, low_byte: u8) -> u16 {
-        ((high_byte as u16) << 8) & 0xFF00 | (low_byte as u16) & 0xFF
-    }
+    // fn word(high_byte: u8, low_byte: u8) -> u16 {
+    //     ((high_byte as u16) << 8) & 0xFF00 | (low_byte as u16) & 0xFF
+    // }
 
     pub fn word_value(&self, address: usize) -> u16 {
         word(self.byte_value(address), self.byte_value(address + 1))
