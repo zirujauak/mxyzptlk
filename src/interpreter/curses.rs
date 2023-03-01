@@ -7,7 +7,7 @@ use std::{
 };
 
 use pancurses::{
-    Attribute, ColorPair, Input, Window, COLOR_BLACK, COLOR_BLUE, COLOR_CYAN, COLOR_GREEN,
+    Attribute, Input, Window, COLOR_BLACK, COLOR_BLUE, COLOR_CYAN, COLOR_GREEN,
     COLOR_MAGENTA, COLOR_RED, COLOR_WHITE, COLOR_YELLOW,
 };
 
@@ -267,7 +267,7 @@ impl Interpreter for Curses {
         self.buffering = mode
     }
 
-    fn erase_line(&mut self, value: u16) {
+    fn erase_line(&mut self, _value: u16) {
         todo!()
     }
 
@@ -295,7 +295,7 @@ impl Interpreter for Curses {
         )
     }
 
-    fn input_stream(&mut self, stream: u16) {
+    fn input_stream(&mut self, _stream: u16) {
         todo!()
     }
     fn new_line(&mut self) {
@@ -304,7 +304,7 @@ impl Interpreter for Curses {
         // self.current_window_mut().addch('\n');
         self.current_window_mut().refresh();
     }
-    fn output_stream(&mut self, stream: i16, table: usize) {
+    fn output_stream(&mut self, stream: i16, _table: usize) {
         if stream < 0 {
             let bits = stream.abs() - 1;
             let mask = !((1 as u8) << bits);
@@ -344,7 +344,7 @@ impl Interpreter for Curses {
         };
     }
 
-    fn print_table(&mut self, text: String, width: u16, height: u16, skip: u16) {
+    fn print_table(&mut self, _text: String, _width: u16, _height: u16, _skip: u16) {
         todo!()
     }
 
@@ -455,7 +455,6 @@ impl Interpreter for Curses {
             let delay = time::Duration::from_millis(10);
             // Don't block on input
             self.current_window_mut().nodelay(true);
-            let mut ch = self.getch();
             let mut result = 0 as char;
             // While no (acceptable) keypress and 'time' seconds haven't elapsed
             while result == 0 as char
@@ -465,7 +464,7 @@ impl Interpreter for Curses {
                     .as_secs()
                     < end
             {
-                ch = self.getch();
+                let ch = self.getch();
                 result = match ch {
                     Some(c) => c.1,
                     _ => 0 as char,
@@ -564,7 +563,7 @@ impl Interpreter for Curses {
         self.status_window.as_mut().unwrap().refresh();
     }
 
-    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8) {
+    fn sound_effect(&mut self, number: u16, _effect: u16, _volume: u8, _repeats: u8) {
         match number {
             1 => {
                 pancurses::beep();
