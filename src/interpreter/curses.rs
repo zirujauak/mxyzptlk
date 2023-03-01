@@ -610,7 +610,12 @@ impl Interpreter for Curses {
     fn save(&mut self, name: &String, data: &Vec<u8>) {
         let default = Curses::save_filename(name);
         self.print("Save to: ".to_string());
-        let filename = self.read(64, 0, &default.chars().collect(), true).0.iter().collect::<String>().replace("\n", "");
+        let filename = self
+            .read(64, 0, &default.chars().collect(), true)
+            .0
+            .iter()
+            .collect::<String>()
+            .replace("\n", "");
         trace!("Save to: {}", filename);
 
         let mut file = fs::OpenOptions::new()
@@ -627,7 +632,12 @@ impl Interpreter for Curses {
     fn restore(&mut self, name: &String) -> Vec<u8> {
         let default = Curses::restore_filename(name);
         self.print("Restore from: ".to_string());
-        let filename = self.read(64, 0, &default.chars().collect(), true).0.iter().collect::<String>().replace("\n", "");
+        let filename = self
+            .read(64, 0, &default.chars().collect(), true)
+            .0
+            .iter()
+            .collect::<String>()
+            .replace("\n", "");
         trace!("Restore from: {}", filename);
 
         fs::read(filename).unwrap()

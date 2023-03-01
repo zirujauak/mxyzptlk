@@ -6,7 +6,7 @@ use simplelog::*;
 
 pub fn init() {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
-    
+
     // WriteLogger::init(
     //     LevelFilter::Trace,
     //     Config::default(),

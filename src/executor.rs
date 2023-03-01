@@ -1,15 +1,15 @@
 pub mod header;
-pub mod state;
 pub mod instruction;
 pub mod log;
 pub mod object;
+pub mod state;
 pub mod text;
 
-use state::State;
 use instruction::Instruction;
+use state::State;
 
 use crate::interpreter::curses::Curses;
-use crate::interpreter::{Interpreter};
+use crate::interpreter::Interpreter;
 
 pub struct Executor {
     state: State,
@@ -23,9 +23,7 @@ impl Executor {
         let spec = interpreter.spec(version);
         let mut state = State::new(name, &v, Box::new(interpreter));
         state.initialize(spec);
-        Executor { 
-            state,
-        }
+        Executor { state }
     }
 
     pub fn run(&mut self) {
@@ -49,4 +47,3 @@ impl Executor {
         }
     }
 }
-

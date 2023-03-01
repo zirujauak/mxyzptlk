@@ -158,7 +158,10 @@ struct OutputStreamTable {
 
 impl OutputStreamTable {
     fn new(address: usize) -> OutputStreamTable {
-        OutputStreamTable { address, data: Vec::new() }
+        OutputStreamTable {
+            address,
+            data: Vec::new(),
+        }
     }
 
     fn write(&mut self, text: String) {
@@ -284,7 +287,14 @@ impl State {
             arguments.len()
         );
 
-        let f = Frame::call(&self.memory_map(), self.version, address, arguments, result, return_address);
+        let f = Frame::call(
+            &self.memory_map(),
+            self.version,
+            address,
+            arguments,
+            result,
+            return_address,
+        );
         self.frames.push(f);
         self.current_frame().pc
     }
@@ -303,7 +313,11 @@ impl State {
             }
         }
 
-        trace!("Return to ${:05x} with result #{:04x}", f.return_address, result);
+        trace!(
+            "Return to ${:05x} with result #{:04x}",
+            f.return_address,
+            result
+        );
         f.return_address
     }
 
@@ -323,7 +337,12 @@ impl State {
     pub fn call_read_char_interrupt(&mut self, address: u16, return_addr: usize) -> usize {
         self.current_frame_mut().read_char_interrupt = true;
         self.read_char_interrupt = true;
-        self.call(self.packed_routine_address(address), return_addr, &Vec::new(), None)
+        self.call(
+            self.packed_routine_address(address),
+            return_addr,
+            &Vec::new(),
+            None,
+        )
     }
 
     pub fn read_interrupt(&self) -> bool {
@@ -353,7 +372,12 @@ impl State {
     pub fn call_read_interrupt(&mut self, address: u16, return_addr: usize) -> usize {
         self.current_frame_mut().read_interrupt = true;
         self.read_interrupt = true;
-        self.call(self.packed_routine_address(address), return_addr, &Vec::new(), None)
+        self.call(
+            self.packed_routine_address(address),
+            return_addr,
+            &Vec::new(),
+            None,
+        )
     }
 
     pub fn current_frame(&self) -> &Frame {
@@ -478,12 +502,12 @@ impl State {
 
     pub fn checksum(&self) -> u16 {
         let mut checksum = 0 as u16;
-        let size = header::length(self) as usize *
-            match self.version {
+        let size = header::length(self) as usize
+            * match self.version {
                 1 | 2 | 3 => 2,
                 4 | 5 => 4,
                 6 | 7 | 8 => 8,
-                _ => 0
+                _ => 0,
             };
         for i in 0x40..size {
             checksum = u16::overflowing_add(checksum, self.pristine_memory_map[i] as u16).0;
@@ -494,7 +518,11 @@ impl State {
 
     pub fn prepare_save(&self, address: usize) -> Quetzal {
         let q = Quetzal::from_state(self, address);
-        trace!("Quetzal: {:05x} bytes, {} stack frames", q.umem.data.len(), q.stks.stks.len());
+        trace!(
+            "Quetzal: {:05x} bytes, {} stack frames",
+            q.umem.data.len(),
+            q.stks.stks.len()
+        );
         q
     }
 
@@ -504,7 +532,11 @@ impl State {
     }
 
     pub fn prepare_restore(&mut self, data: &Quetzal) -> usize {
-        trace!("Quetzal: {:05x} bytes, {} stack frames", data.umem.data.len(), data.stks.stks.len());
+        trace!(
+            "Quetzal: {:05x} bytes, {} stack frames",
+            data.umem.data.len(),
+            data.stks.stks.len()
+        );
 
         // TODO: Verify IFhd metadata
         // Replace dynamic memory
@@ -533,7 +565,11 @@ impl State {
 
     pub fn restore_undo(&mut self) -> Option<usize> {
         let u = self.undo.as_ref().unwrap();
-        trace!("Quetzal: {:05x} bytes, {} stack frames", u.umem.data.len(), u.stks.stks.len());
+        trace!(
+            "Quetzal: {:05x} bytes, {} stack frames",
+            u.umem.data.len(),
+            u.stks.stks.len()
+        );
 
         // TODO: Verify IFhd metadata
         // Replace dynamic memory
@@ -551,9 +587,10 @@ impl State {
 
         Some(u.ifhd.pc as usize)
     }
-    
+
     pub fn print_in_interrupt(&mut self) {
-        self.print_in_interrupt = self.print_in_interrupt || self.read_char_interrupt || self.read_interrupt
+        self.print_in_interrupt =
+            self.print_in_interrupt || self.read_char_interrupt || self.read_interrupt
     }
 
     fn stream_3_mut(&mut self) -> &mut OutputStreamTable {
@@ -601,13 +638,20 @@ impl Interpreter for State {
             let s = self.stream_3.pop();
             match s {
                 Some(mut st) => {
-                    trace!("Closing output stream 3 @ {:#06x} [{:#04x}]", st.address, st.data.len());
+                    trace!(
+                        "Closing output stream 3 @ {:#06x} [{:#04x}]",
+                        st.address,
+                        st.data.len()
+                    );
                     st.close(self)
-                },
+                }
                 None => {}
             }
             if !self.stream_3.is_empty() {
-                trace!("Output stream 3 @ {:#06x} reactivated", self.stream_3.last().unwrap().address);
+                trace!(
+                    "Output stream 3 @ {:#06x} reactivated",
+                    self.stream_3.last().unwrap().address
+                );
             } else {
                 self.output_stream = self.output_stream & 0xB;
             }
@@ -636,7 +680,13 @@ impl Interpreter for State {
         self.interpreter.print_table(text, width, height, skip);
         self.print_in_interrupt()
     }
-    fn read(&mut self, length: u8, time: u16, existing_input: &Vec<char>, redraw: bool) -> (Vec<char>, bool) {
+    fn read(
+        &mut self,
+        length: u8,
+        time: u16,
+        existing_input: &Vec<char>,
+        redraw: bool,
+    ) -> (Vec<char>, bool) {
         self.interpreter.read(length, time, existing_input, redraw)
     }
     fn read_char(&mut self, time: u16) -> char {
@@ -658,7 +708,8 @@ impl Interpreter for State {
         self.interpreter.show_status(location, status)
     }
     fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8) {
-        self.interpreter.sound_effect(number, effect, volume, repeats)
+        self.interpreter
+            .sound_effect(number, effect, volume, repeats)
     }
     fn split_window(&mut self, lines: u16) {
         self.interpreter.split_window(lines);

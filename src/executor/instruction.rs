@@ -2082,7 +2082,7 @@ impl Instruction {
                 let store_var = state.byte_value(addr);
                 state.set_variable(store_var, 2);
                 addr + 1
-            },
+            }
             None => {
                 self.store_result(state, 0);
                 self.next_address

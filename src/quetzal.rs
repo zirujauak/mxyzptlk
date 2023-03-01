@@ -148,10 +148,10 @@ impl Stks {
         let mut stks = Vec::new();
         while chunk.len() - position > 1 {
             trace!("Reading frame from {} [{}]", position, chunk.len());
-            let return_address = vec_as_usize(chunk[position..position+3].to_vec(), 3) as u32;
-            let flags = chunk[position+3];
-            let result_variable = chunk[position+4];
-            let arguments = chunk[position+5];
+            let return_address = vec_as_usize(chunk[position..position + 3].to_vec(), 3) as u32;
+            let flags = chunk[position + 3];
+            let result_variable = chunk[position + 4];
+            let arguments = chunk[position + 5];
 
             trace!("Return address: {:#06x}", return_address);
             trace!("Flags: {:#08b}", flags);
@@ -159,14 +159,14 @@ impl Stks {
             trace!("Arguments: {:#08b}", arguments);
 
             position = position + 6;
-            let stack_size = vec_as_usize(chunk[position..position+2].to_vec(), 2) as u16;
+            let stack_size = vec_as_usize(chunk[position..position + 2].to_vec(), 2) as u16;
             trace!("Stack size: {}", stack_size);
             position = position + 2;
 
             let mut local_variables = Vec::new();
             for i in 0..flags as usize & 0xF {
                 let offset = position + (i * 2);
-                local_variables.push(vec_as_usize(chunk[offset..offset+2].to_vec(), 2) as u16);
+                local_variables.push(vec_as_usize(chunk[offset..offset + 2].to_vec(), 2) as u16);
             }
             trace!("Local variable count: {}", local_variables.len());
             position = position + (local_variables.len() * 2);
@@ -174,8 +174,8 @@ impl Stks {
             trace!("Stack data @ {}", position);
             let mut stack = Vec::new();
             for i in 0..stack_size as usize {
-                let offset = position  + (i * 2);
-                stack.push(vec_as_usize(chunk[offset..offset+2].to_vec(), 2) as u16)
+                let offset = position + (i * 2);
+                stack.push(vec_as_usize(chunk[offset..offset + 2].to_vec(), 2) as u16)
             }
             trace!("Stack count: {}", stack.len());
             position = position + (stack_size as usize * 2);
@@ -190,9 +190,7 @@ impl Stks {
                 stack,
             });
         }
-        Stks {
-            stks
-        }
+        Stks { stks }
     }
 
     pub fn to_chunk(&self) -> Vec<u8> {
