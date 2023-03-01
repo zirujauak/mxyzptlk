@@ -1,6 +1,7 @@
 use std::{
     fs,
     io::Write,
+    path::Path,
     thread,
     time::{self, SystemTime, UNIX_EPOCH},
 };
@@ -82,13 +83,21 @@ impl Curses {
                             let c1 = self.current_window_mut().getch().unwrap();
                             let c2 = self.current_window_mut().getch().unwrap();
                             match (c1, c2) {
-                                (Input::Character('['),Input::Character('A')) => Some((129 as char, 129 as char)),
-                                (Input::Character('['),Input::Character('B')) => Some((130 as char, 130 as char)),
-                                (Input::Character('['),Input::Character('D')) => Some((131 as char, 131 as char)),
-                                (Input::Character('['),Input::Character('C')) => Some((132 as char, 132 as char)),
-                                _ => None
+                                (Input::Character('['), Input::Character('A')) => {
+                                    Some((129 as char, 129 as char))
+                                }
+                                (Input::Character('['), Input::Character('B')) => {
+                                    Some((130 as char, 130 as char))
+                                }
+                                (Input::Character('['), Input::Character('D')) => {
+                                    Some((131 as char, 131 as char))
+                                }
+                                (Input::Character('['), Input::Character('C')) => {
+                                    Some((132 as char, 132 as char))
+                                }
+                                _ => None,
                             }
-                        },
+                        }
                         0x0a => Some((c, 0x0d as char)),
                         0xe4 => Some((c, 155 as char)),
                         0xf6 => Some((c, 156 as char)),
@@ -163,12 +172,11 @@ impl Curses {
                     },
                     _ => None,
                 }
-            },
-            _ => None
+            }
+            _ => None,
         }
     }
 }
-
 
 fn addch(window: &mut Window, c: u16) {
     let ch = match c {
@@ -241,14 +249,14 @@ fn addch(window: &mut Window, c: u16) {
         221 => 0x152,
         222 => 0xa1,
         223 => 0xbf,
-        _ => c
+        _ => c,
     } as u16;
-    
+
     window.addstr(format!("{}", char::from_u32(ch as u32).unwrap()));
 }
 
 fn addstr(window: &mut Window, s: &str) {
-    let chars:Vec<char> = s.chars().collect();
+    let chars: Vec<char> = s.chars().collect();
     for c in chars {
         addch(window, c as u16)
     }
@@ -340,7 +348,13 @@ impl Interpreter for Curses {
         todo!()
     }
 
-    fn read(&mut self, length: u8, time: u16, existing_input: &Vec<char>, redraw: bool) -> (Vec<char>, bool) {
+    fn read(
+        &mut self,
+        length: u8,
+        time: u16,
+        existing_input: &Vec<char>,
+        redraw: bool,
+    ) -> (Vec<char>, bool) {
         self.window_1.refresh();
         self.window_0.refresh();
         self.window_0
@@ -371,11 +385,12 @@ impl Interpreter for Curses {
         let mut done = false;
         self.current_window_mut().nodelay(true);
         while !done {
-            if time > 0 && SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis()
-                > end
+            if time > 0
+                && SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
+                    > end
             {
                 return (input, true);
             } else {
@@ -384,7 +399,7 @@ impl Interpreter for Curses {
                     Some(ch) => {
                         match ch {
                             // Backspace
-                            ('\u{7f}',_) => {
+                            ('\u{7f}', _) => {
                                 if input.len() > 0 {
                                     // Remove from the input array
                                     input.pop();
@@ -411,7 +426,7 @@ impl Interpreter for Curses {
                                 }
                             }
                         }
-                    },
+                    }
                     None => {
                         // Brief sleep
                         thread::sleep(delay);
@@ -553,11 +568,11 @@ impl Interpreter for Curses {
         match number {
             1 => {
                 pancurses::beep();
-            },
+            }
             2 => {
                 pancurses::beep();
                 pancurses::beep();
-            },
+            }
             _ => trace!("sound_effect > 2 not implemented yet."),
         }
     }
@@ -593,7 +608,9 @@ impl Interpreter for Curses {
     }
 
     fn save(&mut self, name: &String, data: &Vec<u8>) {
-        let filename = format!("{}.ifzs", name);
+        let default = Curses::save_filename(name);
+        self.print("Save to: ".to_string());
+        let filename = self.read(64, 0, &default.chars().collect(), true).0.iter().collect::<String>().replace("\n", "");
         trace!("Save to: {}", filename);
 
         let mut file = fs::OpenOptions::new()
@@ -608,7 +625,9 @@ impl Interpreter for Curses {
     }
 
     fn restore(&mut self, name: &String) -> Vec<u8> {
-        let filename = format!("{}.ifzs", name);
+        let default = Curses::restore_filename(name);
+        self.print("Restore from: ".to_string());
+        let filename = self.read(64, 0, &default.chars().collect(), true).0.iter().collect::<String>().replace("\n", "");
         trace!("Restore from: {}", filename);
 
         fs::read(filename).unwrap()
@@ -691,5 +710,33 @@ impl Curses {
             background_color: 2,
             foreground_color: 4,
         }
+    }
+
+    fn save_filename(name: &String) -> String {
+        let mut index = 0;
+        let mut f = true;
+
+        while f {
+            index = index + 1;
+            let name = format!("{}-{:02}.ifzs", name, index);
+            f = Path::new(&name).exists();
+            trace!("Checking {}: {}", name, f);
+        }
+
+        return format!("{}-{:02}.ifzs", name, index);
+    }
+
+    fn restore_filename(name: &String) -> String {
+        let mut index = 0;
+        let mut f = true;
+
+        while f {
+            index = index + 1;
+            let name = format!("{}-{:02}.ifzs", name, index);
+            f = Path::new(&name).exists();
+            trace!("Checking {}: {}", name, f);
+        }
+
+        return format!("{}-{:02}.ifzs", name, index - 1);
     }
 }
