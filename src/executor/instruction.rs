@@ -914,12 +914,12 @@ impl Instruction {
             self.next_address
         } else if state.version < 4 {
             let data = state.prepare_save(self.branch_byte_address);
-            state.save(&String::new(), &data.to_vec());
+            state.save(&data.to_vec());
             // TODO: branch condition should depend on whether save succeeded or not
             self.execute_branch(state, true)
         } else {
             let data = state.prepare_save(self.store_byte_address);
-            state.save(&String::new(), &data.to_vec());
+            state.save(&data.to_vec());
             self.store_result(state, 1);
             self.next_address
         }

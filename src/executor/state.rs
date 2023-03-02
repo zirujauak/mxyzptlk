@@ -178,7 +178,6 @@ impl OutputStreamTable {
 }
 
 pub struct State {
-    pub name: String,
     memory_map: Vec<u8>,
     pristine_memory_map: Vec<u8>,
     pub version: u8,
@@ -197,7 +196,7 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(name: String, memory_map: &Vec<u8>, interpreter: Box<dyn Interpreter>) -> State {
+    pub fn new(memory_map: &Vec<u8>, interpreter: Box<dyn Interpreter>) -> State {
         let version = byte_value(memory_map, 0);
         let f = {
             let pc = word_value(memory_map, 0x06) as usize;
@@ -214,7 +213,6 @@ impl State {
         frames.push(f);
 
         State {
-            name,
             memory_map: memory_map.clone(),
             pristine_memory_map: memory_map.clone(),
             version: memory_map[0],
@@ -535,7 +533,7 @@ impl State {
     }
 
     pub fn restore_file(&mut self) -> Quetzal {
-        let data = self.interpreter.restore(&self.name);
+        let data = self.interpreter.restore();
         Quetzal::from_vec(data)
     }
 
@@ -729,10 +727,10 @@ impl Interpreter for State {
     fn split_window(&mut self, lines: u16) {
         self.interpreter.split_window(lines);
     }
-    fn save(&mut self, _name: &String, data: &Vec<u8>) {
-        self.interpreter.save(&self.name, data);
+    fn save(&mut self, data: &Vec<u8>) {
+        self.interpreter.save(data);
     }
-    fn restore(&mut self, _name: &String) -> Vec<u8> {
-        self.interpreter.restore(&self.name)
+    fn restore(&mut self) -> Vec<u8> {
+        self.interpreter.restore()
     }
 }

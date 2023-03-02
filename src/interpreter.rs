@@ -21,8 +21,8 @@ pub trait Interpreter {
     fn show_status(&mut self, location: &str, status: &str);
     fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8);
     fn split_window(&mut self, lines: u16);
-    fn save(&mut self, name: &String, data: &Vec<u8>);
-    fn restore(&mut self, name: &String) -> Vec<u8>;
+    fn save(&mut self, data: &Vec<u8>);
+    fn restore(&mut self) -> Vec<u8>;
 }
 
 pub struct Spec {

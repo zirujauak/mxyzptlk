@@ -15,6 +15,7 @@ use super::{Interpreter, Spec};
 use crate::executor::{header::Flag, text};
 
 pub struct Curses {
+    name: String,
     version: u8,
     window_0: Window,
     window_1: Window,
@@ -31,7 +32,7 @@ pub struct Curses {
 }
 
 impl Curses {
-    pub fn new(version: u8) -> Curses {
+    pub fn new(version: u8, name: String) -> Curses {
         let window_0 = pancurses::initscr();
         let lines = window_0.get_max_y();
         let columns = window_0.get_max_x();
@@ -50,6 +51,7 @@ impl Curses {
         window_1.scrollok(false);
 
         Self {
+            name,
             version,
             window_0,
             window_1,
@@ -307,24 +309,24 @@ impl Interpreter for Curses {
         self.current_window_mut().refresh();
 
         if self.selected_window == 0 && self.output_streams & 2 == 2 {
-            self.transcript_file.as_mut().unwrap().write(&['\n' as u8]);
+            self.transcript_file.as_mut().unwrap().write(&['\n' as u8]).unwrap();
         }
     }
 
     fn output_stream(&mut self, stream: i16, _table: usize) {
         if stream == 2 {
             match &mut self.transcript_file {
-                Some(f) => {},
+                Some(_) => {},
                 None => {
                     self.transcript_file = Some(fs::OpenOptions::new()
                 .create(true)
                 .write(true)
-                .open("transcript.txt").unwrap()); }
+                .open(format!("{}.txt", self.name)).unwrap()); }
             }
         } else if stream == -2 {
             match &mut self.transcript_file {
                 Some(f) => {
-                    f.flush();
+                    f.flush().unwrap();
                 },
                 None => {}
             }
@@ -355,13 +357,13 @@ impl Interpreter for Curses {
                         addch(self.current_window_mut(), '\n' as u16);
                         addstr(self.current_window_mut(), s);
                         if self.selected_window == 0 && self.output_streams & 2 == 2 {
-                            self.transcript_file.as_mut().unwrap().write_fmt(format_args!("\n{}", s));
+                            self.transcript_file.as_mut().unwrap().write_fmt(format_args!("\n{}", s)).unwrap();
                         }
                         // self.current_window_mut().addstr(s);
                     } else {
                         addstr(self.current_window_mut(), s);
                         if self.selected_window == 0 && self.output_streams & 2 == 2 {
-                            self.transcript_file.as_mut().unwrap().write_all(s.as_bytes());
+                            self.transcript_file.as_mut().unwrap().write_all(s.as_bytes()).unwrap();
                         }
                         // self.current_window_mut().addstr(s);
                     }
@@ -369,7 +371,7 @@ impl Interpreter for Curses {
             } else {
                 addstr(self.current_window_mut(), text.as_str());
                 if self.selected_window == 0 && self.output_streams & 2 == 2 {
-                    self.transcript_file.as_mut().unwrap().write_all(text.as_bytes());
+                    self.transcript_file.as_mut().unwrap().write_all(text.as_bytes()).unwrap();
                 }
                 // self.current_window_mut().addstr(text);
             }
@@ -646,8 +648,8 @@ impl Interpreter for Curses {
         self.window_1.refresh();
     }
 
-    fn save(&mut self, name: &String, data: &Vec<u8>) {
-        let default = Curses::save_filename(name);
+    fn save(&mut self, data: &Vec<u8>) {
+        let default = Curses::save_filename(&self.name);
         self.print("Save to: ".to_string());
         let filename = self
             .read(64, 0, &default.chars().collect(), true)
@@ -668,8 +670,8 @@ impl Interpreter for Curses {
         file.flush().unwrap();
     }
 
-    fn restore(&mut self, name: &String) -> Vec<u8> {
-        let default = Curses::restore_filename(name);
+    fn restore(&mut self) -> Vec<u8> {
+        let default = Curses::restore_filename(&self.name);
         self.print("Restore from: ".to_string());
         let filename = self
             .read(64, 0, &default.chars().collect(), true)
