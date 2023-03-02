@@ -102,6 +102,7 @@ impl Curses {
                                 _ => None,
                             }
                         }
+                        0x7f => Some((c, 0x08 as char)),
                         0x0a => Some((c, 0x0d as char)),
                         0xe4 => Some((c, 155 as char)),
                         0xf6 => Some((c, 156 as char)),
