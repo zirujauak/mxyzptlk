@@ -1,5 +1,5 @@
 use std::{
-    fs,
+    fs::{self, File},
     io::Write,
     path::Path,
     thread,
@@ -27,6 +27,7 @@ pub struct Curses {
     top_line: i32,
     foreground: i16,
     background: i16,
+    transcript_file: Option<File>
 }
 
 impl Curses {
@@ -61,6 +62,7 @@ impl Curses {
             top_line,
             foreground: COLOR_GREEN,
             background: COLOR_BLACK,
+            transcript_file: None,
         }
     }
 
@@ -303,8 +305,30 @@ impl Interpreter for Curses {
         addch(self.current_window_mut(), '\n' as u16);
         // self.current_window_mut().addch('\n');
         self.current_window_mut().refresh();
+
+        if self.selected_window == 0 && self.output_streams & 2 == 2 {
+            self.transcript_file.as_mut().unwrap().write(&['\n' as u8]);
+        }
     }
+
     fn output_stream(&mut self, stream: i16, _table: usize) {
+        if stream == 2 {
+            match &mut self.transcript_file {
+                Some(f) => {},
+                None => {
+                    self.transcript_file = Some(fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .open("transcript.txt").unwrap()); }
+            }
+        } else if stream == -2 {
+            match &mut self.transcript_file {
+                Some(f) => {
+                    f.flush();
+                },
+                None => {}
+            }
+        }
         if stream < 0 {
             let bits = stream.abs() - 1;
             let mask = !((1 as u8) << bits);
@@ -330,14 +354,23 @@ impl Interpreter for Curses {
                     if self.columns as i32 - position.1 < s.len() as i32 {
                         addch(self.current_window_mut(), '\n' as u16);
                         addstr(self.current_window_mut(), s);
+                        if self.selected_window == 0 && self.output_streams & 2 == 2 {
+                            self.transcript_file.as_mut().unwrap().write_fmt(format_args!("\n{}", s));
+                        }
                         // self.current_window_mut().addstr(s);
                     } else {
                         addstr(self.current_window_mut(), s);
+                        if self.selected_window == 0 && self.output_streams & 2 == 2 {
+                            self.transcript_file.as_mut().unwrap().write_all(s.as_bytes());
+                        }
                         // self.current_window_mut().addstr(s);
                     }
                 }
             } else {
                 addstr(self.current_window_mut(), text.as_str());
+                if self.selected_window == 0 && self.output_streams & 2 == 2 {
+                    self.transcript_file.as_mut().unwrap().write_all(text.as_bytes());
+                }
                 // self.current_window_mut().addstr(text);
             }
             self.current_window_mut().refresh();
@@ -436,6 +469,13 @@ impl Interpreter for Curses {
         }
 
         pancurses::curs_set(0);
+        if self.selected_window == 0 && self.output_streams & 2 == 2 {
+            let mut d = vec![];
+            for c in input.clone() {
+                d.push(c as u8);
+            }
+            self.transcript_file.as_mut().unwrap().write_all(&d).unwrap();
+        }
         (input, false)
     }
 

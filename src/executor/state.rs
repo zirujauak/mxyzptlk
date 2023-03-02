@@ -490,13 +490,22 @@ impl State {
         self.memory_map[address] = hb;
         self.memory_map[address + 1] = lb;
 
-        debug!("memory: set ${:05x} to #{:04x}", address, value)
+        trace!("memory: set ${:05x} to #{:04x}", address, value)
     }
 
     pub fn set_byte(&mut self, address: usize, value: u8) {
         self.memory_map[address] = value;
 
-        debug!("memory: set ${:05x} to #{:02x}", address, value)
+        trace!("memory: set ${:05x} to #{:02x}", address, value);
+        if address == 0x01 && value & 1 == 1 && self.output_stream & 2 == 0 {
+            trace!("enabling output stream 2");
+            self.output_stream = self.output_stream | 2;
+            self.interpreter.output_stream(2, 0);
+        } else if address == 0x01 && value & 1 == 0 && self.output_stream & 2 == 2 {
+            trace!("disabling output stream 2");
+            self.output_stream = self.output_stream & 0xFD;
+            self.interpreter.output_stream(-2, 0);
+        }
     }
 
     pub fn checksum(&self) -> u16 {
@@ -633,7 +642,14 @@ impl Interpreter for State {
             self.output_stream = self.output_stream | mask;
         }
 
-        if stream == -3 {
+        if stream == 2 {
+            trace!("Flags1: {:#02x}", self.byte_value(1));
+            self.set_byte(0x01, self.byte_value(0x01) | 0x1);
+        } else if stream == -2 {
+            trace!("Flags1: {:#02x}", self.byte_value(1));
+            self.set_byte(0x01, self.byte_value(0x01) & 0xFE);
+        }
+        else if stream == -3 {
             let s = self.stream_3.pop();
             match s {
                 Some(mut st) => {
@@ -655,7 +671,7 @@ impl Interpreter for State {
                 self.output_stream = self.output_stream & 0xB;
             }
         }
-        if stream == 3 {
+        else if stream == 3 {
             trace!("Output stream 3 opened @ {:#06x}", table);
             let s = OutputStreamTable::new(table);
             self.output_stream = self.output_stream | 4;
