@@ -7,8 +7,8 @@ use std::{
 };
 
 use pancurses::{
-    Attribute, Input, Window, COLOR_BLACK, COLOR_BLUE, COLOR_CYAN, COLOR_GREEN,
-    COLOR_MAGENTA, COLOR_RED, COLOR_WHITE, COLOR_YELLOW,
+    Attribute, Input, Window, COLOR_BLACK, COLOR_BLUE, COLOR_CYAN, COLOR_GREEN, COLOR_MAGENTA,
+    COLOR_RED, COLOR_WHITE, COLOR_YELLOW,
 };
 
 use super::{Interpreter, Spec};
@@ -28,7 +28,9 @@ pub struct Curses {
     top_line: i32,
     foreground: i16,
     background: i16,
-    transcript_file: Option<File>
+    transcript_file: Option<File>,
+    command_file: Option<File>,
+    lines_since_input: i32,
 }
 
 impl Curses {
@@ -65,6 +67,8 @@ impl Curses {
             foreground: COLOR_GREEN,
             background: COLOR_BLACK,
             transcript_file: None,
+            command_file: None,
+            lines_since_input: 0,
         }
     }
 
@@ -77,6 +81,7 @@ impl Curses {
 
     fn getch(&mut self) -> Option<(char, char)> {
         let gc = self.current_window_mut().getch();
+        self.lines_since_input = 0;
         match gc {
             Some(input) => {
                 match input {
@@ -304,34 +309,63 @@ impl Interpreter for Curses {
         todo!()
     }
     fn new_line(&mut self) {
+        self.pause_output();
         //let win = self.current_window_mut();
         addch(self.current_window_mut(), '\n' as u16);
+        self.lines_since_input = self.lines_since_input + 1;
         // self.current_window_mut().addch('\n');
         self.current_window_mut().refresh();
 
         if self.selected_window == 0 && self.output_streams & 2 == 2 {
-            self.transcript_file.as_mut().unwrap().write(&['\n' as u8]).unwrap();
+            self.transcript_file
+                .as_mut()
+                .unwrap()
+                .write(&['\n' as u8])
+                .unwrap();
         }
     }
 
     fn output_stream(&mut self, stream: i16, _table: usize) {
         if stream == 2 {
             match &mut self.transcript_file {
-                Some(_) => {},
+                Some(_) => {}
                 None => {
-                    self.transcript_file = Some(fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .open(format!("{}.txt", self.name)).unwrap()); }
+                    self.transcript_file = Some(
+                        fs::OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .open(self.transcript_filename())
+                            .unwrap(),
+                    );
+                }
             }
         } else if stream == -2 {
             match &mut self.transcript_file {
                 Some(f) => {
                     f.flush().unwrap();
-                },
+                }
+                None => {}
+            }
+        } else if stream == 4 {
+            match &mut self.command_file {
+                Some(_) => {}
+                None => {
+                    self.command_file = Some(
+                        fs::OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .open(self.command_filename())
+                            .unwrap(),
+                    );
+                }
+            }
+        } else if stream == -4 {
+            match &mut self.command_file {
+                Some(f) => f.flush().unwrap(),
                 None => {}
             }
         }
+
         if stream < 0 {
             let bits = stream.abs() - 1;
             let mask = !((1 as u8) << bits);
@@ -356,15 +390,25 @@ impl Interpreter for Curses {
                     );
                     if self.columns as i32 - position.1 < s.len() as i32 {
                         addch(self.current_window_mut(), '\n' as u16);
+                        self.lines_since_input = self.lines_since_input + 1;
+                        self.pause_output();
                         addstr(self.current_window_mut(), s);
                         if self.selected_window == 0 && self.output_streams & 2 == 2 {
-                            self.transcript_file.as_mut().unwrap().write_fmt(format_args!("\n{}", s)).unwrap();
+                            self.transcript_file
+                                .as_mut()
+                                .unwrap()
+                                .write_fmt(format_args!("\n{}", s))
+                                .unwrap();
                         }
                         // self.current_window_mut().addstr(s);
                     } else {
                         addstr(self.current_window_mut(), s);
                         if self.selected_window == 0 && self.output_streams & 2 == 2 {
-                            self.transcript_file.as_mut().unwrap().write_all(s.as_bytes()).unwrap();
+                            self.transcript_file
+                                .as_mut()
+                                .unwrap()
+                                .write_all(s.as_bytes())
+                                .unwrap();
                         }
                         // self.current_window_mut().addstr(s);
                     }
@@ -372,7 +416,11 @@ impl Interpreter for Curses {
             } else {
                 addstr(self.current_window_mut(), text.as_str());
                 if self.selected_window == 0 && self.output_streams & 2 == 2 {
-                    self.transcript_file.as_mut().unwrap().write_all(text.as_bytes()).unwrap();
+                    self.transcript_file
+                        .as_mut()
+                        .unwrap()
+                        .write_all(text.as_bytes())
+                        .unwrap();
                 }
                 // self.current_window_mut().addstr(text);
             }
@@ -477,7 +525,11 @@ impl Interpreter for Curses {
             for c in input.clone() {
                 d.push(c as u8);
             }
-            self.transcript_file.as_mut().unwrap().write_all(&d).unwrap();
+            self.transcript_file
+                .as_mut()
+                .unwrap()
+                .write_all(&d)
+                .unwrap();
         }
         (input, false)
     }
@@ -650,7 +702,7 @@ impl Interpreter for Curses {
     }
 
     fn save(&mut self, data: &Vec<u8>) {
-        let default = Curses::save_filename(&self.name);
+        let default = self.save_filename();
         self.print("Save to: ".to_string());
         let filename = self
             .read(64, 0, &default.chars().collect(), true)
@@ -672,7 +724,7 @@ impl Interpreter for Curses {
     }
 
     fn restore(&mut self) -> Vec<u8> {
-        let default = Curses::restore_filename(&self.name);
+        let default = self.restore_filename();
         self.print("Restore from: ".to_string());
         let filename = self
             .read(64, 0, &default.chars().collect(), true)
@@ -698,6 +750,28 @@ const COLOR_TABLE: [i16; 8] = [
 ];
 
 impl Curses {
+    fn pause_output(&mut self) {
+        if self.selected_window == 0 {
+            let max_lines = self.lines
+                - match &self.status_window {
+                    Some(_) => 1,
+                    _ => 0,
+                };
+            trace!("Lines: {} / {}", self.lines_since_input, max_lines);
+            if self.lines_since_input >= max_lines {
+                trace!("MORE!");
+                self.window_0.addstr("[MORE]");
+                self.window_0.refresh();
+                self.window_0.nodelay(false);
+                self.getch();
+                self.window_0.nodelay(true);
+                self.window_0.mv(self.lines - 1, 0);
+                self.window_0.addstr("      ");
+                self.window_0.mv(self.lines - 1, 0);
+                self.window_0.refresh();
+            }
+        }
+    }
     fn color_pair(fg: i16, bg: i16) -> i16 {
         (fg * 8) + bg
     }
@@ -764,31 +838,43 @@ impl Curses {
         }
     }
 
-    fn save_filename(name: &String) -> String {
+    fn next_filename(&self, extension: &str) -> String {
         let mut index = 0;
-        let mut f = true;
 
-        while f {
+        loop {
             index = index + 1;
-            let name = format!("{}-{:02}.ifzs", name, index);
-            f = Path::new(&name).exists();
-            trace!("Checking {}: {}", name, f);
+            let name = format!("{}-{:02}{}", self.name, index, extension);
+            if !Path::new(&name).exists() {
+                return name;
+            }
         }
-
-        return format!("{}-{:02}.ifzs", name, index);
     }
 
-    fn restore_filename(name: &String) -> String {
-        let mut index = 0;
-        let mut f = true;
+    fn last_filename(&self, extension: &str) -> String {
+        let mut index = 1;
 
-        while f {
+        loop {
+            let name = format!("{}-{:02}{}", self.name, index, extension);
+            if !Path::new(&name).exists() {
+                return format!("{}-{:02}{}", self.name, index-1, extension);
+            }
             index = index + 1;
-            let name = format!("{}-{:02}.ifzs", name, index);
-            f = Path::new(&name).exists();
-            trace!("Checking {}: {}", name, f);
         }
+    }
 
-        return format!("{}-{:02}.ifzs", name, index - 1);
+    fn save_filename(&self) -> String {
+        self.next_filename(&".ifzs")
+    }
+
+    fn restore_filename(&self) -> String {
+        self.last_filename(&".ifzs")
+    }
+
+    fn transcript_filename(&self) -> String {
+        self.next_filename(&"-transcript.txt")
+    }
+
+    fn command_filename(&self) -> String {
+        self.next_filename(&"-command.txt")
     }
 }
