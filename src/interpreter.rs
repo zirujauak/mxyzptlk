@@ -12,8 +12,14 @@ pub trait Interpreter {
     fn output_stream(&mut self, stream: i16, table: usize);
     fn print(&mut self, text: String);
     fn print_table(&mut self, text: String, width: u16, height: u16, skip: u16);
-    fn read(&mut self, length: u8, time: u16, existing_input: &Vec<char>, redraw: bool) -> (Vec<char>, bool);
-    fn read_char(&mut self, time: u16) -> char;
+    fn read(
+        &mut self,
+        length: u8,
+        time: u16,
+        existing_input: &Vec<char>,
+        redraw: bool,
+    ) -> (Vec<char>, bool);
+    fn read_char(&mut self, time: u16) -> Input;
     fn set_colour(&mut self, foreground: u16, background: u16);
     fn set_cursor(&mut self, line: u16, column: u16);
     fn set_text_style(&mut self, style: u16);
@@ -25,6 +31,41 @@ pub trait Interpreter {
     fn restore(&mut self) -> Vec<u8>;
 }
 
+pub struct Input {
+    pub original_value: char,
+    pub zscii_value: char,
+    pub x: u16,
+    pub y: u16,
+}
+
+impl Input {
+    pub fn from_char(original_value: char, zscii_value: u8) -> Option<Input> {
+        Some(Input {
+            original_value,
+            zscii_value: zscii_value as char,
+            x: 0,
+            y: 0,
+        })
+    }
+
+    pub fn from_u8(original_value: u8, zscii_value: u8) -> Option<Input> {
+        Some(Input {
+            original_value: original_value as char,
+            zscii_value: zscii_value as char,
+            x: 0,
+            y: 0,
+        })
+    }
+
+    pub fn from_mouse(value: u8, x: u16, y: u16) -> Option<Input> {
+        Some(Input {
+            original_value: value as char,
+            zscii_value: value as char,
+            x,
+            y,
+        })
+    }
+}
 pub struct Spec {
     pub set_flags: Vec<Flag>,
     pub clear_flags: Vec<Flag>,

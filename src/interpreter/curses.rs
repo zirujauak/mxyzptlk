@@ -7,12 +7,16 @@ use std::{
 };
 
 use pancurses::{
-    Attribute, Input, Window, COLOR_BLACK, COLOR_BLUE, COLOR_CYAN, COLOR_GREEN, COLOR_MAGENTA,
-    COLOR_RED, COLOR_WHITE, COLOR_YELLOW,
+    Attribute, Input, Window, ALL_MOUSE_EVENTS, BUTTON1_CLICKED, BUTTON1_DOUBLE_CLICKED,
+    COLOR_BLACK, COLOR_BLUE, COLOR_CYAN, COLOR_GREEN, COLOR_MAGENTA, COLOR_RED, COLOR_WHITE,
+    COLOR_YELLOW, REPORT_MOUSE_POSITION,
 };
 
 use super::{Interpreter, Spec};
-use crate::executor::{header::Flag, text};
+use crate::executor::{
+    header::{self, Flag},
+    text,
+};
 
 pub struct Curses {
     name: String,
@@ -36,6 +40,7 @@ pub struct Curses {
 impl Curses {
     pub fn new(version: u8, name: String) -> Curses {
         let window_0 = pancurses::initscr();
+        window_0.keypad(true);
         let lines = window_0.get_max_y();
         let columns = window_0.get_max_x();
         let top_line = if version < 4 { 1 } else { 0 };
@@ -79,12 +84,43 @@ impl Curses {
         }
     }
 
-    fn getch(&mut self) -> Option<(char, char)> {
+    fn getch(&mut self) -> Option<super::Input> {
         let gc = self.current_window_mut().getch();
+        pancurses::mousemask(ALL_MOUSE_EVENTS, None);
         self.lines_since_input = 0;
         match gc {
             Some(input) => {
+                trace!("input: {:?}", input);
                 match input {
+                    Input::KeyUp => super::Input::from_u8(129, 129),
+                    Input::KeyDown => super::Input::from_u8(130, 130),
+                    Input::KeyLeft => super::Input::from_u8(131, 131),
+                    Input::KeyRight => super::Input::from_u8(132, 132),
+                    Input::KeyF1 => super::Input::from_u8(133, 133),
+                    Input::KeyF2 => super::Input::from_u8(134, 134),
+                    Input::KeyF3 => super::Input::from_u8(135, 135),
+                    Input::KeyF4 => super::Input::from_u8(136, 136),
+                    Input::KeyF5 => super::Input::from_u8(137, 137),
+                    Input::KeyF6 => super::Input::from_u8(138, 138),
+                    Input::KeyF7 => super::Input::from_u8(139, 139),
+                    Input::KeyF8 => super::Input::from_u8(140, 140),
+                    Input::KeyF9 => super::Input::from_u8(141, 141),
+                    Input::KeyF10 => super::Input::from_u8(142, 142),
+                    Input::KeyF11 => super::Input::from_u8(143, 143),
+                    Input::KeyF12 => super::Input::from_u8(144, 144),
+                    Input::KeyMouse => {
+                        let e = pancurses::getmouse().unwrap();
+                        trace!("{:?}", e);
+                        match e.bstate {
+                            BUTTON1_CLICKED => {
+                                super::Input::from_mouse(254, e.x as u16, e.y as u16)
+                            }
+                            BUTTON1_DOUBLE_CLICKED => {
+                                super::Input::from_mouse(253, e.x as u16, e.y as u16)
+                            }
+                            _ => None,
+                        }
+                    }
                     Input::Character(c) => match c as u16 as u32 {
                         // Cursor keys
                         0x1b => {
@@ -93,94 +129,97 @@ impl Curses {
                             let c2 = self.current_window_mut().getch().unwrap();
                             match (c1, c2) {
                                 (Input::Character('['), Input::Character('A')) => {
-                                    Some((129 as char, 129 as char))
+                                    super::Input::from_u8(129, 129)
                                 }
                                 (Input::Character('['), Input::Character('B')) => {
-                                    Some((130 as char, 130 as char))
+                                    super::Input::from_u8(130, 130)
                                 }
                                 (Input::Character('['), Input::Character('D')) => {
-                                    Some((131 as char, 131 as char))
+                                    super::Input::from_u8(131, 131)
                                 }
                                 (Input::Character('['), Input::Character('C')) => {
-                                    Some((132 as char, 132 as char))
+                                    super::Input::from_u8(132, 132)
                                 }
                                 _ => None,
                             }
                         }
-                        0x7f => Some((c, 0x08 as char)),
-                        0x0a => Some((c, 0x0d as char)),
-                        0xe4 => Some((c, 155 as char)),
-                        0xf6 => Some((c, 156 as char)),
-                        0xfc => Some((c, 157 as char)),
-                        0xc4 => Some((c, 158 as char)),
-                        0xd6 => Some((c, 159 as char)),
-                        0xdc => Some((c, 160 as char)),
-                        0xdf => Some((c, 161 as char)),
-                        0xbb => Some((c, 162 as char)),
-                        0xab => Some((c, 163 as char)),
-                        0xeb => Some((c, 164 as char)),
-                        0xef => Some((c, 165 as char)),
-                        0xff => Some((c, 166 as char)),
-                        0xcb => Some((c, 167 as char)),
-                        0xcf => Some((c, 168 as char)),
-                        0xe1 => Some((c, 169 as char)),
-                        0xe9 => Some((c, 170 as char)),
-                        0xed => Some((c, 171 as char)),
-                        0xf3 => Some((c, 172 as char)),
-                        0xfa => Some((c, 173 as char)),
-                        0xfd => Some((c, 174 as char)),
-                        0xc1 => Some((c, 175 as char)),
-                        0xc9 => Some((c, 176 as char)),
-                        0xcd => Some((c, 177 as char)),
-                        0xd3 => Some((c, 178 as char)),
-                        0xda => Some((c, 179 as char)),
-                        0xdd => Some((c, 180 as char)),
-                        0xe0 => Some((c, 181 as char)),
-                        0xe8 => Some((c, 182 as char)),
-                        0xec => Some((c, 183 as char)),
-                        0xf2 => Some((c, 184 as char)),
-                        0xf9 => Some((c, 185 as char)),
-                        0xc0 => Some((c, 186 as char)),
-                        0xc8 => Some((c, 187 as char)),
-                        0xcc => Some((c, 188 as char)),
-                        0xd2 => Some((c, 189 as char)),
-                        0xd9 => Some((c, 190 as char)),
-                        0xe2 => Some((c, 191 as char)),
-                        0xea => Some((c, 192 as char)),
-                        0xee => Some((c, 193 as char)),
-                        0xf4 => Some((c, 194 as char)),
-                        0xfb => Some((c, 195 as char)),
-                        0xc2 => Some((c, 196 as char)),
-                        0xca => Some((c, 197 as char)),
-                        0xce => Some((c, 198 as char)),
-                        0xd4 => Some((c, 199 as char)),
-                        0xdb => Some((c, 200 as char)),
-                        0xe5 => Some((c, 201 as char)),
-                        0xc5 => Some((c, 202 as char)),
-                        0xf8 => Some((c, 203 as char)),
-                        0xd8 => Some((c, 204 as char)),
-                        0xe3 => Some((c, 205 as char)),
-                        0xf1 => Some((c, 206 as char)),
-                        0xf5 => Some((c, 207 as char)),
-                        0xc3 => Some((c, 208 as char)),
-                        0xd1 => Some((c, 209 as char)),
-                        0xd5 => Some((c, 210 as char)),
-                        0xe6 => Some((c, 211 as char)),
-                        0xc6 => Some((c, 212 as char)),
-                        0xe7 => Some((c, 213 as char)),
-                        0xc7 => Some((c, 214 as char)),
-                        0xfe => Some((c, 215 as char)),
-                        0xf0 => Some((c, 216 as char)),
-                        0xde => Some((c, 217 as char)),
-                        0xd0 => Some((c, 218 as char)),
-                        0xa3 => Some((c, 219 as char)),
-                        0x153 => Some((c, 220 as char)),
-                        0x152 => Some((c, 221 as char)),
-                        0xa1 => Some((c, 222 as char)),
-                        0xbf => Some((c, 223 as char)),
-                        _ => Some((c, c)),
+                        0x7f => super::Input::from_char(c, 0x08),
+                        0x0a => super::Input::from_char(c, 0x0d),
+                        0xe4 => super::Input::from_char(c, 155),
+                        0xf6 => super::Input::from_char(c, 156),
+                        0xfc => super::Input::from_char(c, 157),
+                        0xc4 => super::Input::from_char(c, 158),
+                        0xd6 => super::Input::from_char(c, 159),
+                        0xdc => super::Input::from_char(c, 160),
+                        0xdf => super::Input::from_char(c, 161),
+                        0xbb => super::Input::from_char(c, 162),
+                        0xab => super::Input::from_char(c, 163),
+                        0xeb => super::Input::from_char(c, 164),
+                        0xef => super::Input::from_char(c, 165),
+                        0xff => super::Input::from_char(c, 166),
+                        0xcb => super::Input::from_char(c, 167),
+                        0xcf => super::Input::from_char(c, 168),
+                        0xe1 => super::Input::from_char(c, 169),
+                        0xe9 => super::Input::from_char(c, 170),
+                        0xed => super::Input::from_char(c, 171),
+                        0xf3 => super::Input::from_char(c, 172),
+                        0xfa => super::Input::from_char(c, 173),
+                        0xfd => super::Input::from_char(c, 174),
+                        0xc1 => super::Input::from_char(c, 175),
+                        0xc9 => super::Input::from_char(c, 176),
+                        0xcd => super::Input::from_char(c, 177),
+                        0xd3 => super::Input::from_char(c, 178),
+                        0xda => super::Input::from_char(c, 179),
+                        0xdd => super::Input::from_char(c, 180),
+                        0xe0 => super::Input::from_char(c, 181),
+                        0xe8 => super::Input::from_char(c, 182),
+                        0xec => super::Input::from_char(c, 183),
+                        0xf2 => super::Input::from_char(c, 184),
+                        0xf9 => super::Input::from_char(c, 185),
+                        0xc0 => super::Input::from_char(c, 186),
+                        0xc8 => super::Input::from_char(c, 187),
+                        0xcc => super::Input::from_char(c, 188),
+                        0xd2 => super::Input::from_char(c, 189),
+                        0xd9 => super::Input::from_char(c, 190),
+                        0xe2 => super::Input::from_char(c, 191),
+                        0xea => super::Input::from_char(c, 192),
+                        0xee => super::Input::from_char(c, 193),
+                        0xf4 => super::Input::from_char(c, 194),
+                        0xfb => super::Input::from_char(c, 195),
+                        0xc2 => super::Input::from_char(c, 196),
+                        0xca => super::Input::from_char(c, 197),
+                        0xce => super::Input::from_char(c, 198),
+                        0xd4 => super::Input::from_char(c, 199),
+                        0xdb => super::Input::from_char(c, 200),
+                        0xe5 => super::Input::from_char(c, 201),
+                        0xc5 => super::Input::from_char(c, 202),
+                        0xf8 => super::Input::from_char(c, 203),
+                        0xd8 => super::Input::from_char(c, 204),
+                        0xe3 => super::Input::from_char(c, 205),
+                        0xf1 => super::Input::from_char(c, 206),
+                        0xf5 => super::Input::from_char(c, 207),
+                        0xc3 => super::Input::from_char(c, 208),
+                        0xd1 => super::Input::from_char(c, 209),
+                        0xd5 => super::Input::from_char(c, 210),
+                        0xe6 => super::Input::from_char(c, 211),
+                        0xc6 => super::Input::from_char(c, 212),
+                        0xe7 => super::Input::from_char(c, 213),
+                        0xc7 => super::Input::from_char(c, 214),
+                        0xfe => super::Input::from_char(c, 215),
+                        0xf0 => super::Input::from_char(c, 216),
+                        0xde => super::Input::from_char(c, 217),
+                        0xd0 => super::Input::from_char(c, 218),
+                        0xa3 => super::Input::from_char(c, 219),
+                        0x153 => super::Input::from_char(c, 220),
+                        0x152 => super::Input::from_char(c, 221),
+                        0xa1 => super::Input::from_char(c, 222),
+                        0xbf => super::Input::from_char(c, 223),
+                        _ => super::Input::from_char(c, c as u8),
                     },
-                    _ => None,
+                    _ => {
+                        trace!("getch: {:?}", input);
+                        None
+                    }
                 }
             }
             _ => None,
@@ -478,12 +517,12 @@ impl Interpreter for Curses {
             {
                 return (input, true);
             } else {
-                let c = self.getch();
-                match c {
-                    Some(ch) => {
-                        match ch {
+                let i = self.getch();
+                match i {
+                    Some(inp) => {
+                        match inp.original_value {
                             // Backspace
-                            ('\u{7f}', _) => {
+                            '\u{7f}' => {
                                 if input.len() > 0 {
                                     // Remove from the input array
                                     input.pop();
@@ -497,14 +536,16 @@ impl Interpreter for Curses {
                                 }
                             }
                             //
-                            (_, _) => {
-                                if input.len() < length as usize && text::valid_input(ch.1) {
-                                    input.push(ch.1);
-                                    addch(&mut self.window_0, ch.1 as u16);
+                            _ => {
+                                if input.len() < length as usize
+                                    && text::valid_input(inp.zscii_value)
+                                {
+                                    input.push(inp.zscii_value);
+                                    addch(&mut self.window_0, inp.original_value as u16);
                                     self.window_0.refresh();
                                 }
-                                if input.len() < length as usize && ch.0 == '\n' {
-                                    input.push(ch.0);
+                                if input.len() < length as usize && inp.original_value == '\n' {
+                                    input.push(inp.original_value);
                                     done = true;
                                     addch(&mut self.window_0, '\n' as u16);
                                 }
@@ -520,6 +561,8 @@ impl Interpreter for Curses {
         }
 
         pancurses::curs_set(0);
+
+        // Transcripting
         if self.selected_window == 0 && self.output_streams & 2 == 2 {
             let mut d = vec![];
             for c in input.clone() {
@@ -531,10 +574,20 @@ impl Interpreter for Curses {
                 .write_all(&d)
                 .unwrap();
         }
+
+        // Stream 4
+        if self.output_streams & 0x8 == 0x8 {
+            let mut d = vec![];
+            for c in input.clone() {
+                d.push(c as u8);
+            }
+            self.command_file.as_mut().unwrap().write_all(&d).unwrap();
+            self.command_file.as_mut().unwrap().flush().unwrap();
+        }
         (input, false)
     }
 
-    fn read_char(&mut self, time: u16) -> char {
+    fn read_char(&mut self, time: u16) -> super::Input {
         pancurses::noecho();
         pancurses::curs_set(1);
 
@@ -550,35 +603,59 @@ impl Interpreter for Curses {
             let delay = time::Duration::from_millis(10);
             // Don't block on input
             self.current_window_mut().nodelay(true);
-            let mut result = 0 as char;
+            let mut result = None;
             // While no (acceptable) keypress and 'time' seconds haven't elapsed
-            while result == 0 as char
-                && SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()
-                    < end
+            while match result {
+                Some(_) => false,
+                None => true,
+            } && SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                < end
             {
-                let ch = self.getch();
-                result = match ch {
-                    Some(c) => c.1,
-                    _ => 0 as char,
-                };
+                result = self.getch();
 
                 // Brief sleep
                 thread::sleep(delay);
             }
 
+            let result = match result {
+                Some(r) => r,
+                None => super::Input::from_u8(0, 0).unwrap(),
+            };
+
             // Re-enable block on input
             pancurses::curs_set(0);
+
+            // Send character to stream 4, if selected
+            if self.output_streams & 0x8 == 0x8 {
+                self.command_file
+                    .as_mut()
+                    .unwrap()
+                    .write(format!("[{:03}]\n", result.zscii_value).as_bytes())
+                    .unwrap();
+                self.command_file.as_mut().unwrap().flush().unwrap();
+            }
+
             result
         } else {
             self.current_window_mut().nodelay(false);
             let result = match self.getch() {
-                Some(ch) => ch.1,
-                None => ' ',
+                Some(r) => r,
+                None => super::Input::from_u8(0, 0).unwrap(),
             };
             pancurses::curs_set(0);
+
+            if self.output_streams & 0x8 == 0x8 {
+                self.command_file
+                    .as_mut()
+                    .unwrap()
+                    .write(format!("[{:03}]\n", result.zscii_value).as_bytes())
+                    .unwrap();
+                self.command_file.as_mut().unwrap().flush().unwrap();
+            }
+
             result
         }
     }
@@ -794,7 +871,6 @@ impl Curses {
                 Flag::GameWantsSoundEffects,
                 Flag::GameWantsPictures,
                 Flag::GameWantsMenus,
-                Flag::GameWantsMouse,
                 Flag::PicturesAvailable,
                 Flag::SoundEffectsAvailable,
             ],
@@ -856,7 +932,7 @@ impl Curses {
         loop {
             let name = format!("{}-{:02}{}", self.name, index, extension);
             if !Path::new(&name).exists() {
-                return format!("{}-{:02}{}", self.name, index-1, extension);
+                return format!("{}-{:02}{}", self.name, index - 1, extension);
             }
             index = index + 1;
         }

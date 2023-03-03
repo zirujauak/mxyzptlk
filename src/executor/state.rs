@@ -4,6 +4,7 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::executor::header;
 
+use crate::interpreter::Input;
 use crate::interpreter::Interpreter;
 use crate::interpreter::Spec;
 use crate::quetzal::Quetzal;
@@ -702,8 +703,17 @@ impl Interpreter for State {
     ) -> (Vec<char>, bool) {
         self.interpreter.read(length, time, existing_input, redraw)
     }
-    fn read_char(&mut self, time: u16) -> char {
-        self.interpreter.read_char(time)
+    fn read_char(&mut self, time: u16) -> Input {
+        let input = self.interpreter.read_char(time);
+        match input.zscii_value as u8 {
+            253 | 254  => {
+                header::set_extension_word(self, 0, input.x);
+                header::set_extension_word(self, 1, input.y);
+            },
+            _ => {}
+        }
+
+        input
     }
     fn set_colour(&mut self, foreground: u16, background: u16) {
         self.interpreter.set_colour(foreground, background)

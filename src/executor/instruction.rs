@@ -1894,7 +1894,7 @@ impl Instruction {
         if self.operands.len() == 3 && operands[1] > 0 && operands[2] > 0 {
             let time = operands[1];
             let routine = operands[2];
-            let c = state.read_char(time / 10) as u16;
+            let c = state.read_char(time / 10).zscii_value as u16;
             if c == 0 {
                 return state.call_read_char_interrupt(routine, self.address);
                 // Set state.read_char_interrupt = true
@@ -1902,7 +1902,7 @@ impl Instruction {
             }
             self.store_result(state, c);
         } else {
-            let c = state.read_char(0) as u16;
+            let c = state.read_char(0).zscii_value as u16;
             self.store_result(state, c);
         }
 
