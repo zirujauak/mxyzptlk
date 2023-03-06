@@ -153,7 +153,7 @@ impl Frame {
 
 struct OutputStreamTable {
     address: usize,
-    data: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 impl OutputStreamTable {
@@ -166,7 +166,9 @@ impl OutputStreamTable {
 
     fn write(&mut self, text: String) {
         for c in text.chars() {
-            self.data.push(c as u8);
+            if c as u8 != 0 {
+                self.data.push(c as u8);
+            }
         }
     }
 
@@ -245,14 +247,18 @@ impl State {
         self.set_byte(0x1E, spec.interpreter_number);
         self.set_byte(0x1F, spec.interpreter_version);
 
-        // Screen size
-        self.set_byte(0x20, spec.screen_lines);
-        self.set_byte(0x21, spec.screen_columns);
+        if self.version < 5 {
+            // Screen size
+            self.set_byte(0x20, spec.screen_lines);
+            self.set_byte(0x21, spec.screen_columns);
+        }
 
         if self.version >= 5 {
             // Character sizing
-            self.set_byte(0x22, spec.column_units);
-            self.set_byte(0x23, spec.line_units);
+            self.set_word(0x22, spec.screen_columns as u16);
+            self.set_word(0x24, spec.screen_lines as u16);
+            self.set_byte(0x26, spec.column_units);
+            self.set_byte(0x27, spec.line_units);
 
             // Default colours
             self.set_byte(0x2C, spec.background_color);
@@ -647,8 +653,7 @@ impl Interpreter for State {
         } else if stream == -2 {
             trace!("Flags1: {:#02x}", self.byte_value(1));
             self.set_byte(0x01, self.byte_value(0x01) & 0xFE);
-        }
-        else if stream == -3 {
+        } else if stream == -3 {
             let s = self.stream_3.pop();
             match s {
                 Some(mut st) => {
@@ -669,8 +674,7 @@ impl Interpreter for State {
             } else {
                 self.output_stream = self.output_stream & 0xB;
             }
-        }
-        else if stream == 3 {
+        } else if stream == 3 {
             trace!("Output stream 3 opened @ {:#06x}", table);
             let s = OutputStreamTable::new(table);
             self.output_stream = self.output_stream | 4;
@@ -683,13 +687,19 @@ impl Interpreter for State {
     fn print(&mut self, text: String) {
         trace!(target: "app::transcript", "[{:#04b}] {}", self.output_stream, text);
         if self.output_stream & 0x4 == 0x4 {
-            trace!("Printing to stream 3");
+            trace!(
+                "Printing to stream 3 {:?} @ {}: {}",
+                text.as_bytes(),
+                self.stream_3_mut().data.len(),
+                text
+            );
             self.stream_3_mut().write(text);
         } else {
             self.interpreter.print(text);
             self.print_in_interrupt()
         }
     }
+
     fn print_table(&mut self, text: String, width: u16, height: u16, skip: u16) {
         self.interpreter.print_table(text, width, height, skip);
         self.print_in_interrupt()
@@ -706,10 +716,10 @@ impl Interpreter for State {
     fn read_char(&mut self, time: u16) -> Input {
         let input = self.interpreter.read_char(time);
         match input.zscii_value as u8 {
-            253 | 254  => {
+            253 | 254 => {
                 header::set_extension_word(self, 0, input.x);
                 header::set_extension_word(self, 1, input.y);
-            },
+            }
             _ => {}
         }
 
@@ -720,6 +730,9 @@ impl Interpreter for State {
     }
     fn set_cursor(&mut self, line: u16, column: u16) {
         self.interpreter.set_cursor(line, column);
+    }
+    fn set_font(&mut self, font: u16) {
+        self.interpreter.set_font(font);
     }
     fn set_text_style(&mut self, style: u16) {
         self.interpreter.set_text_style(style);
