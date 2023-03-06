@@ -77,6 +77,12 @@ impl Curses {
         }
     }
 
+    fn current_window(&self) -> &Window {
+        match self.selected_window {
+            1 => &self.window_1,
+            _ => &self.window_0,
+        }
+    }
     fn current_window_mut(&mut self) -> &mut Window {
         match self.selected_window {
             1 => &mut self.window_1,
@@ -232,7 +238,7 @@ fn addch(window: &mut Window, c: u16) {
         155 => 0xe4,
         156 => 0xf6,
         157 => 0xfc,
-        158 => 0xc6,
+        158 => 0xc4,
         159 => 0xd6,
         160 => 0xdc,
         161 => 0xdf,
@@ -301,7 +307,17 @@ fn addch(window: &mut Window, c: u16) {
         _ => c,
     } as u16;
 
-    window.addstr(format!("{}", char::from_u32(ch as u32).unwrap()));
+    // This might break accented characters in macos, which were working correctly.
+    if ch > 0 {
+        for o in char::decode_utf16([ch]) {
+            match o {
+                Ok(x) => {
+                    window.addstr(x.to_string());
+                }
+                Err(_) => {}
+            }
+        }
+    }
 }
 
 fn addstr(window: &mut Window, s: &str) {
@@ -417,12 +433,17 @@ impl Interpreter for Curses {
     }
 
     fn print(&mut self, text: String) {
+        let (y, x) = self.current_window().get_cur_yx();
+        trace!("Cursor @ {},{}", y, x);
+
         if self.output_streams & 1 == 1 && self.output_streams & 4 == 0 {
             if self.buffering || self.selected_window == 1 {
+                trace!("Buffered printing");
                 // Split the text string on spaces
                 let frags = text.split_inclusive(&[' ']);
                 // Iterate over the fragments
                 for s in frags {
+                    trace!("Fragment: {}", s);
                     let position = (
                         self.current_window_mut().get_cur_y() + 1,
                         self.current_window_mut().get_cur_x() + 1,
@@ -453,6 +474,7 @@ impl Interpreter for Curses {
                     }
                 }
             } else {
+                trace!("Printing");
                 addstr(self.current_window_mut(), text.as_str());
                 if self.selected_window == 0 && self.output_streams & 2 == 2 {
                     self.transcript_file
@@ -463,8 +485,8 @@ impl Interpreter for Curses {
                 }
                 // self.current_window_mut().addstr(text);
             }
-            self.current_window_mut().refresh();
         };
+        self.current_window_mut().refresh();
     }
 
     fn print_table(&mut self, _text: String, _width: u16, _height: u16, _skip: u16) {
@@ -480,8 +502,8 @@ impl Interpreter for Curses {
     ) -> (Vec<char>, bool) {
         self.window_1.refresh();
         self.window_0.refresh();
-        self.window_0
-            .mv(self.window_0.get_cur_y(), self.window_0.get_cur_x());
+        // self.window_0
+        //     .mv(self.window_0.get_cur_y(), self.window_0.get_cur_x());
         pancurses::curs_set(1);
         pancurses::noecho();
 
@@ -690,10 +712,20 @@ impl Interpreter for Curses {
     }
 
     fn set_cursor(&mut self, line: u16, column: u16) {
-        self.current_window_mut()
-            .mv(line as i32 - 1, column as i32 - 1);
+        if self.selected_window == 1 {
+            trace!(
+                "Setting cursor in window {} to {},{}",
+                self.selected_window,
+                line,
+                column
+            );
+            self.current_window_mut()
+                .mv(line as i32 - 1, column as i32 - 1);
+            trace!("{:?}", self.current_window().get_cur_yx());
+        }
     }
 
+    fn set_font(&mut self, font: u16) {}
     fn set_text_style(&mut self, style: u16) {
         let win = &mut self.current_window_mut();
         if style == 0 {
@@ -753,6 +785,7 @@ impl Interpreter for Curses {
             // Unsplit
             self.window_1.resize(0, 0);
             self.window_0.setscrreg(self.top_line, self.lines - 1);
+            self.selected_window = 0;
         } else {
             if self.version < 4 {
                 // Resize and move window 0
@@ -765,6 +798,7 @@ impl Interpreter for Curses {
                 // Clear the upper window
                 self.window_1.erase();
             } else {
+                trace!("Splitting @ {}", lines);
                 // Resize and move window 0
                 self.window_0.setscrreg(lines as i32, self.lines - 1);
                 // Resize window 1
