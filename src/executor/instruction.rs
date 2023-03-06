@@ -2049,7 +2049,12 @@ impl Instruction {
             }
         } else {
             // Copy from end of table to avoid corruption
-            if len > 0 && dst < src + len as usize {
+            // SRC............END
+            //        DST.............END
+            //
+            //        SRC.............END
+            // DST............END
+            if len > 0 && dst > src && dst < src + len as usize {
                 for i in (0..len as usize).rev() {
                     let v = state.byte_value(src + i);
                     state.set_byte(dst + i, v)
@@ -2065,8 +2070,27 @@ impl Instruction {
         self.next_address
     }
 
-    fn print_table(&self, _state: &mut State) -> usize {
-        todo!()
+    fn print_table(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let address = operands[0] as usize;
+        let width = operands[1] as usize;
+        let height = operands[2] as usize;
+        let skip = if operands.len() == 4 {
+            operands[3] as usize
+        } else {
+            0
+        };
+
+        for i in 0..height as usize {
+            for j in 0..width as usize {
+                let idx = (i * (width + skip)) + j;
+                state.print(format!("{}", state.byte_value(address + idx) as char));
+            }
+            state.new_line();
+        }
+
+        self.next_address
     }
 
     fn check_arg_count(&self, state: &mut State) -> usize {

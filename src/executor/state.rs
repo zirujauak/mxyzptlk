@@ -271,7 +271,7 @@ impl State {
 
         // Specification
         self.set_byte(0x32, 1);
-        self.set_byte(0x33, 1);
+        self.set_byte(0x33, 0);
     }
 
     pub fn memory_map(&self) -> &Vec<u8> {
