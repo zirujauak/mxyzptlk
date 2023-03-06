@@ -22,6 +22,7 @@ pub trait Interpreter {
     fn read_char(&mut self, time: u16) -> Input;
     fn set_colour(&mut self, foreground: u16, background: u16);
     fn set_cursor(&mut self, line: u16, column: u16);
+    fn set_font(&mut self, font: u16);
     fn set_text_style(&mut self, style: u16);
     fn set_window(&mut self, window: u16);
     fn show_status(&mut self, location: &str, status: &str);
