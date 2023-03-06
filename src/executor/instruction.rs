@@ -272,6 +272,10 @@ impl Instruction {
                         0x05 | 0x06 => (address + 1, Some(state.byte_value(address))),
                         _ => (address, None),
                     },
+                    5 | 6 | 7 | 8 => match opcode.instruction {
+                        0x09 => (address + 1, Some(state.byte_value(address))),
+                        _ => (address, None),
+                    }
                     _ => (address, None),
                 },
                 OperandCount::_1OP => match opcode.instruction {
@@ -961,8 +965,11 @@ impl Instruction {
         self.next_address
     }
 
-    fn catch(&self, _state: &mut State) -> usize {
-        todo!()
+    fn catch(&self, state: &mut State) -> usize {
+        let frame_index = state.frames.len() as u16;
+
+        self.store_result(state, frame_index);
+        self.next_address
     }
 
     fn quit(&self, _state: &mut State) -> usize {
@@ -1538,8 +1545,13 @@ impl Instruction {
         self.next_address
     }
 
-    pub fn throw(&self, _state: &mut State) -> usize {
-        todo!()
+    pub fn throw(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        let value = operands[0];
+        let frame_index = operands[1];
+
+        state.throw(frame_index, value)
     }
 
     // VAR

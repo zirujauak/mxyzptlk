@@ -329,6 +329,14 @@ impl State {
         f.return_address
     }
 
+    pub fn throw(&mut self, frame_index: u16, result: u16) -> usize {
+        while self.frames.len() > frame_index as usize {
+            self.frames.pop();
+        }
+
+        self.return_fn(result)
+    }
+
     pub fn read_char_interrupt(&self) -> bool {
         self.current_frame().read_char_interrupt
     }
