@@ -900,8 +900,9 @@ impl Curses {
             _ => vec![],
         };
         let clear_flags = match version {
-            1 | 2 | 3 => vec![Flag::StatusLineNotAvailable, Flag::VariablePitchDefaultFont],
+            1 | 2 | 3 => vec![Flag::StatusLineNotAvailable, Flag::VariablePitchDefaultFont, Flag::Transcripting],
             4 | 5 | 6 | 7 | 8 => vec![
+                Flag::Transcripting,
                 Flag::GameWantsSoundEffects,
                 Flag::GameWantsPictures,
                 Flag::GameWantsMenus,

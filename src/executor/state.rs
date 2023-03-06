@@ -237,9 +237,11 @@ impl State {
     pub fn initialize(&mut self, spec: Spec) {
         // Set and clear flag bits
         for f in spec.set_flags {
+            trace!("Setting flag {:?}", f);
             header::set_flag(self, f)
         }
         for f in spec.clear_flags {
+            trace!("Clearing flag {:?}", f);
             header::clear_flag(self, f)
         }
 
@@ -495,6 +497,15 @@ impl State {
         self.memory_map[address] = hb;
         self.memory_map[address + 1] = lb;
 
+        if address == 0x10 && value & 1 == 1 && self.output_stream & 2 == 0 {
+            trace!("enabling output stream 2");
+            self.output_stream = self.output_stream | 2;
+            self.interpreter.output_stream(2, 0);
+        } else if address == 0x10 && value & 1 == 0 && self.output_stream & 2 == 2 {
+            trace!("disabling output stream 2");
+            self.output_stream = self.output_stream & 0xFD;
+            self.interpreter.output_stream(-2, 0);
+        }
         trace!("memory: set ${:05x} to #{:04x}", address, value)
     }
 
@@ -502,15 +513,6 @@ impl State {
         self.memory_map[address] = value;
 
         trace!("memory: set ${:05x} to #{:02x}", address, value);
-        if address == 0x01 && value & 1 == 1 && self.output_stream & 2 == 0 {
-            trace!("enabling output stream 2");
-            self.output_stream = self.output_stream | 2;
-            self.interpreter.output_stream(2, 0);
-        } else if address == 0x01 && value & 1 == 0 && self.output_stream & 2 == 2 {
-            trace!("disabling output stream 2");
-            self.output_stream = self.output_stream & 0xFD;
-            self.interpreter.output_stream(-2, 0);
-        }
     }
 
     pub fn checksum(&self) -> u16 {
