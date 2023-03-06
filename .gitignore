@@ -16,4 +16,4 @@ Cargo.lock
 *.z[0-9]
 *.ifzs
 *.log
-./*.txt
+*.txt
