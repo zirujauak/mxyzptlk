@@ -11,3 +11,9 @@ Cargo.lock
 
 # Macos
 .DS_Store
+
+# Zmachine
+*.z[0-9]
+*.ifzs
+*.log
+./*.txt
