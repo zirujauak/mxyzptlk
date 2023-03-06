@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -193,7 +195,7 @@ pub struct State {
     pub random_predictable: bool,
     pub random_predictable_range: u16,
     pub random_predictable_next: u16,
-    undo: Option<Quetzal>,
+    undo: VecDeque<Quetzal>,
     stream_3: Vec<OutputStreamTable>,
     output_stream: u8,
 }
@@ -228,7 +230,7 @@ impl State {
             random_predictable: false,
             random_predictable_range: 0,
             random_predictable_next: 0,
-            undo: None,
+            undo: VecDeque::new(),
             stream_3: Vec::new(),
             output_stream: 1,
         }
@@ -571,36 +573,37 @@ impl State {
     }
 
     pub fn save_undo(&mut self, q: Quetzal) {
-        self.undo = Some(q)
-    }
-
-    pub fn undo(&self) -> Option<&Quetzal> {
-        self.undo.as_ref()
+        self.undo.push_front(q);
+        self.undo.truncate(10);
     }
 
     pub fn restore_undo(&mut self) -> Option<usize> {
-        let u = self.undo.as_ref().unwrap();
-        trace!(
-            "Quetzal: {:05x} bytes, {} stack frames",
-            u.umem.data.len(),
-            u.stks.stks.len()
-        );
+        match self.undo.pop_front() {
+            Some(u) => {
+                trace!(
+                    "Quetzal: {:05x} bytes, {} stack frames",
+                    u.umem.data.len(),
+                    u.stks.stks.len()
+                );
 
-        // TODO: Verify IFhd metadata
-        // Replace dynamic memory
-        let static_address = header::static_memory_base(self) as usize;
-        let mut static_memory = self.memory_map[static_address..].to_vec();
-        self.memory_map = u.umem.data.clone();
-        self.memory_map.append(&mut static_memory);
+                // TODO: Verify IFhd metadata
+                // Replace dynamic memory
+                let static_address = header::static_memory_base(self) as usize;
+                let mut static_memory = self.memory_map[static_address..].to_vec();
+                self.memory_map = u.umem.data.clone();
+                self.memory_map.append(&mut static_memory);
 
-        // Rebuild frame stack
-        self.frames.clear();
-        for f in &u.stks.stks {
-            let frame = Frame::from_stack_frame(f);
-            self.frames.push(frame);
+                // Rebuild frame stack
+                self.frames.clear();
+                for f in &u.stks.stks {
+                    let frame = Frame::from_stack_frame(f);
+                    self.frames.push(frame);
+                }
+
+                Some(u.ifhd.pc as usize)
+            }
+            None => None,
         }
-
-        Some(u.ifhd.pc as usize)
     }
 
     pub fn print_in_interrupt(&mut self) {
