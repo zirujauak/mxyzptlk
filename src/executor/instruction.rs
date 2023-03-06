@@ -979,7 +979,12 @@ impl Instruction {
     fn show_status(&self, state: &mut State) -> usize {
         if state.version < 4 {
             let loc_obj = state.variable(16) as usize;
-            let location = text::from_vec(state, &object::short_name(state, loc_obj));
+            let location = if loc_obj > 0 {
+                text::from_vec(state, &object::short_name(state, loc_obj))
+            } else {
+                "nothing".to_string()
+            };
+
             let stat_1 = state.variable(17) as i16;
             let stat_2 = state.variable(18);
             let status =
@@ -1106,33 +1111,35 @@ impl Instruction {
         let operands = self.operand_values(state);
 
         let object = operands[0] as usize;
-        let parent = object::parent(state, object);
+        if object > 0 {
+            let parent = object::parent(state, object);
 
-        if parent != 0 {
-            let parent_child = object::child(state, parent);
+            if parent != 0 {
+                let parent_child = object::child(state, parent);
 
-            if parent_child == object {
-                // object is direct child of parent
-                // Set child of parent to the object's sibling
-                object::set_child(state, parent, object::sibling(state, object));
-            } else {
-                // scan the parent child list for the sibling prior to the object
-                let mut sibling = parent_child;
-                while sibling != 0 && object::sibling(state, sibling) != object {
-                    sibling = object::sibling(state, sibling);
+                if parent_child == object {
+                    // object is direct child of parent
+                    // Set child of parent to the object's sibling
+                    object::set_child(state, parent, object::sibling(state, object));
+                } else {
+                    // scan the parent child list for the sibling prior to the object
+                    let mut sibling = parent_child;
+                    while sibling != 0 && object::sibling(state, sibling) != object {
+                        sibling = object::sibling(state, sibling);
+                    }
+
+                    if sibling == 0 {
+                        panic!("Inconsistent object tree state!")
+                    }
+
+                    // Set the previous sibling's sibling to the object's sibling
+                    object::set_sibling(state, sibling, object::sibling(state, object));
                 }
-
-                if sibling == 0 {
-                    panic!("Inconsistent object tree state!")
-                }
-
-                // Set the previous sibling's sibling to the object's sibling
-                object::set_sibling(state, sibling, object::sibling(state, object));
             }
+            // Set parent and sibling of object to 0
+            object::set_parent(state, object, 0);
+            object::set_sibling(state, object, 0);
         }
-        // Set parent and sibling of object to 0
-        object::set_parent(state, object, 0);
-        object::set_sibling(state, object, 0);
 
         self.next_address
     }
@@ -1277,8 +1284,12 @@ impl Instruction {
     fn loadw(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        let address = operands[0] as usize + (operands[1] as usize * 2);
-        let value = state.word_value(address);
+        let address = (operands[0] as isize + (operands[1] as i16 * 2) as isize) as usize;
+        let value = if address < 0xFFFF {
+            state.word_value(address)
+        } else {
+            0
+        };
 
         self.store_result(state, value);
         self.next_address
@@ -1287,9 +1298,12 @@ impl Instruction {
     fn loadb(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        let address = operands[0] as usize + operands[1] as usize;
-        let value = state.byte_value(address) as u16;
-
+        let address = (operands[0] as isize + (operands[1] as i16) as isize) as usize;
+        let value = if address <= 0xFFFF {
+            state.byte_value(address) as u16
+        } else {
+            0
+        };
         self.store_result(state, value);
         self.next_address
     }
@@ -1305,64 +1319,68 @@ impl Instruction {
         let operands = self.operand_values(state);
 
         let object = operands[0] as usize;
-        let new_parent = operands[1] as usize;
-        trace!("Insert {} into {}", object, new_parent);
+        if object != 0 {
+            let new_parent = operands[1] as usize;
+            trace!("Insert {} into {}", object, new_parent);
 
-        // Step 1: remove object from its current parent
-        let old_parent = object::parent(state, object);
-        trace!("Old parent {}", old_parent);
+            // Step 1: remove object from its current parent
+            let old_parent = object::parent(state, object);
+            trace!("Old parent {}", old_parent);
 
-        // If the old parent is not "nothing"
-        if old_parent != 0 {
-            let old_parent_child = object::child(state, old_parent);
-            trace!("Old parent child {}", old_parent_child);
+            if old_parent != new_parent {
+                // If the old parent is not "nothing"
+                if old_parent != 0 {
+                    let old_parent_child = object::child(state, old_parent);
+                    trace!("Old parent child {}", old_parent_child);
 
-            // If the old_parent's child is this object
-            if old_parent_child == object {
-                trace!(
-                    "Set {} child to {}",
-                    old_parent,
-                    object::sibling(state, object)
-                );
-                // Simply set the old parent's child to the object's sibling
-                object::set_child(state, old_parent, object::sibling(state, object));
-            } else {
-                // Else need to traverse the child list until we find
-                // the entry whose next sibiling is the object
-                let mut sibling = old_parent_child;
-                while sibling != 0 && object::sibling(state, sibling) != object {
-                    sibling = object::sibling(state, sibling);
+                    // If the old_parent's child is this object
+                    if old_parent_child == object {
+                        trace!(
+                            "Set {} child to {}",
+                            old_parent,
+                            object::sibling(state, object)
+                        );
+                        // Simply set the old parent's child to the object's sibling
+                        object::set_child(state, old_parent, object::sibling(state, object));
+                    } else {
+                        // Else need to traverse the child list until we find
+                        // the entry whose next sibiling is the object
+                        let mut sibling = old_parent_child;
+                        while sibling != 0 && object::sibling(state, sibling) != object {
+                            sibling = object::sibling(state, sibling);
+                        }
+
+                        trace!("Object previous sibling {}", sibling);
+                        if sibling == 0 {
+                            panic!("Inconsistent object tree state!")
+                        }
+
+                        trace!(
+                            "Set previous sibling {} sibling to {}",
+                            sibling,
+                            object::sibling(state, object)
+                        );
+                        object::set_sibling(state, sibling, object::sibling(state, object));
+                    }
                 }
 
-                trace!("Object previous sibling {}", sibling);
-                if sibling == 0 {
-                    panic!("Inconsistent object tree state!")
-                }
-
+                // Step 2: Set object's sibling to the new_parent's child
                 trace!(
-                    "Set previous sibling {} sibling to {}",
-                    sibling,
-                    object::sibling(state, object)
+                    "Set object {} sibling to {}",
+                    object,
+                    object::child(state, new_parent)
                 );
-                object::set_sibling(state, sibling, object::sibling(state, object));
+                object::set_sibling(state, object, object::child(state, new_parent));
+
+                // Step 3: Set new_parent's child to the object
+                trace!("Set object {} child to {}", new_parent, object);
+                object::set_child(state, new_parent, object);
+
+                // Step 4: Set the object's parent to new_parent
+                trace!("Set object {} parent to {}", object, new_parent);
+                object::set_parent(state, object, new_parent);
             }
         }
-
-        // Step 2: Set object's sibling to the new_parent's child
-        trace!(
-            "Set object {} sibling to {}",
-            object,
-            object::child(state, new_parent)
-        );
-        object::set_sibling(state, object, object::child(state, new_parent));
-
-        // Step 3: Set new_parent's child to the object
-        trace!("Set object {} child to {}", new_parent, object);
-        object::set_child(state, new_parent, object);
-
-        // Step 4: Set the object's parent to new_parent
-        trace!("Set object {} parent to {}", object, new_parent);
-        object::set_parent(state, object, new_parent);
 
         self.next_address
     }
@@ -1370,7 +1388,8 @@ impl Instruction {
     fn test_attr(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        let condition = object::attribute(state, operands[0] as usize, operands[1] as u8);
+        let condition =
+            operands[0] > 0 && object::attribute(state, operands[0] as usize, operands[1] as u8);
 
         self.execute_branch(state, condition)
     }
@@ -1378,38 +1397,59 @@ impl Instruction {
     fn set_attr(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        object::set_attribute(state, operands[0] as usize, operands[1] as u8);
+        if operands[0] > 0 {
+            object::set_attribute(state, operands[0] as usize, operands[1] as u8);
+        }
+
         self.next_address
     }
 
     fn clear_attr(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        object::clear_attribute(state, operands[0] as usize, operands[1] as u8);
+        if operands[0] > 0 {
+            object::clear_attribute(state, operands[0] as usize, operands[1] as u8);
+        }
+
         self.next_address
     }
 
     fn get_prop(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        let value = object::property(state, operands[0] as usize, operands[1] as u8);
-        self.store_result(state, value);
+        if operands[0] == 0 {
+            self.store_result(state, 0);
+        } else {
+            let value = object::property(state, operands[0] as usize, operands[1] as u8);
+            self.store_result(state, value);
+        }
+
         self.next_address
     }
 
     fn get_prop_addr(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        let value = object::property_data_addr(state, operands[0] as usize, operands[1] as u8);
-        self.store_result(state, value as u16);
+        if operands[0] == 0 {
+            self.store_result(state, 0);
+        } else {
+            let value = object::property_data_addr(state, operands[0] as usize, operands[1] as u8);
+            self.store_result(state, value as u16);
+        }
+
         self.next_address
     }
 
     fn get_next_prop(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        let prop = object::next_property(state, operands[0] as usize, operands[1] as u8);
-        self.store_result(state, prop as u16);
+        if operands[0] == 0 {
+            self.store_result(state, 0);
+        } else {
+            let prop = object::next_property(state, operands[0] as usize, operands[1] as u8);
+            self.store_result(state, prop as u16);
+        }
+
         self.next_address
     }
 
@@ -1519,20 +1559,22 @@ impl Instruction {
     fn storew(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        state.set_word(
-            operands[0] as usize + (operands[1] as usize * 2),
-            operands[2],
-        );
+        let address = operands[0] as isize + (operands[1] as i16 * 2) as isize;
+        if address < header::static_memory_base(state) as isize - 1 {
+            state.set_word(address as usize, operands[2]);
+        }
+
         self.next_address
     }
 
     fn storeb(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        state.set_byte(
-            operands[0] as usize + operands[1] as usize,
-            operands[2] as u8,
-        );
+        let address = operands[0] as isize + (operands[1] as i16) as isize;
+        if address < header::static_memory_base(state) as isize{
+            state.set_byte(address as usize, operands[2] as u8);
+        }
+
         self.next_address
     }
 
@@ -1708,7 +1750,7 @@ impl Instruction {
     fn print_char(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        state.print(format!("{}", (operands[0] as u8) as char));
+        state.print(format!("{}", (operands[0] as u8) as char));        
         self.next_address
     }
 
@@ -1983,8 +2025,32 @@ impl Instruction {
         todo!()
     }
 
-    fn copy_table(&self, _state: &mut State) -> usize {
-        todo!()
+    fn copy_table(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+        let src = operands[0] as usize;
+        let dst = operands[1] as usize;
+        let len = operands[2] as i16;
+
+        if dst == 0 {
+            for i in 0..len as usize {
+                state.set_byte(src + i, 0)
+            }
+        } else {
+            // Copy from end of table to avoid corruption
+            if len > 0 && dst < src + len as usize {
+                for i in (0..len as usize).rev() {
+                    let v = state.byte_value(src + i);
+                    state.set_byte(dst + i, v)
+                }
+            } else {
+                for i in 0..len.abs() as usize {
+                    let v = state.byte_value(src + i);
+                    state.set_byte(dst + i, v)
+                }
+            }
+        }
+
+        self.next_address
     }
 
     fn print_table(&self, _state: &mut State) -> usize {
@@ -2049,8 +2115,15 @@ impl Instruction {
         self.next_address
     }
 
-    fn set_font(&self, _state: &mut State) -> usize {
-        todo!()
+    fn set_font(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+
+        match operands[0] {
+            0 | 1 => self.store_result(state, 1),
+            _ => self.store_result(state, 0),
+        }
+
+        self.next_address
     }
 
     fn draw_picture(&self, _state: &mut State) -> usize {
