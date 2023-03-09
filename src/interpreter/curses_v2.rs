@@ -10,15 +10,16 @@ use std::{
 use pancurses::{
     Attribute, Input, Window, ALL_MOUSE_EVENTS, BUTTON1_CLICKED, BUTTON1_DOUBLE_CLICKED,
     COLOR_BLACK, COLOR_BLUE, COLOR_CYAN, COLOR_GREEN, COLOR_MAGENTA, COLOR_RED, COLOR_WHITE,
-    COLOR_YELLOW, REPORT_MOUSE_POSITION,
+    COLOR_YELLOW,
 };
 
-use super::{Interpreter, Spec};
+use super::{Interpreter, Spec, Input as OtherInput};
 use crate::executor::{
-    header::{self, Flag},
+    header::{Flag},
     text,
 };
 
+#[derive(Debug)]
 struct Cursor {
     line: i32,
     column: i32,
@@ -143,26 +144,26 @@ impl Curses_V2 {
                     }
                     Input::Character(c) => match c as u16 as u32 {
                         // Cursor keys
-                        0x1b => {
-                            // Control character
-                            let c1 = self.window.getch().unwrap();
-                            let c2 = self.window.getch().unwrap();
-                            match (c1, c2) {
-                                (Input::Character('['), Input::Character('A')) => {
-                                    super::Input::from_u8(129, 129)
-                                }
-                                (Input::Character('['), Input::Character('B')) => {
-                                    super::Input::from_u8(130, 130)
-                                }
-                                (Input::Character('['), Input::Character('D')) => {
-                                    super::Input::from_u8(131, 131)
-                                }
-                                (Input::Character('['), Input::Character('C')) => {
-                                    super::Input::from_u8(132, 132)
-                                }
-                                _ => None,
-                            }
-                        },
+                        // 0x1b => {
+                        //     // Control character
+                        //     let c1 = self.window.getch().unwrap();
+                        //     let c2 = self.window.getch().unwrap();
+                        //     match (c1, c2) {
+                        //         (Input::Character('['), Input::Character('A')) => {
+                        //             super::Input::from_u8(129, 129)
+                        //         }
+                        //         (Input::Character('['), Input::Character('B')) => {
+                        //             super::Input::from_u8(130, 130)
+                        //         }
+                        //         (Input::Character('['), Input::Character('D')) => {
+                        //             super::Input::from_u8(131, 131)
+                        //         }
+                        //         (Input::Character('['), Input::Character('C')) => {
+                        //             super::Input::from_u8(132, 132)
+                        //         }
+                        //         _ => None,
+                        //     }
+                        // }
                         0x0a => super::Input::from_char(c, 0x0d),
                         0x7f => super::Input::from_char(c, 0x08),
                         0xe4 => super::Input::from_char(c, 155),
@@ -335,7 +336,7 @@ impl Curses_V2 {
                 0xc4 => 0x2500,
                 0xd9 => 0x2518,
                 0xda => 0x250C,
-                _ => c
+                _ => c,
             }
         } as u16;
 
@@ -393,6 +394,8 @@ impl Curses_V2 {
         } else {
             cursor.column = new_col;
         }
+
+        trace!("advance_cursor: {:?}", self.cursor[self.selected_window]);
     }
 
     fn addstr(&mut self, s: &str) {
@@ -400,6 +403,14 @@ impl Curses_V2 {
         for c in chars {
             self.addch(c as u16)
         }
+    }
+
+    fn is_terminator(&self, terminators: &Vec<u8>, c: u8) -> bool {
+        trace!("Terminator? {} => {}", c, terminators.contains(&c));
+        c == '\n' as u8
+            || c == '\r' as u8
+            || terminators.contains(&c)
+            || (terminators.contains(&255) && c >= 129 && c <= 144)
     }
 }
 
@@ -568,7 +579,7 @@ impl Interpreter for Curses_V2 {
                     }
                 }
             } else {
-                trace!("Printing");
+                trace!("Printing: {}", text);
                 self.addstr(text.as_str());
                 if self.selected_window == 0 && self.output_streams & 2 == 2 {
                     self.transcript_file
@@ -586,6 +597,7 @@ impl Interpreter for Curses_V2 {
     fn print_table(&mut self, data: Vec<u8>, width: u16, height: u16, skip: u16) {
         let column = self.cursor[self.selected_window].column;
         for i in 0..height as usize {
+            // Debugging
             let offset = i * (width as usize + skip as usize);
             let end = offset + width as usize;
             let row: Vec<char> = data[offset..end]
@@ -608,7 +620,8 @@ impl Interpreter for Curses_V2 {
         time: u16,
         existing_input: &Vec<char>,
         redraw: bool,
-    ) -> (Vec<char>, bool) {
+        terminators: Vec<u8>,
+    ) -> (Vec<char>, bool, OtherInput) {
         self.window.refresh();
         // self.window_0
         //     .mv(self.window_0.get_cur_y(), self.window_0.get_cur_x());
@@ -619,9 +632,18 @@ impl Interpreter for Curses_V2 {
             for c in existing_input {
                 self.addch(*c as u16);
             }
+
+            trace!("Last input: {:#02x}", *existing_input.last().unwrap() as u8)
         }
 
         self.window.refresh();
+
+        match existing_input.last() {
+            Some(x) => if self.is_terminator(&terminators, *x as u8) {
+                return (existing_input.clone(), false, super::Input::from_char(*x, *x as u8).unwrap());
+            },
+            _ => {}
+        }
 
         // Current time, in seconds
         let start = SystemTime::now()
@@ -638,6 +660,7 @@ impl Interpreter for Curses_V2 {
 
         let mut input: Vec<char> = existing_input.clone();
         let mut done = false;
+        let mut i = super::Input::from_u8(0, 0);
         self.window.nodelay(true);
         while !done {
             if time > 0
@@ -647,11 +670,12 @@ impl Interpreter for Curses_V2 {
                     .as_millis()
                     > end
             {
-                return (input, true);
+                i = super::Input::from_u8(0, 0);
             } else {
-                let i = self.getch();
+                i = self.getch();
                 match i {
                     Some(inp) => {
+                        trace!("Input: {:?}", inp);
                         match inp.original_value {
                             // Backspace
                             '\u{7f}' => {
@@ -673,16 +697,19 @@ impl Interpreter for Curses_V2 {
                             //
                             _ => {
                                 if input.len() < length as usize
+                                    && self.is_terminator(&terminators, inp.zscii_value as u8)
+                                {
+                                    input.push(inp.original_value);
+                                    done = true;
+                                    if inp.original_value == '\n' {
+                                        self.addch('\n' as u16);
+                                    }
+                                } else if input.len() < length as usize
                                     && text::valid_input(inp.zscii_value)
                                 {
                                     input.push(inp.zscii_value);
                                     self.addch(inp.original_value as u16);
                                     self.window.refresh();
-                                }
-                                if input.len() < length as usize && inp.original_value == '\n' {
-                                    input.push(inp.original_value);
-                                    done = true;
-                                    self.addch('\n' as u16);
                                 }
                             }
                         }
@@ -719,7 +746,7 @@ impl Interpreter for Curses_V2 {
             self.command_file.as_mut().unwrap().write_all(&d).unwrap();
             self.command_file.as_mut().unwrap().flush().unwrap();
         }
-        (input, false)
+        (input, false, i.unwrap())
     }
 
     fn read_char(&mut self, time: u16) -> super::Input {
@@ -948,7 +975,7 @@ impl Interpreter for Curses_V2 {
         let default = self.save_filename();
         self.print("Save to: ".to_string());
         let filename = self
-            .read(64, 0, &default.chars().collect(), true)
+            .read(64, 0, &default.chars().collect(), true, vec![])
             .0
             .iter()
             .collect::<String>()
@@ -970,7 +997,7 @@ impl Interpreter for Curses_V2 {
         let default = self.restore_filename();
         self.print("Restore from: ".to_string());
         let filename = self
-            .read(64, 0, &default.chars().collect(), true)
+            .read(64, 0, &default.chars().collect(), true, vec![])
             .0
             .iter()
             .collect::<String>()
