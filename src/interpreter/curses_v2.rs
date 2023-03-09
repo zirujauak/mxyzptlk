@@ -28,6 +28,7 @@ pub struct Curses_V2 {
     version: u8,
     window: Window,
     cursor: Vec<Cursor>,
+    font: Vec<u16>,
     window_0_top: i32,
     window_1_bottom: i32,
     status_line: i32,
@@ -63,12 +64,22 @@ impl Curses_V2 {
             Cursor { line: 1, column: 1 }
         };
 
+        trace!(
+            "Screen: {}x{} [top-left is 1,1]",
+            screen_lines,
+            screen_columns
+        );
+        trace!("Status line: {}", status_line);
+        trace!("Window 1 bottom: {}", 0);
+        trace!("Window 0 top: {}", status_line + 1);
+
         let cursor = vec![window_0_cursor, Cursor { line: 0, column: 0 }];
         Self {
             name,
             version,
             window,
             cursor,
+            font: vec![1, 1],
             window_0_top: status_line + 1,
             window_1_bottom: 0,
             status_line,
@@ -151,9 +162,9 @@ impl Curses_V2 {
                                 }
                                 _ => None,
                             }
-                        }
-                        0x7f => super::Input::from_char(c, 0x08),
+                        },
                         0x0a => super::Input::from_char(c, 0x0d),
+                        0x7f => super::Input::from_char(c, 0x08),
                         0xe4 => super::Input::from_char(c, 155),
                         0xf6 => super::Input::from_char(c, 156),
                         0xfc => super::Input::from_char(c, 157),
@@ -236,77 +247,96 @@ impl Curses_V2 {
     }
 
     fn addch(&mut self, c: u16) {
-        let ch = match c {
-            155 => 0xe4,
-            156 => 0xf6,
-            157 => 0xfc,
-            158 => 0xc4,
-            159 => 0xd6,
-            160 => 0xdc,
-            161 => 0xdf,
-            162 => 0xbb,
-            163 => 0xab,
-            164 => 0xeb,
-            165 => 0xef,
-            166 => 0xff,
-            167 => 0xcb,
-            168 => 0xcf,
-            169 => 0xe1,
-            170 => 0xe9,
-            171 => 0xed,
-            172 => 0xf3,
-            173 => 0xfa,
-            174 => 0xfd,
-            175 => 0xc1,
-            176 => 0xc9,
-            177 => 0xcd,
-            178 => 0xd3,
-            179 => 0xda,
-            180 => 0xdd,
-            181 => 0xe0,
-            182 => 0xe8,
-            183 => 0xec,
-            184 => 0xf2,
-            185 => 0xf9,
-            186 => 0xc0,
-            187 => 0xc8,
-            188 => 0xcc,
-            189 => 0xd2,
-            190 => 0xd9,
-            191 => 0xe2,
-            192 => 0xea,
-            193 => 0xee,
-            194 => 0xf4,
-            195 => 0xfb,
-            196 => 0xc2,
-            197 => 0xca,
-            198 => 0xce,
-            199 => 0xd4,
-            200 => 0xdb,
-            201 => 0xe5,
-            202 => 0xc5,
-            203 => 0xf8,
-            204 => 0xd8,
-            205 => 0xe3,
-            206 => 0xf1,
-            207 => 0xf5,
-            208 => 0xc3,
-            209 => 0xd1,
-            210 => 0xd5,
-            211 => 0xe6,
-            212 => 0xc6,
-            213 => 0xe7,
-            214 => 0xc7,
-            215 => 0xfe,
-            216 => 0xf0,
-            217 => 0xde,
-            218 => 0xd0,
-            219 => 0xa3,
-            220 => 0x153,
-            221 => 0x152,
-            222 => 0xa1,
-            223 => 0xbf,
-            _ => c,
+        let ch = if self.font[self.selected_window] != 3 {
+            match c {
+                0x0d => 0x0a,
+                155 => 0xe4,
+                156 => 0xf6,
+                157 => 0xfc,
+                158 => 0xc4,
+                159 => 0xd6,
+                160 => 0xdc,
+                161 => 0xdf,
+                162 => 0xbb,
+                163 => 0xab,
+                164 => 0xeb,
+                165 => 0xef,
+                166 => 0xff,
+                167 => 0xcb,
+                168 => 0xcf,
+                169 => 0xe1,
+                170 => 0xe9,
+                171 => 0xed,
+                172 => 0xf3,
+                173 => 0xfa,
+                174 => 0xfd,
+                175 => 0xc1,
+                176 => 0xc9,
+                177 => 0xcd,
+                178 => 0xd3,
+                179 => 0xda,
+                180 => 0xdd,
+                181 => 0xe0,
+                182 => 0xe8,
+                183 => 0xec,
+                184 => 0xf2,
+                185 => 0xf9,
+                186 => 0xc0,
+                187 => 0xc8,
+                188 => 0xcc,
+                189 => 0xd2,
+                190 => 0xd9,
+                191 => 0xe2,
+                192 => 0xea,
+                193 => 0xee,
+                194 => 0xf4,
+                195 => 0xfb,
+                196 => 0xc2,
+                197 => 0xca,
+                198 => 0xce,
+                199 => 0xd4,
+                200 => 0xdb,
+                201 => 0xe5,
+                202 => 0xc5,
+                203 => 0xf8,
+                204 => 0xd8,
+                205 => 0xe3,
+                206 => 0xf1,
+                207 => 0xf5,
+                208 => 0xc3,
+                209 => 0xd1,
+                210 => 0xd5,
+                211 => 0xe6,
+                212 => 0xc6,
+                213 => 0xe7,
+                214 => 0xc7,
+                215 => 0xfe,
+                216 => 0xf0,
+                217 => 0xde,
+                218 => 0xd0,
+                219 => 0xa3,
+                220 => 0x153,
+                221 => 0x152,
+                222 => 0xa1,
+                223 => 0xbf,
+                _ => c,
+            }
+        } else {
+            match c {
+                0xb0 => 0x2591,
+                0xb1 => 0x2592,
+                0xb2 => 0x2593,
+                0xb3 => 0x2502,
+                0xb4 => 0x2524,
+                0xb5 => 0x2561,
+                0xb6 => 0x2562,
+                0xbf => 0x2510,
+                0xc0 => 0x2514,
+                0xc4 => 0x2500,
+                0xd9 => 0x2518,
+                0xda => 0x250C,
+                _ => c
+            }
         } as u16;
 
         // This might break accented characters in macos, which were working correctly.
@@ -556,6 +586,14 @@ impl Interpreter for Curses_V2 {
     fn print_table(&mut self, data: Vec<u8>, width: u16, height: u16, skip: u16) {
         let column = self.cursor[self.selected_window].column;
         for i in 0..height as usize {
+            let offset = i * (width as usize + skip as usize);
+            let end = offset + width as usize;
+            let row: Vec<char> = data[offset..end]
+                .to_vec()
+                .iter()
+                .map(|x| *x as char)
+                .collect();
+            trace!("Row {}: '{:?}'", i, row);
             for j in 0..width as usize {
                 self.addch(data[(i * (width as usize + skip as usize)) + j] as u16);
             }
@@ -799,7 +837,19 @@ impl Interpreter for Curses_V2 {
         }
     }
 
-    fn set_font(&mut self, font: u16) {}
+    fn set_font(&mut self, font: u16) -> u16 {
+        let current_font = self.font[self.selected_window];
+
+        match font {
+            0 => self.font[self.selected_window],
+            1 | 3 | 4 => {
+                self.font[self.selected_window] = font;
+                current_font
+            }
+            _ => 0,
+        }
+    }
+
     fn set_text_style(&mut self, style: u16) {
         if style == 0 {
             self.window.attroff(Attribute::Reverse);
@@ -868,6 +918,8 @@ impl Interpreter for Curses_V2 {
             self.window
                 .setscrreg(self.window_0_top - 1, self.screen_lines - 1);
             self.selected_window = 0;
+            trace!("Window 1 bottom: {}", self.window_1_bottom);
+            trace!("Window 0 top: {}", self.window_0_top);
         } else {
             // Resize and move window 0
             self.window_1_bottom = lines as i32 + self.status_line;
@@ -884,6 +936,9 @@ impl Interpreter for Curses_V2 {
             } else {
                 self.cursor[0].line = max(self.window_1_bottom, self.cursor[0].line)
             }
+
+            trace!("Window 1 bottom: {}", self.window_1_bottom);
+            trace!("Window 0 top: {}", self.window_0_top);
         }
 
         self.window.refresh();
@@ -967,6 +1022,7 @@ impl Curses_V2 {
                 Flag::ItalicAvailable,
                 Flag::FixedSpaceAvailable,
                 Flag::TimedInputAvailable,
+                Flag::PicturesAvailable,
                 Flag::ColoursAvailable,
             ],
             _ => vec![],
@@ -982,7 +1038,6 @@ impl Curses_V2 {
                 Flag::GameWantsSoundEffects,
                 Flag::GameWantsPictures,
                 Flag::GameWantsMenus,
-                Flag::PicturesAvailable,
                 Flag::SoundEffectsAvailable,
             ],
             _ => vec![],
