@@ -1692,7 +1692,8 @@ impl Instruction {
 
         // Lexical analysis
         if parse > 0 || state.version < 5 {
-            let separators = text::separators(state);
+            let dictionary = header::dictionary_table(state) as usize;
+            let separators = text::separators(state, dictionary);
             let mut word = Vec::new();
             let mut word_start: usize = 0;
             let mut word_count: usize = 0;
@@ -1706,14 +1707,14 @@ impl Instruction {
 
                 if separators.contains(&data[i]) {
                     if word.len() > 0 {
-                        let entry = text::from_dictionary(state, &word);
+                        let entry = text::from_dictionary(state, dictionary, &word);
                         state.set_word(parse + 2 + (4 * word_count), entry as u16);
                         state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
                         state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 1);
                         word_count = word_count + 1;
                         trace!("{:?} => ${:05x}", word, entry);
                     }
-                    let entry = text::from_dictionary(state, &vec![data[i]]);
+                    let entry = text::from_dictionary(state, dictionary, &word);
                     state.set_word(parse + 2 + (4 * word_count), entry as u16);
                     state.set_byte(parse + 4 + (4 * word_count), 1);
                     state.set_byte(parse + 5 + (4 * word_count), i as u8 + 1);
@@ -1724,7 +1725,7 @@ impl Instruction {
                     word_start = i + 1;
                 } else if data[i] == ' ' {
                     if word.len() > 0 {
-                        let entry = text::from_dictionary(state, &word);
+                        let entry = text::from_dictionary(state, dictionary, &word);
                         state.set_word(parse + 2 + (4 * word_count), entry as u16);
                         state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
                         state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 1);
@@ -1739,7 +1740,7 @@ impl Instruction {
             }
 
             if word.len() > 0 && word_count < max_words {
-                let entry = text::from_dictionary(state, &word);
+                let entry = text::from_default_dictionary(state, &word);
                 state.set_word(parse + 2 + (4 * word_count), entry as u16);
                 state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
                 state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 1);
@@ -2027,8 +2028,98 @@ impl Instruction {
         self.call_fn(state, address, self.next_address, &arguments, None)
     }
 
-    fn tokenise(&self, _state: &mut State) -> usize {
-        todo!()
+    fn tokenise(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+        let text = operands[0] as usize;
+        let parse = operands[1] as usize;
+        let dictionary = if operands.len() > 2 {
+            operands[2] as usize
+        } else {
+            header::dictionary_table(state) as usize
+        };
+        let flag = if operands.len() > 3 {
+            operands[3] == 1
+        } else {
+            false
+        };
+
+        let mut input = Vec::new();
+        for i in 0..state.byte_value(text + 1) as usize {
+            input.push(state.byte_value(text + 2 + i) as char);
+        }
+
+        trace!("Tokenise: '{:?}'", input);
+
+        //Lexical analysis
+        if parse > 0 {
+            let separators = text::separators(state, dictionary);
+            let mut word = Vec::new();
+            let mut word_start: usize = 0;
+            let mut word_count: usize = 0;
+            let max_words = state.byte_value(parse) as usize;
+
+            let data = input[0..input.len()].to_vec();
+            for i in 0..data.len() {
+                if word_count > max_words {
+                    break;
+                }
+
+                if separators.contains(&data[i]) {
+                    if word.len() > 0 {
+                        let entry = text::from_dictionary(state, dictionary, &word);
+                        if entry > 0 || !flag {
+                            state.set_word(parse + 2 + (4 * word_count), entry as u16);
+                            state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
+                            state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 1);
+                        }
+                        word_count = word_count + 1;
+                        trace!("{:?} => ${:05x}", word, entry);
+                    }
+                    let entry = text::from_dictionary(state, dictionary, &vec![data[i]]);
+                    if entry > 0 || !flag {
+                        state.set_word(parse + 2 + (4 * word_count), entry as u16);
+                        state.set_byte(parse + 4 + (4 * word_count), 1);
+                        state.set_byte(parse + 5 + (4 * word_count), i as u8 + 1);
+                    }
+                    word_count = word_count + 1;
+                    trace!("{} => ${:05x}", data[i], entry);
+
+                    word.clear();
+                    word_start = i + 1;
+                } else if data[i] == ' ' {
+                    if word.len() > 0 {
+                        let entry = text::from_dictionary(state, dictionary, &word);
+                        if entry > 0 || flag {
+                            state.set_word(parse + 2 + (4 * word_count), entry as u16);
+                            state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
+                            state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 1);
+                        }
+                        word_count = word_count + 1;
+                        trace!("{:?} => ${:05x}", word, entry)
+                    }
+                    word.clear();
+                    word_start = i + 1;
+                } else {
+                    word.push(data[i].to_ascii_lowercase())
+                }
+            }
+
+            if word.len() > 0 && word_count < max_words {
+                let entry = text::from_dictionary(state, dictionary, &word);
+                if entry > 0 || !flag {
+                    state.set_word(parse + 2 + (4 * word_count), entry as u16);
+                    state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
+                    state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 1);
+                }
+                word_count = word_count + 1;
+                trace!("{:?} => ${:05x}", word, entry)
+            }
+
+            state.set_byte(parse + 1, word_count as u8);
+            trace!("Parsed {} words", word_count);
+        }
+
+        self.next_address
     }
 
     fn encode_text(&self, _state: &mut State) -> usize {

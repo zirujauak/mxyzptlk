@@ -123,8 +123,7 @@ pub fn from_vec(state: &State, ztext: &Vec<u16>) -> String {
     s
 }
 
-pub fn separators(state: &State) -> Vec<char> {
-    let dictionary_address = header::dictionary_table(state) as usize;
+pub fn separators(state: &State, dictionary_address: usize) -> Vec<char> {
     let separator_count = state.byte_value(dictionary_address);
     let mut sep = Vec::new();
     for i in 1..=separator_count as usize {
@@ -154,12 +153,17 @@ fn word_value(z1: u8, z2: u8, z3: u8) -> u16 {
     (((z1 as u16) & 0x1F) << 10) | (((z2 as u16) & 0x1F) << 5) | (z3 as u16) & 0x1F
 }
 
-pub fn from_dictionary(state: &State, word: &Vec<char>) -> usize {
-    trace!("Dictionary search: {:?}", word);
+pub fn from_default_dictionary(state: &State, word: &Vec<char>) -> usize {
+    self::from_dictionary(state, header::dictionary_table(state) as usize, word)
+}
+
+pub fn from_dictionary(state: &State, dictionary_address: usize, word: &Vec<char>) -> usize {
+    trace!("Searching dictioary @ {:#05x} for {:?}", dictionary_address, word);
     let dictionary_address = header::dictionary_table(state) as usize;
     let separator_count = state.byte_value(dictionary_address) as usize;
     let entry_size = state.byte_value(dictionary_address + 1 + separator_count) as usize;
-    let entry_count = state.word_value(dictionary_address + 1 + separator_count + 1) as usize;
+    // TODO: negative counts indicate unsorted table ... remember this when implementing searching
+    let entry_count = i16::abs((state.word_value(dictionary_address + 1 + separator_count + 1)) as i16) as usize;
 
     if state.version < 4 {
         // Encode the input
