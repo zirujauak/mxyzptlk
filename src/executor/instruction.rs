@@ -978,7 +978,7 @@ impl Instruction {
     }
 
     fn new_line(&self, state: &mut State) -> usize {
-        state.interpreter.new_line();
+        state.new_line();
         self.next_address
     }
 
@@ -1597,14 +1597,31 @@ impl Instruction {
     }
 
     pub fn read(&self, state: &mut State) -> usize {
+        let operands = self.operand_values(state);
+        let text = operands[0] as usize;
+
+        let mut terminators = vec!['\r' as u8];
+        if state.version >= 5 {
+            let addr = header::terminating_character_table(state) as usize;
+            let mut index = 0 as usize;
+            loop {
+                let b = state.byte_value(addr + index);
+                if b == 0 {
+                    break;
+                } else if (b >= 129 && b <= 154) || b >= 252 {
+                    terminators.push(b);
+                }
+                index = index + 1;
+            }
+        }
+
+        trace!("Terminators: {:?}", terminators);
+
         if state.version < 4 {
             trace!("SHOW_STATUS before READ");
             self.show_status(state);
         }
 
-        let operands = self.operand_values(state);
-
-        let text = operands[0] as usize;
         let mut existing_input = Vec::new();
 
         // If text was printed in an interrupt, let the interpreter know
@@ -1627,8 +1644,9 @@ impl Instruction {
         if state.version > 4 {
             // Read text buffer into existing input
             trace!(
-                "Recovering {} bytes from text buffer",
-                state.byte_value(text + 1)
+                "Recovering {} bytes from text buffer @ {:?}",
+                state.byte_value(text + 1),
+                state.get_cursor()
             );
             let s = state.byte_value(text + 1) as usize;
             for i in 0..s {
@@ -1662,7 +1680,7 @@ impl Instruction {
             0
         };
 
-        let (input, interrupt) = state.read(len, time, &existing_input, redraw);
+        let (input, interrupt, terminator) = state.read(len, time, &existing_input, redraw, terminators);
         state.print_in_interrupt = false;
         if interrupt {
             trace!("READ interrupt: {} bytes in input buffer", input.len());
@@ -1677,7 +1695,7 @@ impl Instruction {
         trace!("Read <= \"{:?}\"", &input);
 
         // Store input to the text buffer
-        let terminator = input.last().unwrap();
+        let terminator = terminator.zscii_value;
         if state.version < 5 {
             for i in 0..input.len() - 1 {
                 state.set_byte(text + 1 + i, input[i].to_ascii_lowercase() as u8);
@@ -1753,7 +1771,7 @@ impl Instruction {
         }
 
         if state.version > 4 {
-            self.store_result(state, *terminator as u16);
+            self.store_result(state, terminator as u16);
         }
 
         self.next_address
