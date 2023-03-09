@@ -19,7 +19,8 @@ pub trait Interpreter {
         time: u16,
         existing_input: &Vec<char>,
         redraw: bool,
-    ) -> (Vec<char>, bool);
+        terminators: Vec<u8>,
+    ) -> (Vec<char>, bool, Input);
     fn read_char(&mut self, time: u16) -> Input;
     fn set_colour(&mut self, foreground: u16, background: u16);
     fn set_cursor(&mut self, line: u16, column: u16);
@@ -33,6 +34,7 @@ pub trait Interpreter {
     fn restore(&mut self) -> Vec<u8>;
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct Input {
     pub original_value: char,
     pub zscii_value: char,
