@@ -149,6 +149,7 @@ impl Curses {
                                 _ => None,
                             }
                         }
+                        '\n' => super::Input::from_char(c, '\r'),
                         0x7f => super::Input::from_char(c, 0x08),
                         0x0a => super::Input::from_char(c, 0x0d),
                         0xe4 => super::Input::from_char(c, 155),
@@ -235,6 +236,7 @@ impl Curses {
 
 fn addch(window: &mut Window, c: u16) {
     let ch = match c {
+        0x0d => 0x0a,
         155 => 0xe4,
         156 => 0xf6,
         157 => 0xfc,
