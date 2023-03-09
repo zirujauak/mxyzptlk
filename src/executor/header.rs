@@ -218,12 +218,16 @@ pub fn checksum(state: &State) -> u16 {
     state.word_value(0x1c)
 }
 
+pub fn terminating_character_table(state: &State) -> u16 {
+    state.word_value(0x2e)
+}
+
 pub fn set_extension_word(state: &mut State, index: usize, value: u16) {
     let table = state.word_value(0x36) as usize;
     if table > 0 {
         let size = state.word_value(table) as usize;
         if size >= index {
-            state.set_word(table + (index * 2), value);
+            state.set_word(table + ((index + 1) * 2), value);
         }
     }
 }
