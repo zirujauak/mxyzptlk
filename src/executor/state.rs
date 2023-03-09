@@ -6,6 +6,7 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::executor::header;
 
+use crate::interpreter;
 use crate::interpreter::Input;
 use crate::interpreter::Interpreter;
 use crate::interpreter::Spec;
@@ -651,7 +652,18 @@ impl Interpreter for State {
     }
     fn new_line(&mut self) {
         trace!(target: "app::transcript", "\n");
-        self.interpreter.new_line();
+        if self.output_stream & 0x4 == 0x4 {
+            trace!(
+                "Printing new_line to stream 3 {:#02x} @ {}",
+                '\r' as u8,
+                self.stream_3_mut().data.len(),
+            );
+
+            self.stream_3_mut().write("\n".to_string());
+        } else {
+            self.interpreter.new_line();
+        }
+        
         self.print_in_interrupt()
     }
     fn output_stream(&mut self, stream: i16, table: usize) {
@@ -729,8 +741,15 @@ impl Interpreter for State {
         time: u16,
         existing_input: &Vec<char>,
         redraw: bool,
-    ) -> (Vec<char>, bool) {
-        self.interpreter.read(length, time, existing_input, redraw)
+        terminators: Vec<u8>
+    ) -> (Vec<char>, bool, Input) {
+        let (data, timed_out, terminator) = self.interpreter.read(length, time, existing_input, redraw, terminators);
+        if terminator.zscii_value as u8 == 254 || terminator.zscii_value as u8 == 253 {
+            header::set_extension_word(self, 0, terminator.x);
+            header::set_extension_word(self, 1, terminator.y);
+        }
+
+        (data, timed_out, terminator)
     }
     fn read_char(&mut self, time: u16) -> Input {
         let input = self.interpreter.read_char(time);
