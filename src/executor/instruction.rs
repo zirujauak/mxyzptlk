@@ -974,7 +974,6 @@ impl Instruction {
 
     fn quit(&self, _state: &mut State) -> usize {
         pancurses::reset_shell_mode();
-        pancurses::curs_set(1);
         process::exit(0);
     }
 
@@ -1921,7 +1920,6 @@ impl Instruction {
     }
 
     fn read_char(&self, state: &mut State) -> usize {
-        pancurses::curs_set(1);
         let operands = self.operand_values(state);
 
         let x = operands[0];
@@ -2075,21 +2073,18 @@ impl Instruction {
 
         let address = operands[0] as usize;
         let width = operands[1] as usize;
-        let height = operands[2] as usize;
+        let height = if operands.len() >= 3 {
+            operands[2] as usize
+        } else {
+            1
+        };
         let skip = if operands.len() == 4 {
             operands[3] as usize
         } else {
             0
         };
 
-        for i in 0..height as usize {
-            for j in 0..width as usize {
-                let idx = (i * (width + skip)) + j;
-                state.print(format!("{}", state.byte_value(address + idx) as char));
-            }
-            state.new_line();
-        }
-
+        state.print_table_state(address, width, height, skip);
         self.next_address
     }
 

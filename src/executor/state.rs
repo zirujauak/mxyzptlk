@@ -622,6 +622,13 @@ impl State {
     fn stream_3_mut(&mut self) -> &mut OutputStreamTable {
         self.stream_3.last_mut().unwrap()
     }
+
+    pub fn print_table_state(&mut self, address: usize, width: usize, height: usize, skip: usize) {
+        let end = address + (width * height);
+        let data = self.memory_map[address..end].to_vec();
+
+        self.interpreter.print_table(data, width as u16, height as u16, skip as u16);
+    }
 }
 
 impl Interpreter for State {
@@ -713,10 +720,9 @@ impl Interpreter for State {
         }
     }
 
-    fn print_table(&mut self, text: String, width: u16, height: u16, skip: u16) {
-        self.interpreter.print_table(text, width, height, skip);
-        self.print_in_interrupt()
+    fn print_table(&mut self, text: Vec<u8>, width: u16, height: u16, skip: u16) {
     }
+
     fn read(
         &mut self,
         length: u8,

@@ -1,6 +1,7 @@
 use crate::executor::header::Flag;
 
-pub mod curses;
+//pub mod curses;
+pub mod curses_v2;
 
 pub trait Interpreter {
     fn buffer_mode(&mut self, mode: bool);
@@ -11,7 +12,7 @@ pub trait Interpreter {
     fn new_line(&mut self);
     fn output_stream(&mut self, stream: i16, table: usize);
     fn print(&mut self, text: String);
-    fn print_table(&mut self, text: String, width: u16, height: u16, skip: u16);
+    fn print_table(&mut self, data: Vec<u8>, width: u16, height: u16, skip: u16);
     fn read(
         &mut self,
         length: u8,

@@ -8,7 +8,7 @@ pub mod text;
 use instruction::Instruction;
 use state::State;
 
-use crate::interpreter::curses::Curses;
+use crate::interpreter::curses_v2::Curses_V2;
 use crate::interpreter::Interpreter;
 
 pub struct Executor {
@@ -19,7 +19,7 @@ impl Executor {
     pub fn from_vec(name: String, v: Vec<u8>) -> Executor {
         let version = v[0];
 
-        let interpreter = Curses::new(version, name);
+        let interpreter = Curses_V2::new(version, name);
         let spec = interpreter.spec(version);
         let mut state = State::new(&v, Box::new(interpreter));
         state.initialize(spec);
