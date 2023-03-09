@@ -2070,7 +2070,7 @@ impl Instruction {
                         if entry > 0 || !flag {
                             state.set_word(parse + 2 + (4 * word_count), entry as u16);
                             state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
-                            state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 1);
+                            state.set_byte(parse + 5 + (4 * word_count), word_start as u8);
                         }
                         word_count = word_count + 1;
                         trace!("{:?} => ${:05x}", word, entry);
@@ -2079,7 +2079,7 @@ impl Instruction {
                     if entry > 0 || !flag {
                         state.set_word(parse + 2 + (4 * word_count), entry as u16);
                         state.set_byte(parse + 4 + (4 * word_count), 1);
-                        state.set_byte(parse + 5 + (4 * word_count), i as u8 + 1);
+                        state.set_byte(parse + 5 + (4 * word_count), i as u8);
                     }
                     word_count = word_count + 1;
                     trace!("{} => ${:05x}", data[i], entry);
@@ -2092,7 +2092,7 @@ impl Instruction {
                         if entry > 0 || flag {
                             state.set_word(parse + 2 + (4 * word_count), entry as u16);
                             state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
-                            state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 1);
+                            state.set_byte(parse + 5 + (4 * word_count), word_start as u8);
                         }
                         word_count = word_count + 1;
                         trace!("{:?} => ${:05x}", word, entry)
@@ -2109,7 +2109,7 @@ impl Instruction {
                 if entry > 0 || !flag {
                     state.set_word(parse + 2 + (4 * word_count), entry as u16);
                     state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
-                    state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 1);
+                    state.set_byte(parse + 5 + (4 * word_count), word_start as u8);
                 }
                 word_count = word_count + 1;
                 trace!("{:?} => ${:05x}", word, entry)
@@ -2240,11 +2240,8 @@ impl Instruction {
     fn set_font(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        match operands[0] {
-            0 | 1 => self.store_result(state, 1),
-            _ => self.store_result(state, 0),
-        }
-
+        let result = state.set_font(operands[0]);
+        self.store_result(state, result);
         self.next_address
     }
 
