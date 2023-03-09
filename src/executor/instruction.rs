@@ -2070,7 +2070,7 @@ impl Instruction {
                         if entry > 0 || !flag {
                             state.set_word(parse + 2 + (4 * word_count), entry as u16);
                             state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
-                            state.set_byte(parse + 5 + (4 * word_count), word_start as u8);
+                            state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 2);
                         }
                         word_count = word_count + 1;
                         trace!("{:?} => ${:05x}", word, entry);
@@ -2079,7 +2079,7 @@ impl Instruction {
                     if entry > 0 || !flag {
                         state.set_word(parse + 2 + (4 * word_count), entry as u16);
                         state.set_byte(parse + 4 + (4 * word_count), 1);
-                        state.set_byte(parse + 5 + (4 * word_count), i as u8);
+                        state.set_byte(parse + 5 + (4 * word_count), i as u8 + 2);
                     }
                     word_count = word_count + 1;
                     trace!("{} => ${:05x}", data[i], entry);
@@ -2092,7 +2092,7 @@ impl Instruction {
                         if entry > 0 || flag {
                             state.set_word(parse + 2 + (4 * word_count), entry as u16);
                             state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
-                            state.set_byte(parse + 5 + (4 * word_count), word_start as u8);
+                            state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 2);
                         }
                         word_count = word_count + 1;
                         trace!("{:?} => ${:05x}", word, entry)
@@ -2109,7 +2109,7 @@ impl Instruction {
                 if entry > 0 || !flag {
                     state.set_word(parse + 2 + (4 * word_count), entry as u16);
                     state.set_byte(parse + 4 + (4 * word_count), word.len() as u8);
-                    state.set_byte(parse + 5 + (4 * word_count), word_start as u8);
+                    state.set_byte(parse + 5 + (4 * word_count), word_start as u8 + 2);
                 }
                 word_count = word_count + 1;
                 trace!("{:?} => ${:05x}", word, entry)
