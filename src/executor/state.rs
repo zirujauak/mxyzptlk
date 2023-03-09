@@ -750,8 +750,8 @@ impl Interpreter for State {
     fn set_cursor(&mut self, line: u16, column: u16) {
         self.interpreter.set_cursor(line, column);
     }
-    fn set_font(&mut self, font: u16) {
-        self.interpreter.set_font(font);
+    fn set_font(&mut self, font: u16) -> u16 {
+        self.interpreter.set_font(font)
     }
     fn set_text_style(&mut self, style: u16) {
         self.interpreter.set_text_style(style);
