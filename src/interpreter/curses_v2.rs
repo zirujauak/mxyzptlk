@@ -961,7 +961,7 @@ impl Interpreter for Curses_V2 {
                     self.window.clrtoeol();
                 }
             } else {
-                self.cursor[0].line = max(self.window_1_bottom, self.cursor[0].line)
+                self.cursor[0].line = max(self.window_1_bottom + 1, self.cursor[0].line)
             }
 
             trace!("Window 1 bottom: {}", self.window_1_bottom);
