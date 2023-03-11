@@ -9,8 +9,8 @@ use crate::executor::header;
 use crate::interpreter::Input;
 use crate::interpreter::Interpreter;
 use crate::interpreter::Spec;
-use crate::quetzal::Quetzal;
-use crate::quetzal::StackFrame;
+use crate::iff::quetzal::Quetzal;
+use crate::iff::quetzal::stks::StackFrame;
 
 #[derive(Debug)]
 pub struct Frame {
@@ -546,7 +546,7 @@ impl State {
         q
     }
 
-    pub fn restore_file(&mut self) -> Quetzal {
+    pub fn restore_file(&mut self) -> Option<Quetzal> {
         let data = self.interpreter.restore();
         Quetzal::from_vec(data)
     }

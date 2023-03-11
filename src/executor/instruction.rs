@@ -963,27 +963,39 @@ impl Instruction {
             self.store_result(state, 0);
             self.next_address
         } else {
-            let q = state.restore_file();
-            let instruction_address = state.prepare_restore(&q);
-            trace!("Restore address: {:?}", instruction_address);
-            match instruction_address {
+            let quetzal = state.restore_file();
+            match quetzal {
+                Some(q) => {
+                    let instruction_address = state.prepare_restore(&q);
+                    trace!("Restore address: {:?}", instruction_address);
+                    match instruction_address {
+                        None => {
+                            if state.version < 4 {
+                                self.execute_branch(state, false)
+                            } else {
+                                self.store_result(state, 0);
+                                self.next_address
+                            }
+                        }
+                        Some(addr) => {
+                            if state.version < 4 {
+                                let (_address, branch) = Self::decode_branch(state, addr);
+                                self.branch = branch;
+                                self.execute_branch(state, true)
+                            } else {
+                                let var = state.byte_value(addr);
+                                state.set_variable(var, 2);
+                                addr + 1
+                            }
+                        }
+                    }
+                },
                 None => {
                     if state.version < 4 {
                         self.execute_branch(state, false)
                     } else {
                         self.store_result(state, 0);
                         self.next_address
-                    }
-                }
-                Some(addr) => {
-                    if state.version < 4 {
-                        let (_address, branch) = Self::decode_branch(state, addr);
-                        self.branch = branch;
-                        self.execute_branch(state, true)
-                    } else {
-                        let var = state.byte_value(addr);
-                        state.set_variable(var, 2);
-                        addr + 1
                     }
                 }
             }

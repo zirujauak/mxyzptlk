@@ -8,7 +8,7 @@ use std::{env};
 
 pub mod executor;
 pub mod interpreter;
-pub mod quetzal;
+pub mod iff;
 
 use executor::Executor;
 
