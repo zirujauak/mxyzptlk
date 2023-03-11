@@ -275,7 +275,7 @@ impl Instruction {
                     5 | 6 | 7 | 8 => match opcode.instruction {
                         0x09 => (address + 1, Some(state.byte_value(address))),
                         _ => (address, None),
-                    }
+                    },
                     _ => (address, None),
                 },
                 OperandCount::_1OP => match opcode.instruction {
@@ -938,14 +938,26 @@ impl Instruction {
         } else {
             let q = state.restore_file();
             let instruction_address = state.prepare_restore(&q);
-            if state.version < 4 {
-                let (_address, branch) = Self::decode_branch(state, instruction_address);
-                self.branch = branch;
-                self.execute_branch(state, true)
-            } else {
-                let var = state.byte_value(instruction_address);
-                state.set_variable(var, 1);
-                instruction_address + 1
+            match instruction_address {
+                None => {
+                    if state.version < 4 {
+                        self.execute_branch(state, false)                       
+                    } else {
+                        self.store_result(state, 0);
+                        self.next_address
+                    }
+                }
+                Some(addr) => {
+                    if state.version < 4 {
+                        let (_address, branch) = Self::decode_branch(state, addr);
+                        self.branch = branch;
+                        self.execute_branch(state, true)
+                    } else {
+                        let var = state.byte_value(addr);
+                        state.set_variable(var, 2);
+                        addr + 1
+                    }
+                }
             }
         }
     }
@@ -1582,7 +1594,7 @@ impl Instruction {
         let operands = self.operand_values(state);
 
         let address = operands[0] as isize + (operands[1] as i16) as isize;
-        if address < header::static_memory_base(state) as isize{
+        if address < header::static_memory_base(state) as isize {
             state.set_byte(address as usize, operands[2] as u8);
         }
 
@@ -1680,7 +1692,8 @@ impl Instruction {
             0
         };
 
-        let (input, interrupt, terminator) = state.read(len, time, &existing_input, redraw, terminators);
+        let (input, interrupt, terminator) =
+            state.read(len, time, &existing_input, redraw, terminators);
         state.print_in_interrupt = false;
         if interrupt {
             trace!("READ interrupt: {} bytes in input buffer", input.len());
@@ -1780,7 +1793,7 @@ impl Instruction {
     fn print_char(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
 
-        state.print(format!("{}", (operands[0] as u8) as char));        
+        state.print(format!("{}", (operands[0] as u8) as char));
         self.next_address
     }
 

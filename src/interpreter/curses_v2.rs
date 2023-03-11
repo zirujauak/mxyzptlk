@@ -1090,7 +1090,7 @@ impl Curses_V2 {
         Spec {
             set_flags,
             clear_flags,
-            interpreter_number: 6,
+            interpreter_number: 10,
             interpreter_version: 'A' as u8,
             screen_lines: self.screen_lines as u8,
             screen_columns: self.screen_columns as u8,

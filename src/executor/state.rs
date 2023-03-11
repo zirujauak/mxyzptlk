@@ -557,14 +557,31 @@ impl State {
         Quetzal::from_vec(data)
     }
 
-    pub fn prepare_restore(&mut self, data: &Quetzal) -> usize {
+    pub fn prepare_restore(&mut self, data: &Quetzal) -> Option<usize> {
         trace!(
             "Quetzal: {:05x} bytes, {} stack frames",
             data.umem.data.len(),
             data.stks.stks.len()
         );
 
-        // TODO: Verify IFhd metadata
+        // Match IFHd data with story file
+        if data.ifhd.release_number != header::release_number(self) {
+            error!("Save file release numbers do not match: {} != {}", data.ifhd.release_number, header::release_number(self));
+            return None;
+        }
+
+        for i in 0..6 as usize {
+            if data.ifhd.serial_number[i] != header::serial_number(self)[i] {
+                error!("Save file serial numbers do not match: {:?} != {:?}", data.ifhd.serial_number, header::serial_number(self));
+            }
+            return None;
+        }
+
+        if data.ifhd.checksum != header::checksum(self) {
+            error!("Save file checksums do not match: {:#04x} != {:#04x}", data.ifhd.checksum, header::checksum(self));
+            return None;
+        }
+
         // Replace dynamic memory
         let static_address = header::static_memory_base(self) as usize;
         let mut static_memory = self.memory_map[static_address..].to_vec();
@@ -578,7 +595,7 @@ impl State {
             self.frames.push(frame);
         }
 
-        data.ifhd.pc as usize
+        Some(data.ifhd.pc as usize)
     }
 
     pub fn save_undo(&mut self, q: Quetzal) {
@@ -659,11 +676,11 @@ impl Interpreter for State {
                 self.stream_3_mut().data.len(),
             );
 
-            self.stream_3_mut().write("\n".to_string());
+            self.stream_3_mut().write("\r".to_string());
         } else {
             self.interpreter.new_line();
         }
-        
+
         self.print_in_interrupt()
     }
     fn output_stream(&mut self, stream: i16, table: usize) {
