@@ -886,6 +886,7 @@ impl Instruction {
                     self.format_store()
                 );
                 info!(
+                    target: "app::instruction",
                     "{:#05x}: {} {}{}{}",
                     self.address,
                     self.name(state),
@@ -964,6 +965,7 @@ impl Instruction {
         } else {
             let q = state.restore_file();
             let instruction_address = state.prepare_restore(&q);
+            trace!("Restore address: {:?}", instruction_address);
             match instruction_address {
                 None => {
                     if state.version < 4 {

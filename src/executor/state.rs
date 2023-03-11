@@ -184,7 +184,7 @@ impl OutputStreamTable {
 
 pub struct State {
     memory_map: Vec<u8>,
-    pristine_memory_map: Vec<u8>,
+    pub pristine_memory_map: Vec<u8>,
     pub version: u8,
     pub frames: Vec<Frame>,
     pub interpreter: Box<dyn Interpreter>,
@@ -543,11 +543,6 @@ impl State {
 
     pub fn prepare_save(&self, address: usize) -> Quetzal {
         let q = Quetzal::from_state(self, address);
-        trace!(
-            "Quetzal: {:05x} bytes, {} stack frames",
-            q.umem.data.len(),
-            q.stks.stks.len()
-        );
         q
     }
 
@@ -559,7 +554,13 @@ impl State {
     pub fn prepare_restore(&mut self, data: &Quetzal) -> Option<usize> {
         trace!(
             "Quetzal: {:05x} bytes, {} stack frames",
-            data.umem.data.len(),
+            match &data.cmem {
+                Some(c) => c.data.len(),
+                None => match &data.umem {
+                    Some(u) => u.data.len(),
+                    None => 0,
+                }
+            },
             data.stks.stks.len()
         );
 
@@ -572,8 +573,8 @@ impl State {
         for i in 0..6 as usize {
             if data.ifhd.serial_number[i] != header::serial_number(self)[i] {
                 error!("Save file serial numbers do not match: {:?} != {:?}", data.ifhd.serial_number, header::serial_number(self));
+                return None;
             }
-            return None;
         }
 
         if data.ifhd.checksum != header::checksum(self) {
@@ -584,7 +585,13 @@ impl State {
         // Replace dynamic memory
         let static_address = header::static_memory_base(self) as usize;
         let mut static_memory = self.memory_map[static_address..].to_vec();
-        self.memory_map = data.umem.data.clone();
+        self.memory_map = match &data.cmem {
+            Some(c) => c.to_vec(self),
+            None => match &data.umem {
+                Some(u) => u.data.clone(),
+                None => vec![]
+            }
+        };
         self.memory_map.append(&mut static_memory);
 
         // Rebuild frame stack
@@ -605,17 +612,17 @@ impl State {
     pub fn restore_undo(&mut self) -> Option<usize> {
         match self.undo.pop_front() {
             Some(u) => {
-                trace!(
-                    "Quetzal: {:05x} bytes, {} stack frames",
-                    u.umem.data.len(),
-                    u.stks.stks.len()
-                );
-
                 // TODO: Verify IFhd metadata
                 // Replace dynamic memory
                 let static_address = header::static_memory_base(self) as usize;
                 let mut static_memory = self.memory_map[static_address..].to_vec();
-                self.memory_map = u.umem.data.clone();
+                self.memory_map = match u.cmem {
+                    Some(c) => c.to_vec(self),
+                    None => match u.umem {
+                        Some(u) => u.data.clone(),
+                        None => vec![]
+                    }
+                };
                 self.memory_map.append(&mut static_memory);
 
                 // Rebuild frame stack
