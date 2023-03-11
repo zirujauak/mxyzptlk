@@ -24,7 +24,7 @@ struct Cursor {
     line: i32,
     column: i32,
 }
-pub struct Curses_V2 {
+pub struct CursesV2 {
     name: String,
     version: u8,
     window: Window,
@@ -45,8 +45,8 @@ pub struct Curses_V2 {
     lines_since_input: i32,
 }
 
-impl Curses_V2 {
-    pub fn new(version: u8, name: String) -> Curses_V2 {
+impl CursesV2 {
+    pub fn new(version: u8, name: String) -> CursesV2 {
         let window = pancurses::initscr();
         window.keypad(true);
         let screen_lines = window.get_max_y();
@@ -95,10 +95,6 @@ impl Curses_V2 {
             command_file: None,
             lines_since_input: 0,
         }
-    }
-
-    fn window_mut(&mut self) -> &mut Window {
-        &mut self.window
     }
 
     fn getch(&mut self) -> Option<super::Input> {
@@ -414,7 +410,7 @@ impl Curses_V2 {
     }
 }
 
-impl Interpreter for Curses_V2 {
+impl Interpreter for CursesV2 {
     fn buffer_mode(&mut self, mode: bool) {
         self.buffering = mode
     }
@@ -847,7 +843,7 @@ impl Interpreter for Curses_V2 {
         };
 
         let pair =
-            Curses_V2::color_pair(self.foreground_colour as i16, self.background_colour as i16);
+            CursesV2::color_pair(self.foreground_colour as i16, self.background_colour as i16);
         self.window.color_set(pair);
     }
 
@@ -904,7 +900,7 @@ impl Interpreter for Curses_V2 {
         }
     }
     fn show_status(&mut self, location: &str, status: &str) {
-        self.window.color_set(Curses_V2::color_pair(
+        self.window.color_set(CursesV2::color_pair(
             self.background_colour,
             self.foreground_colour,
         ));
@@ -918,7 +914,7 @@ impl Interpreter for Curses_V2 {
         let x = self.screen_columns - 1 - status.len() as i32;
         self.window.mvaddstr(0, x, status);
         self.window.refresh();
-        self.window.color_set(Curses_V2::color_pair(
+        self.window.color_set(CursesV2::color_pair(
             self.foreground_colour,
             self.background_colour,
         ));
@@ -1019,7 +1015,7 @@ const COLOR_TABLE: [i16; 8] = [
     COLOR_WHITE,
 ];
 
-impl Curses_V2 {
+impl CursesV2 {
     fn pause_output(&mut self) {
         if self.selected_window == 0 {
             let max_lines = self.screen_lines - self.status_line;
@@ -1074,14 +1070,14 @@ impl Curses_V2 {
         pancurses::start_color();
         for i in 0..COLOR_TABLE.len() {
             for j in 0..COLOR_TABLE.len() {
-                let pair = Curses_V2::color_pair(i as i16, j as i16);
+                let pair = CursesV2::color_pair(i as i16, j as i16);
                 pancurses::init_pair(pair as i16, COLOR_TABLE[i], COLOR_TABLE[j]);
             }
         }
 
         pancurses::curs_set(1);
 
-        let pair = Curses_V2::color_pair(COLOR_GREEN, COLOR_BLACK);
+        let pair = CursesV2::color_pair(COLOR_GREEN, COLOR_BLACK);
         self.window.color_set(pair);
         self.window
             .setscrreg(self.window_0_top - 1, self.screen_lines - 1);

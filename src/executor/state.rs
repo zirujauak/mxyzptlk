@@ -6,7 +6,6 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::executor::header;
 
-use crate::interpreter;
 use crate::interpreter::Input;
 use crate::interpreter::Interpreter;
 use crate::interpreter::Spec;
@@ -668,7 +667,7 @@ impl Interpreter for State {
         self.interpreter.input_stream(stream)
     }
     fn new_line(&mut self) {
-        trace!(target: "app::transcript", "\n");
+        info!(target: "app::transcript", "\n");
         if self.output_stream & 0x4 == 0x4 {
             trace!(
                 "Printing new_line to stream 3 {:#02x} @ {}",
@@ -734,7 +733,7 @@ impl Interpreter for State {
     }
 
     fn print(&mut self, text: String) {
-        trace!(target: "app::transcript", "[{:#04b}] {}", self.output_stream, text);
+        info!(target: "app::transcript", "[{:#04b}] {}", self.output_stream, text);
         if self.output_stream & 0x4 == 0x4 {
             trace!(
                 "Printing to stream 3 {:?} @ {}: {}",
@@ -749,7 +748,7 @@ impl Interpreter for State {
         }
     }
 
-    fn print_table(&mut self, text: Vec<u8>, width: u16, height: u16, skip: u16) {
+    fn print_table(&mut self, _text: Vec<u8>, _width: u16, _height: u16, _skip: u16) {
     }
 
     fn read(

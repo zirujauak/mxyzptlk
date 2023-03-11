@@ -4,12 +4,19 @@ appenders:
   stdout:
     kind: console
 
+  instruction:
+    kind: file
+    path: "instruction.log"
+    append: false
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)}:{f}/{L} - {m}{n}"
+      
   trace:
     kind: file
     path: "trace.log"
     append: false
     encoder:
-      pattern: "{d}:{f}/{L} - {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)}:{f}/{L} - {m}{n}"
 
   transcript:
     kind: file
@@ -24,8 +31,20 @@ root:
     - trace
 
 loggers:
-  app::transcript:
+  app::instruction:
+    level: info
+    appenders:
+      - instruction
+    additive: false
+    
+  app::trace:
     level: trace
+    appenders:
+      - trace
+    additive: false
+    
+  app::transcript:
+    level: info
     appenders:
       - transcript
     additive: false

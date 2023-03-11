@@ -837,12 +837,20 @@ impl Instruction {
 
     pub fn trace_instruction(&self, state: &State) {
         match (&self.opcode.opcount, self.opcode.instruction) {
-            (OperandCount::_0OP, 0x2) | (OperandCount::_0OP, 0x3) => trace!(
-                "${:05x}: {} \"{}\"",
-                self.address,
-                self.name(state),
-                text::as_text(state, self.address + 1)
-            ),
+            (OperandCount::_0OP, 0x2) | (OperandCount::_0OP, 0x3) => {
+                trace!(
+                    "{:#05x}: {} \"{}\"",
+                    self.address,
+                    self.name(state),
+                    text::as_text(state, self.address + 1)
+                );
+                info!(
+                    target: "app::instruction",                     
+                    "{:#05x}: {} \"{}\"",
+                    self.address,
+                    self.name(state),
+                    text::as_text(state, self.address + 1));
+            }
             (OperandCount::_1OP, 0xD) => {
                 let a = match self.operands[0].operand_type {
                     OperandType::SmallConstant | OperandType::LargeConstant => {
@@ -853,21 +861,39 @@ impl Instruction {
                     }
                 };
                 trace!(
-                    "${:05x}: {} {} \"{}\"",
+                    "{:#05x}: {} {} \"{}\"",
+                    self.address,
+                    self.name(state),
+                    self.format_operand(state, 0),
+                    text::as_text(state, state.packed_string_address(a))
+                );
+                info!(
+                    target: "app::instruction",
+                    "{:#05x}: {} {} \"{}\"",
                     self.address,
                     self.name(state),
                     self.format_operand(state, 0),
                     text::as_text(state, state.packed_string_address(a))
                 )
             }
-            _ => trace!(
-                "${:05x}: {} {}{}{}",
-                self.address,
-                self.name(state),
-                self.format_operands(state),
-                self.format_branch(),
-                self.format_store()
-            ),
+            _ => {
+                trace!(
+                    "{:#05x}: {} {}{}{}",
+                    self.address,
+                    self.name(state),
+                    self.format_operands(state),
+                    self.format_branch(),
+                    self.format_store()
+                );
+                info!(
+                    "{:#05x}: {} {}{}{}",
+                    self.address,
+                    self.name(state),
+                    self.format_operands(state),
+                    self.format_branch(),
+                    self.format_store()
+                );
+            }
         }
     }
 
@@ -941,7 +967,7 @@ impl Instruction {
             match instruction_address {
                 None => {
                     if state.version < 4 {
-                        self.execute_branch(state, false)                       
+                        self.execute_branch(state, false)
                     } else {
                         self.store_result(state, 0);
                         self.next_address
