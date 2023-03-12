@@ -1986,8 +1986,17 @@ impl Instruction {
 
     fn sound_effect(&self, state: &mut State) -> usize {
         let operands = self.operand_values(state);
-        state.sound_effect(operands[0], 0, 0, 0);
-
+        if operands.len() > 1 {
+            let effect = operands[1];
+            let (volume, repeats) = if operands.len() > 2 {
+                ((operands[2] & 0xFF) as u8, (operands[2] >> 8) as u8 & 0xFF)
+            } else { 
+                (0,0)
+            };
+            state.sound_effect(operands[0], effect, volume, repeats);
+        } else {
+            state.sound_effect(operands[0], 0, 0, 0);
+        }
         self.next_address
     }
 
