@@ -157,13 +157,77 @@ pub fn from_default_dictionary(state: &State, word: &Vec<char>) -> usize {
     self::from_dictionary(state, header::dictionary_table(state) as usize, word)
 }
 
+fn lookup_entry(
+    state: &State,
+    address: usize,
+    entry_count: usize,
+    entry_size: usize,
+    word: &[u16],
+) -> usize {
+    let mut min = 0;
+    let mut max = entry_count - 1;
+    let mut pivot = max / 2;
+
+    // Binary search:
+    // Set min to first entry, max to last entry
+    // Set pivot to halfway point in dictionary
+    // If entry is too high, set max to pivot, reset pivot to halfway between min and max, and repeat
+    // If entry is too low, set min to pivot, reset pivot to halfway between min and max, and repeat
+    // If min exceeds max, the entry was not found
+    'outer: loop {
+        let addr = address + (pivot * entry_size);
+        for i in 0..word.len() {
+            let w = state.word_value(addr + (i * 2));
+            if w > word[i] {
+                trace!("Min/Pivot/Max: {}/{}/{} -- vvv", min, pivot, max);
+                max = pivot - 1;
+                if max < min {
+                    break 'outer;
+                }
+                let new_pivot = min + ((max - min) / 2);
+                if new_pivot == pivot {
+                    pivot = new_pivot - 1;
+                } else {
+                    pivot = new_pivot;
+                }
+                continue 'outer;
+            } else if w < word[i] {
+                trace!("Min/Pivot/Max: {}/{}/{} -- ^^^", min, pivot, max);
+                min = pivot + 1;
+                if min > max {
+                    break 'outer;
+                }
+                let new_pivot = min + ((max - min) / 2);
+                if new_pivot == pivot {
+                    pivot = new_pivot + 1;
+                } else {
+                    pivot = new_pivot
+                }
+                if pivot > max {
+                    break 'outer;
+                }
+                continue 'outer;
+            }
+        }
+
+        trace!("Entry found @ {:#05x}", addr);
+        return addr;
+    }
+
+    trace!("No entry found");
+    0
+}
+
 pub fn from_dictionary(state: &State, dictionary_address: usize, word: &Vec<char>) -> usize {
-    trace!("Searching dictioary @ {:#05x} for {:?}", dictionary_address, word);
+    trace!(
+        "Searching dictionary @ {:#05x} for {:?}",
+        dictionary_address,
+        word
+    );
     let dictionary_address = header::dictionary_table(state) as usize;
     let separator_count = state.byte_value(dictionary_address) as usize;
     let entry_size = state.byte_value(dictionary_address + 1 + separator_count) as usize;
-    // TODO: negative counts indicate unsorted table ... remember this when implementing searching
-    let entry_count = i16::abs((state.word_value(dictionary_address + 1 + separator_count + 1)) as i16) as usize;
+    let entry_count = (state.word_value(dictionary_address + 1 + separator_count + 1)) as i16;
 
     if state.version < 4 {
         // Encode the input
@@ -178,24 +242,37 @@ pub fn from_dictionary(state: &State, dictionary_address: usize, word: &Vec<char
         let w1 = word_value(w[0], w[1], w[2]);
         let w2 = word_value(w[3], w[4], w[5]) | 0x8000;
 
-        for i in 0..entry_count {
-            let entry_address = dictionary_address + separator_count + 4 + (i * entry_size);
-            let e1 = state.word_value(entry_address);
-            if e1 == w1 {
-                let e2 = state.word_value(entry_address + 2);
-                if e2 == w2 {
-                    trace!("Entry {}", i + 1);
-                    return entry_address;
+        if entry_count > 0 {
+            lookup_entry(
+                state,
+                dictionary_address + separator_count + 4,
+                i16::abs(entry_count) as usize,
+                entry_size,
+                &[w1, w2],
+            )
+        } else {
+            // A negative entry count is an unsorted table
+            for i in 0..i16::abs(entry_count) as usize {
+                let entry_address = dictionary_address + separator_count + 4 + (i * entry_size);
+                let e1 = state.word_value(entry_address);
+                if e1 == w1 {
+                    let e2 = state.word_value(entry_address + 2);
+                    if e2 == w2 {
+                        trace!("Entry {}", i + 1);
+                        return entry_address;
+                    } else {
+                        if w2 < e2 {
+                            return 0;
+                        }
+                    }
                 } else {
-                    if w2 < e2 {
+                    if w1 < e1 {
                         return 0;
                     }
                 }
-            } else {
-                if w1 < e1 {
-                    return 0;
-                }
             }
+
+            0
         }
     } else {
         // Encode the input
@@ -211,33 +288,43 @@ pub fn from_dictionary(state: &State, dictionary_address: usize, word: &Vec<char
         let w2 = word_value(w[3], w[4], w[5]);
         let w3 = word_value(w[6], w[7], w[8]) | 0x8000;
 
-        for i in 0..entry_count {
-            let entry_address = dictionary_address + separator_count + 4 + (i * entry_size);
-            let e1 = state.word_value(entry_address);
-            if e1 == w1 {
-                let e2 = state.word_value(entry_address + 2);
-                if e2 == w2 {
-                    let e3 = state.word_value(entry_address + 4);
-                    if e3 == w3 {
-                        trace!("Entry {}", i + 1);
-                        return entry_address;
+        if entry_count > 0 {
+            lookup_entry(
+                state,
+                dictionary_address + separator_count + 4,
+                i16::abs(entry_count) as usize,
+                entry_size,
+                &[w1, w2, w3],
+            )
+        } else {
+            for i in 0..i16::abs(entry_count) as usize {
+                let entry_address = dictionary_address + separator_count + 4 + (i * entry_size);
+                let e1 = state.word_value(entry_address);
+                if e1 == w1 {
+                    let e2 = state.word_value(entry_address + 2);
+                    if e2 == w2 {
+                        let e3 = state.word_value(entry_address + 4);
+                        if e3 == w3 {
+                            trace!("Entry {}", i + 1);
+                            return entry_address;
+                        } else {
+                            if w3 < e3 {
+                                return 0;
+                            }
+                        }
                     } else {
-                        if w3 < e3 {
+                        if w2 < e2 {
                             return 0;
                         }
                     }
                 } else {
-                    if w2 < e2 {
+                    if w1 < e1 {
                         return 0;
                     }
                 }
-            } else {
-                if w1 < e1 {
-                    return 0;
-                }
             }
+
+            0
         }
     }
-
-    0
 }
