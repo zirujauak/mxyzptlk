@@ -2,10 +2,10 @@ use std::{
     cmp::{max, min},
     collections::HashMap,
     fs::{self, File},
-    io::{BufReader, Write},
+    io::Write,
     path::Path,
     thread,
-    time::{self, Duration, SystemTime, UNIX_EPOCH},
+    time::{self, SystemTime, UNIX_EPOCH},
 };
 
 use pancurses::{
@@ -13,7 +13,7 @@ use pancurses::{
     COLOR_BLACK, COLOR_BLUE, COLOR_CYAN, COLOR_GREEN, COLOR_MAGENTA, COLOR_RED, COLOR_WHITE,
     COLOR_YELLOW,
 };
-use rodio::{decoder, Decoder, OutputStream, OutputStreamHandle, Sink, Source};
+use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use tempfile::NamedTempFile;
 
 use super::{Input as OtherInput, Interpreter, Sound, Spec};
@@ -43,7 +43,7 @@ pub struct CursesV2 {
     transcript_file: Option<File>,
     command_file: Option<File>,
     lines_since_input: i32,
-    output_stream: OutputStream,
+    _output_stream: OutputStream,
     output_stream_handle: OutputStreamHandle,
     pub sounds: HashMap<u8, Sound>,
     current_effect: u8,
@@ -79,6 +79,17 @@ impl CursesV2 {
         trace!("Window 1 bottom: {}", 0);
         trace!("Window 0 top: {}", status_line + 1);
 
+        // Initialize color pairs for all fg/bg comobos
+        pancurses::start_color();
+        for i in 0..COLOR_TABLE.len() {
+            for j in 0..COLOR_TABLE.len() {
+                let pair = CursesV2::color_pair(i as i16, j as i16);
+                pancurses::init_pair(pair as i16, COLOR_TABLE[i], COLOR_TABLE[j]);
+            }
+        }
+
+        pancurses::curs_set(1);
+
         let cursor = vec![window_0_cursor, Cursor { line: 0, column: 0 }];
 
         let (stream, stream_handle) = OutputStream::try_default().unwrap();
@@ -102,7 +113,7 @@ impl CursesV2 {
             transcript_file: None,
             command_file: None,
             lines_since_input: 0,
-            output_stream: stream,
+            _output_stream: stream,
             output_stream_handle: stream_handle,
             sounds: HashMap::new(),
             current_effect: 0,
@@ -571,7 +582,7 @@ impl Interpreter for CursesV2 {
                             self.transcript_file
                                 .as_mut()
                                 .unwrap()
-                                .write_fmt(format_args!("\n{}", s))
+                                .write_fmt(format_args!("\n{}", s.replace("\r", "\n")))
                                 .unwrap();
                         }
                         // self.current_window_mut().addstr(s);
@@ -581,7 +592,7 @@ impl Interpreter for CursesV2 {
                             self.transcript_file
                                 .as_mut()
                                 .unwrap()
-                                .write_all(s.as_bytes())
+                                .write_all(s.replace("\r", "\n").as_bytes())
                                 .unwrap();
                         }
                         // self.current_window_mut().addstr(s);
@@ -594,7 +605,7 @@ impl Interpreter for CursesV2 {
                     self.transcript_file
                         .as_mut()
                         .unwrap()
-                        .write_all(text.as_bytes())
+                        .write_all(text.replace("\r", "\n").as_bytes())
                         .unwrap();
                 }
                 // self.current_window_mut().addstr(text);
@@ -975,7 +986,7 @@ impl Interpreter for CursesV2 {
                                 match NamedTempFile::new() {
                                     Ok(mut write) => match write.reopen() {
                                         Ok(read) => match self.sounds.get(&(number as u8)) {
-                                            Some(s) => match (write.write_all(&s.data)) {
+                                            Some(s) => match write.write_all(&s.data) {
                                                 Ok(_) => match Decoder::new(read) {
                                                     Ok(source) => {
                                                         match self.sink {
@@ -990,12 +1001,23 @@ impl Interpreter for CursesV2 {
                                                                 sink.set_volume(
                                                                     volume as f32 / 128.0,
                                                                 );
-                                                                if s.repeat == 0 {
-                                                                    sink.append(
-                                                                        source.repeat_infinite(),
-                                                                    )
-                                                                } else {
-                                                                    sink.append(source);
+                                                                match s.repeat {
+                                                                    Some(repeats) => {
+                                                                        match repeats {
+                                                                            0 => sink.append(source.repeat_infinite()),
+                                                                            _ => for _ in 0..repeats {
+                                                                                sink.append(Decoder::new(write.reopen().unwrap()).unwrap());
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    None => {
+                                                                        match repeats {
+                                                                            255 => sink.append(source.repeat_infinite()),
+                                                                            _ => for _ in 0..repeats {
+                                                                                sink.append(Decoder::new(write.reopen().unwrap()).unwrap());
+                                                                            }
+                                                                        }
+                                                                    }
                                                                 }
                                                                 sink.play();
                                                                 self.current_effect = number as u8;
@@ -1020,19 +1042,19 @@ impl Interpreter for CursesV2 {
                                     },
                                     Err(e) => error!("Error opening temp file for writing: {}", e),
                                 }
-                                let mut tf = NamedTempFile::new().unwrap();
-                                let tfr = tf.reopen().unwrap();
-                                let s = self.sounds.get(&(number as u8)).unwrap();
-                                tf.write_all(&s.data).unwrap();
-                                let source = Decoder::new(tfr).unwrap();
-                                let sink = Sink::try_new(&self.output_stream_handle).unwrap();
-                                sink.set_volume(volume as f32 / 128.0);
-                                if s.repeat == 0 {
-                                    sink.append(source.repeat_infinite());
-                                }
-                                sink.play();
-                                self.current_effect = number as u8;
-                                self.sink = Some(sink);
+                                // let mut tf = NamedTempFile::new().unwrap();
+                                // let tfr = tf.reopen().unwrap();
+                                // let s = self.sounds.get(&(number as u8)).unwrap();
+                                // tf.write_all(&s.data).unwrap();
+                                // let source = Decoder::new(tfr).unwrap();
+                                // let sink = Sink::try_new(&self.output_stream_handle).unwrap();
+                                // sink.set_volume(volume as f32 / 128.0);
+                                // if s.repeat == 0 {
+                                //     sink.append(source.repeat_infinite());
+                                // }
+                                // sink.play();
+                                // self.current_effect = number as u8;
+                                // self.sink = Some(sink);
                             }
                         },
                         3 | 4 => {
@@ -1125,6 +1147,58 @@ impl Interpreter for CursesV2 {
     fn resources(&mut self, sounds: HashMap<u8, super::Sound>) {
         self.sounds = sounds;
     }
+
+    fn spec(&mut self, version: u8) -> Spec {
+        let set_flags = match version {
+            1 | 2 | 3 => vec![Flag::ScreenSplittingAvailable],
+            4 | 5 | 6 | 7 | 8 => vec![
+                Flag::BoldfaceAvailable,
+                Flag::ItalicAvailable,
+                Flag::FixedSpaceAvailable,
+                Flag::TimedInputAvailable,
+                Flag::PicturesAvailable,
+                Flag::ColoursAvailable,
+                Flag::SoundEffectsAvailable,
+            ],
+            _ => vec![],
+        };
+        let clear_flags = match version {
+            1 | 2 | 3 => vec![
+                Flag::StatusLineNotAvailable,
+                Flag::VariablePitchDefaultFont,
+            ],
+            4 | 5 | 6 | 7 | 8 => vec![
+                Flag::GameWantsSoundEffects,
+                Flag::GameWantsPictures,
+                Flag::GameWantsMenus,
+            ],
+            _ => vec![],
+        };
+
+        // Unsplit the window
+        self.window_1_bottom = 0;
+        self.window_0_top = self.status_line;
+        self.cursor[1].column = 0;
+        self.cursor[1].line = 0;
+        self.window.color_set(CursesV2::color_pair(COLOR_GREEN, COLOR_BLACK));
+        self.window
+            .setscrreg(self.window_0_top - 1, self.screen_lines - 1);
+        self.window.scrollok(true);
+
+        Spec {
+            set_flags,
+            clear_flags,
+            interpreter_number: 10,
+            interpreter_version: 'A' as u8,
+            screen_lines: self.screen_lines as u8,
+            screen_columns: self.screen_columns as u8,
+            line_units: 1,
+            column_units: 1,
+            background_color: 2,
+            foreground_color: 4,
+        }
+    }
+
 }
 
 const COLOR_TABLE: [i16; 8] = [
@@ -1160,65 +1234,6 @@ impl CursesV2 {
         (fg * 8) + bg
     }
 
-    pub fn spec(&self, version: u8) -> Spec {
-        let set_flags = match version {
-            1 | 2 | 3 => vec![Flag::ScreenSplittingAvailable],
-            4 | 5 | 6 | 7 | 8 => vec![
-                Flag::BoldfaceAvailable,
-                Flag::ItalicAvailable,
-                Flag::FixedSpaceAvailable,
-                Flag::TimedInputAvailable,
-                Flag::PicturesAvailable,
-                Flag::ColoursAvailable,
-                Flag::SoundEffectsAvailable,
-            ],
-            _ => vec![],
-        };
-        let clear_flags = match version {
-            1 | 2 | 3 => vec![
-                Flag::StatusLineNotAvailable,
-                Flag::VariablePitchDefaultFont,
-                Flag::Transcripting,
-            ],
-            4 | 5 | 6 | 7 | 8 => vec![
-                Flag::Transcripting,
-                Flag::GameWantsSoundEffects,
-                Flag::GameWantsPictures,
-                Flag::GameWantsMenus,
-            ],
-            _ => vec![],
-        };
-
-        // Initialize color pairs for all fg/bg comobos
-        pancurses::start_color();
-        for i in 0..COLOR_TABLE.len() {
-            for j in 0..COLOR_TABLE.len() {
-                let pair = CursesV2::color_pair(i as i16, j as i16);
-                pancurses::init_pair(pair as i16, COLOR_TABLE[i], COLOR_TABLE[j]);
-            }
-        }
-
-        pancurses::curs_set(1);
-
-        let pair = CursesV2::color_pair(COLOR_GREEN, COLOR_BLACK);
-        self.window.color_set(pair);
-        self.window
-            .setscrreg(self.window_0_top - 1, self.screen_lines - 1);
-        self.window.scrollok(true);
-
-        Spec {
-            set_flags,
-            clear_flags,
-            interpreter_number: 10,
-            interpreter_version: 'A' as u8,
-            screen_lines: self.screen_lines as u8,
-            screen_columns: self.screen_columns as u8,
-            line_units: 1,
-            column_units: 1,
-            background_color: 2,
-            foreground_color: 4,
-        }
-    }
 
     fn next_filename(&self, extension: &str) -> String {
         let mut index = 0;

@@ -978,6 +978,7 @@ impl Instruction {
                             }
                         }
                         Some(addr) => {
+                            state.initialize();
                             if state.version < 4 {
                                 let (_address, branch) = Self::decode_branch(state, addr);
                                 self.branch = branch;
@@ -1002,8 +1003,8 @@ impl Instruction {
         }
     }
 
-    fn restart(&mut self, _state: &mut State) -> usize {
-        todo!()
+    fn restart(&mut self, state: &mut State) -> usize {
+        state.restart()
     }
 
     fn ret_popped(&self, state: &mut State) -> usize {

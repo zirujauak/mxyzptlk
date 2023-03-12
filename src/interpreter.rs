@@ -36,11 +36,12 @@ pub trait Interpreter {
     fn restore(&mut self) -> Vec<u8>;
 
     fn resources(&mut self, sounds: HashMap<u8, Sound>);
+    fn spec(&mut self, version: u8) -> Spec;
 }
 
 pub struct Sound {
     pub data: Vec<u8>,
-    pub repeat: u8,
+    pub repeat: Option<u8>,
 }
 
 #[derive(Debug, Copy, Clone)]

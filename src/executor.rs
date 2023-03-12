@@ -21,9 +21,8 @@ impl Executor {
         let version = v[0];
 
         let interpreter = CursesV2::new(version, name);
-        let spec = interpreter.spec(version);
         let mut state = State::new(&v, Box::new(interpreter));
-        state.initialize(spec);
+        state.initialize();
         Executor { state }
     }
 

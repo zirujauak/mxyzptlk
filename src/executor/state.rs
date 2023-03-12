@@ -239,7 +239,8 @@ impl State {
         }
     }
 
-    pub fn initialize(&mut self, spec: Spec) {
+    pub fn initialize(&mut self) {
+        let spec = self.interpreter.spec(self.version);
         // Set and clear flag bits
         for f in spec.set_flags {
             trace!("Setting flag {:?}", f);
@@ -600,6 +601,9 @@ impl State {
         // Replace dynamic memory
         let static_address = header::static_memory_base(self) as usize;
         let mut static_memory = self.memory_map[static_address..].to_vec();
+        let flags2_1 = self.byte_value(0x10);
+        let flags2_2 = self.byte_value(0x11);
+
         self.memory_map = match &data.cmem {
             Some(c) => c.to_vec(self),
             None => match &data.umem {
@@ -608,6 +612,8 @@ impl State {
             },
         };
         self.memory_map.append(&mut static_memory);
+        self.set_byte(0x10, flags2_1);
+        self.set_byte(0x11, flags2_2);
 
         // Rebuild frame stack
         self.frames.clear();
@@ -713,7 +719,7 @@ impl State {
                             entry.number as u8,
                             Sound {
                                 data: s.data.clone(),
-                                repeat: 1,
+                                repeat: Some(1),
                             },
                         );
                     }
@@ -728,7 +734,7 @@ impl State {
                 for entry in sloop.entries {
                     match sounds.get_mut(&(entry.number as u8)) {
                         Some(s) => {
-                            s.repeat = entry.repeats as u8;
+                            s.repeat = Some(entry.repeats as u8);
                         },
                         None => warn!("Loop has repeat for missing sound #{}", entry.number)
                     }
@@ -739,10 +745,39 @@ impl State {
 
         for k in sounds.keys() {
             let s = sounds.get(k).unwrap();
-            trace!("Loaded sound effect #{}, repeat = {}", k, s.repeat);
+            trace!("Loaded sound effect #{}, repeat = {:?}", k, s.repeat);
         }
 
         self.interpreter.resources(sounds);
+    }
+
+    pub fn restart(&mut self) -> usize {
+        let flags2_1 = self.byte_value(0x10);
+        let flags2_2 = self.byte_value(0x11);
+
+        // Reset the memory map, preserving Flags
+        self.memory_map = self.pristine_memory_map.clone();
+        self.set_byte(0x10, flags2_1);
+        self.set_byte(0x11, flags2_2);
+
+        // Clear the frame stack
+        self.frames.clear();
+
+        // Load the initial frame
+        let f = {
+            let pc = header::initial_pc(self) as usize;
+            match self.version {
+                6 => {
+                    let addr = (pc * 4) + (header::routine_offset(self) as usize * 8);
+                    Frame::call(&self.memory_map, self.version, addr, &Vec::new(), None, 0)
+                }
+                _ => Frame::initial(&self.memory_map, pc),
+            }
+        };
+        let pc = f.pc;
+        self.frames.push(f);
+
+        pc
     }
 }
 
@@ -909,7 +944,12 @@ impl Interpreter for State {
     fn restore(&mut self) -> Vec<u8> {
         self.interpreter.restore()
     }
-    fn resources(&mut self, sounds: HashMap<u8, Sound>) {
+    fn resources(&mut self, _sounds: HashMap<u8, Sound>) {
         todo!()
     }
+
+    fn spec(&mut self, _version: u8) -> Spec {
+        self.interpreter.spec(self.version)
+    }
+    
 }

@@ -80,6 +80,9 @@ impl CMem {
             }
         }
 
+        // FLAGS2 in the header is preserved from the current play state
+        data[0x10] = state.byte_value(0x10);
+        data[0x11] = state.byte_value(0x11);
         trace!("Uncompressed CMem: {} bytes", data.len());
         trace!("Header base of static: {}", header::static_memory_base(state));
         data
