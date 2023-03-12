@@ -1,3 +1,6 @@
+use std::{fs, io::Write};
+
+pub mod blorb;
 pub mod quetzal;
 
 pub fn usize_as_vec(d: usize, bytes: usize) -> Vec<u8> {
@@ -60,22 +63,51 @@ pub fn chunk(id: &str, data: &mut Vec<u8>) -> Vec<u8> {
 }
 
 pub struct Chunk {
+    offset: usize,
+    form: Option<String>,
     id: String,
     length: u32,
-    data: Vec<u8>
+    data: Vec<u8>,
 }
 
 impl Chunk {
     pub fn from_vec(vec: &Vec<u8>, offset: usize) -> Chunk {
-        let id = vec_to_id(&vec, offset);
+        let mut form = None;
+        let mut id = vec_to_id(&vec, offset);
+        if id == "FORM" {
+            form = Some(id);
+            id = vec_to_id(&vec, offset + 8);
+        }
+
         let length = vec_to_u32(&vec, offset + 4, 4);
-        trace!("IFF Chunk: {} {:#05x}", id, length);
+
+        match &form {
+            Some(fr) => {
+                let mut f = fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(format!("sample-{}.aiff", offset))
+                    .unwrap();
+                f.write_all(&id_as_vec(&fr)).unwrap();
+                f.write_all(&u32_to_vec(length, 4)).unwrap();
+                let d = &vec[offset + 8..offset + 8 + (length as usize)];
+                trace!("d: {} bytes", d.len());
+                f.write_all(d).unwrap();
+                f.flush().unwrap();
+            }
+            None => (),
+        }
+
+        trace!("IFF Chunk: {:?}/{} {:#05x}", form, id, length);
         let data = vec[offset + 8..offset + 8 + length as usize].to_vec();
 
         Chunk {
+            offset,
+            form,
             id,
             length,
-            data            
+            data,
         }
     }
 
@@ -83,16 +115,31 @@ impl Chunk {
         let mut v = Vec::new();
 
         // Chunk ID
-        let id_b = self.id.as_bytes();
-        for b in id_b {
-            v.push(*b);
-        }
+        match &self.form {
+            Some(f) => {
+                for b in f.as_bytes() {
+                    v.push(*b);
+                }
+                v.append(&mut u32_to_vec(self.length, 4));
+                for b in self.id.as_bytes() {
+                    v.push(*b)
+                }
+            }
+            None => {
+                for b in self.id.as_bytes() {
+                    v.push(*b);
+                }
 
-        // Length
-        v.append(&mut u32_to_vec(self.length, 4));
+                v.append(&mut u32_to_vec(self.length, 4));
+            }
+        }
 
         // Data
         v.append(&mut self.data.clone());
+
+        if self.data.len() %2 == 1 {
+            v.push(0);
+        }
 
         v
     }
@@ -102,7 +149,7 @@ pub struct IFF {
     form: String,
     length: u32,
     sub_form: String,
-    chunks: Vec<Chunk>
+    chunks: Vec<Chunk>,
 }
 
 impl IFF {
@@ -124,12 +171,18 @@ impl IFF {
             }
         }
 
-        trace!("IFF: {}/{} {:#05x}, {} chunks", form, sub_form, length, chunks.len());
+        trace!(
+            "IFF: {}/{} {:#05x}, {} chunks",
+            form,
+            sub_form,
+            length,
+            chunks.len()
+        );
         IFF {
             form,
             length,
             sub_form,
-            chunks
+            chunks,
         }
     }
 }

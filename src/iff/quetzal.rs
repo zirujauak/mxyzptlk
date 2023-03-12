@@ -46,34 +46,6 @@ impl Quetzal {
             }
         }
 
-        // while length as isize - position as isize > 1 {
-        //     let id = String::from_utf8(data[position..position + 4].to_vec()).unwrap();
-        //     let len = vec_as_usize(data[position + 4..position + 8].to_vec(), 4);
-        //     match id.as_str() {
-        //         "IFhd" => {
-        //             let chunk_data = data[position + 8..position + 8 + len].to_vec();
-        //             ifhd = Some(IFhd::from_vec(chunk_data));
-        //         }
-        //         "UMem" => {
-        //             let chunk_data = data[position + 8..position + 8 + len].to_vec();
-        //             umem = Some(UMem::from_vec(chunk_data));
-        //         }
-        //         "CMem" => {
-        //             let chunk_data = data[position + 8..position + 8 + len].to_vec();
-        //             cmem = Some(CMem::from_vec(chunk_data));
-        //         }
-        //         "Stks" => {
-        //             let chunk_data = data[position + 8..position + 8 + len].to_vec();
-        //             stks = Some(Stks::from_vec(chunk_data));
-        //         }
-        //         _ => {}
-        //     }
-        //     position = position + 8 + len;
-        //     if len % 2 == 1 {
-        //         position = position + 1;
-        //     }
-        // }
-
         match ifhd {
             Some(_) => match stks {
                 Some(_) => match cmem {

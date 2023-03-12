@@ -1047,6 +1047,7 @@ impl CursesV2 {
                 Flag::TimedInputAvailable,
                 Flag::PicturesAvailable,
                 Flag::ColoursAvailable,
+                Flag::SoundEffectsAvailable
             ],
             _ => vec![],
         };
@@ -1061,7 +1062,6 @@ impl CursesV2 {
                 Flag::GameWantsSoundEffects,
                 Flag::GameWantsPictures,
                 Flag::GameWantsMenus,
-                Flag::SoundEffectsAvailable,
             ],
             _ => vec![],
         };
