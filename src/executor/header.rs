@@ -1,5 +1,6 @@
 use super::state::State;
 
+/// Header flags, version specific
 #[derive(Debug)]
 pub enum Flag {
     // Flags 1, v1 - 3
@@ -28,10 +29,12 @@ pub enum Flag {
     GameWantsMenus,        // bit 8
 }
 
+/// Returns the ZMachine version (1-5, 7-8 are supported) stored in the header at offset $00
 pub fn version(state: &State) -> u8 {
     state.byte_value(0x00)
 }
 
+/// Identifies the bit in a Flags structure that corresponds to a specific flag
 fn flag_bit(version: u8, flag: &Flag) -> u8 {
     match version {
         1 | 2 => {
@@ -55,6 +58,7 @@ fn flag_bit(version: u8, flag: &Flag) -> u8 {
                 Flag::StatusLineNotAvailable => 4,
                 Flag::ScreenSplittingAvailable => 5,
                 Flag::VariablePitchDefaultFont => 6,
+                // Flags 2
                 Flag::Transcripting => 0,
                 Flag::ForceFixedPitch => 1,
                 // TODO: This is an error
@@ -63,10 +67,12 @@ fn flag_bit(version: u8, flag: &Flag) -> u8 {
         }
         4 => {
             match flag {
+                // Flags 1
                 Flag::BoldfaceAvailable => 2,
                 Flag::ItalicAvailable => 3,
                 Flag::FixedSpaceAvailable => 4,
                 Flag::TimedInputAvailable => 7,
+                // Flags 2
                 Flag::Transcripting => 0,
                 Flag::ForceFixedPitch => 1,
                 // TODO: This is an error
@@ -75,6 +81,7 @@ fn flag_bit(version: u8, flag: &Flag) -> u8 {
         }
         5 | 7 | 8 => {
             match flag {
+                // Flags 1
                 Flag::ColoursAvailable => 0,
                 Flag::PicturesAvailable => 1,
                 Flag::BoldfaceAvailable => 2,
@@ -82,6 +89,7 @@ fn flag_bit(version: u8, flag: &Flag) -> u8 {
                 Flag::FixedSpaceAvailable => 4,
                 Flag::SoundEffectsAvailable => 5,
                 Flag::TimedInputAvailable => 7,
+                // Flags 2
                 Flag::Transcripting => 0,
                 Flag::ForceFixedPitch => 1,
                 Flag::GameWantsPictures => 3,
@@ -95,6 +103,7 @@ fn flag_bit(version: u8, flag: &Flag) -> u8 {
         }
         6 => {
             match flag {
+                // Flags 1
                 Flag::ColoursAvailable => 0,
                 Flag::PicturesAvailable => 1,
                 Flag::BoldfaceAvailable => 2,
@@ -102,6 +111,7 @@ fn flag_bit(version: u8, flag: &Flag) -> u8 {
                 Flag::FixedSpaceAvailable => 4,
                 Flag::SoundEffectsAvailable => 5,
                 Flag::TimedInputAvailable => 7,
+                // Flags 2
                 Flag::Transcripting => 0,
                 Flag::ForceFixedPitch => 1,
                 Flag::RequestRedraw => 2,
@@ -120,6 +130,8 @@ fn flag_bit(version: u8, flag: &Flag) -> u8 {
     }
 }
 
+/// Tests where a Flag is a member of the Flags1 structure.  If the result is false,
+/// then the flag must be part of Flags2.
 fn is_flag1(flag: &Flag) -> bool {
     match flag {
         Flag::StatusLineType
@@ -137,6 +149,8 @@ fn is_flag1(flag: &Flag) -> bool {
         _ => false,
     }
 }
+
+/// Returns the current value of a flag, `0` for off, `1` for on.
 pub fn flag(state: &State, flag: Flag) -> u16 {
     let v = version(state);
     let bit = flag_bit(v, &flag);
@@ -148,6 +162,7 @@ pub fn flag(state: &State, flag: Flag) -> u16 {
     }
 }
 
+/// Sets a flag to `1`
 pub fn set_flag(state: &mut State, flag: Flag) {
     let v = version(state);
     let bit = flag_bit(v, &flag);
@@ -161,6 +176,7 @@ pub fn set_flag(state: &mut State, flag: Flag) {
     }
 }
 
+/// Clears a flag to `0`
 pub fn clear_flag(state: &mut State, flag: Flag) {
     let v = state.version;
     let bit = flag_bit(v, &flag);
@@ -174,54 +190,73 @@ pub fn clear_flag(state: &mut State, flag: Flag) {
     }
 }
 
+/// Returns the release number from the header stored at offset $02
 pub fn release_number(state: &State) -> u16 {
     state.word_value(0x02)
 }
 
+/// Returns a vector containing the 6-byte serial number from the header stored
+/// at offset $12
 pub fn serial_number(state: &State) -> Vec<u8> {
     state.memory_map()[0x12..0x18].to_vec()
 }
 
+/// Returns the initial program counter from the header stored at offset $06
 pub fn initial_pc(state: &State) -> u16 {
     state.word_value(0x06)
 }
 
+/// Returns the routine offset (V6,7) from the header stored at offset $28
 pub fn routine_offset(state: &State) -> u16 {
     state.word_value(0x28)
 }
 
+/// Returns the string offset (V6,7) from the header stored at offset $2A
 pub fn strings_offset(state: &State) -> u16 {
     state.word_value(0x2a)
 }
 
+/// Returns the object table byte address from the header stored at offset $0A
 pub fn object_table(state: &State) -> usize {
     state.word_value(0x0a) as usize
 }
 
+/// Returns the global variable table byte address from the header stored at offset $0C
 pub fn global_variable_table(state: &State) -> u16 {
     state.word_value(0x0c)
 }
 
+/// Returns the dictionary table byte address from the header stored at offset $08
 pub fn dictionary_table(state: &State) -> u16 {
     state.word_value(0x08)
 }
 
+/// Returns the base of static memory from the header stored at offset $0E
 pub fn static_memory_base(state: &State) -> u16 {
     state.word_value(0x0e)
 }
 
+/// Returns the (packed) length word from the header stored at offset $1A
 pub fn length(state: &State) -> u16 {
     state.word_value(0x1a)
 }
 
+/// Returns the checksum word from the header stored at offset $1C
 pub fn checksum(state: &State) -> u16 {
     state.word_value(0x1c)
 }
 
+/// Returns the terminating character table byte address from the header stored
+/// at offset $2E
 pub fn terminating_character_table(state: &State) -> u16 {
     state.word_value(0x2e)
 }
 
+/// Sets a word in the header extension table.
+/// 
+/// # Arguments
+/// * `index`: 0-based index in the table of the word to set
+/// * `value`: word to set
 pub fn set_extension_word(state: &mut State, index: usize, value: u16) {
     let table = state.word_value(0x36) as usize;
     if table > 0 {
