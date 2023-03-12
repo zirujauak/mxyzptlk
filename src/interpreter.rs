@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::executor::header::Flag;
 
 //pub mod curses;
@@ -32,6 +34,13 @@ pub trait Interpreter {
     fn split_window(&mut self, lines: u16);
     fn save(&mut self, data: &Vec<u8>);
     fn restore(&mut self) -> Vec<u8>;
+
+    fn resources(&mut self, sounds: HashMap<u8, Sound>);
+}
+
+pub struct Sound {
+    pub data: Vec<u8>,
+    pub repeat: u8,
 }
 
 #[derive(Debug, Copy, Clone)]

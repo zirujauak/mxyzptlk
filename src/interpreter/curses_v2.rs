@@ -1,10 +1,11 @@
 use std::{
     cmp::{max, min},
+    collections::HashMap,
     fs::{self, File},
-    io::Write,
+    io::{BufReader, Write},
     path::Path,
     thread,
-    time::{self, SystemTime, UNIX_EPOCH},
+    time::{self, Duration, SystemTime, UNIX_EPOCH},
 };
 
 use pancurses::{
@@ -12,12 +13,11 @@ use pancurses::{
     COLOR_BLACK, COLOR_BLUE, COLOR_CYAN, COLOR_GREEN, COLOR_MAGENTA, COLOR_RED, COLOR_WHITE,
     COLOR_YELLOW,
 };
+use rodio::{decoder, Decoder, OutputStream, OutputStreamHandle, Sink, Source};
+use tempfile::NamedTempFile;
 
-use super::{Interpreter, Spec, Input as OtherInput};
-use crate::executor::{
-    header::{Flag},
-    text,
-};
+use super::{Input as OtherInput, Interpreter, Sound, Spec};
+use crate::executor::{header::Flag, text};
 
 #[derive(Debug)]
 struct Cursor {
@@ -43,6 +43,11 @@ pub struct CursesV2 {
     transcript_file: Option<File>,
     command_file: Option<File>,
     lines_since_input: i32,
+    output_stream: OutputStream,
+    output_stream_handle: OutputStreamHandle,
+    pub sounds: HashMap<u8, Sound>,
+    current_effect: u8,
+    sink: Option<Sink>,
 }
 
 impl CursesV2 {
@@ -75,6 +80,9 @@ impl CursesV2 {
         trace!("Window 0 top: {}", status_line + 1);
 
         let cursor = vec![window_0_cursor, Cursor { line: 0, column: 0 }];
+
+        let (stream, stream_handle) = OutputStream::try_default().unwrap();
+
         Self {
             name,
             version,
@@ -94,6 +102,11 @@ impl CursesV2 {
             transcript_file: None,
             command_file: None,
             lines_since_input: 0,
+            output_stream: stream,
+            output_stream_handle: stream_handle,
+            sounds: HashMap::new(),
+            current_effect: 0,
+            sink: None,
         }
     }
 
@@ -635,9 +648,15 @@ impl Interpreter for CursesV2 {
         self.window.refresh();
 
         match existing_input.last() {
-            Some(x) => if self.is_terminator(&terminators, *x as u8) {
-                return (existing_input.clone(), false, super::Input::from_char(*x, *x as u8).unwrap());
-            },
+            Some(x) => {
+                if self.is_terminator(&terminators, *x as u8) {
+                    return (
+                        existing_input.clone(),
+                        false,
+                        super::Input::from_char(*x, *x as u8).unwrap(),
+                    );
+                }
+            }
             _ => {}
         }
 
@@ -920,7 +939,7 @@ impl Interpreter for CursesV2 {
         ));
     }
 
-    fn sound_effect(&mut self, number: u16, _effect: u16, _volume: u8, _repeats: u8) {
+    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8) {
         match number {
             1 => {
                 pancurses::beep();
@@ -929,7 +948,107 @@ impl Interpreter for CursesV2 {
                 pancurses::beep();
                 pancurses::beep();
             }
-            _ => trace!("sound_effect > 2 not implemented yet."),
+            _ => {
+                trace!("Current effect: {}", self.current_effect);
+                if number == 0 || self.sounds.contains_key(&(number as u8)) {
+                    match effect {
+                        2 => {
+                            if number == 0 {
+                                match &self.sink {
+                                    Some(sink) => sink.stop(),
+                                    None => (),
+                                }
+                            } else if number as u8 == self.current_effect {
+                                let vol = volume as f32 / 128.0;
+                                trace!("Adjusting volume to {}", vol);
+                                match self.sink.as_ref() {
+                                    Some(sink) => sink.set_volume(vol),
+                                    None => error!("Nothing currently playing"),
+                                }
+                            } else {
+                                self.current_effect = 0;
+                                match self.sink.as_ref() {
+                                    Some(sink) => sink.stop(),
+                                    None => (),
+                                }
+
+                                match NamedTempFile::new() {
+                                    Ok(mut write) => match write.reopen() {
+                                        Ok(read) => match self.sounds.get(&(number as u8)) {
+                                            Some(s) => match (write.write_all(&s.data)) {
+                                                Ok(_) => match Decoder::new(read) {
+                                                    Ok(source) => {
+                                                        match self.sink {
+                                                                    None => match Sink::try_new(&self.output_stream_handle) {
+                                                                        Ok(sink) => self.sink = Some(sink),
+                                                                        Err(e) => error!("Error creating playback sink: {}", e)
+                                                                    }
+                                                                    Some(_) => ()
+                                                                }
+                                                        match self.sink.as_ref() {
+                                                            Some(sink) => {
+                                                                sink.set_volume(
+                                                                    volume as f32 / 128.0,
+                                                                );
+                                                                if s.repeat == 0 {
+                                                                    sink.append(
+                                                                        source.repeat_infinite(),
+                                                                    )
+                                                                } else {
+                                                                    sink.append(source);
+                                                                }
+                                                                sink.play();
+                                                                self.current_effect = number as u8;
+                                                            }
+                                                            None => (),
+                                                        }
+                                                    }
+                                                    Err(e) => error!(
+                                                        "Error getting playback source: {}",
+                                                        e
+                                                    ),
+                                                },
+                                                Err(e) => {
+                                                    error!("Error getting playback decoder: {}", e)
+                                                }
+                                            },
+                                            None => error!("Sound effect {} not found", number),
+                                        },
+                                        Err(e) => {
+                                            error!("Error reopening temp file for reading: {}", e)
+                                        }
+                                    },
+                                    Err(e) => error!("Error opening temp file for writing: {}", e),
+                                }
+                                let mut tf = NamedTempFile::new().unwrap();
+                                let tfr = tf.reopen().unwrap();
+                                let s = self.sounds.get(&(number as u8)).unwrap();
+                                tf.write_all(&s.data).unwrap();
+                                let source = Decoder::new(tfr).unwrap();
+                                let sink = Sink::try_new(&self.output_stream_handle).unwrap();
+                                sink.set_volume(volume as f32 / 128.0);
+                                if s.repeat == 0 {
+                                    sink.append(source.repeat_infinite());
+                                }
+                                sink.play();
+                                self.current_effect = number as u8;
+                                self.sink = Some(sink);
+                            }
+                        },
+                        3 | 4 => {
+                            match &self.sink {
+                                Some(sink) => {
+                                    trace!("Stopping playback");
+                                    sink.stop()
+                                },
+                                None => (),
+                            }
+                            self.current_effect = 0;
+                        }
+                        _ => (),
+                    }
+                }
+            }
         }
     }
 
@@ -1002,6 +1121,10 @@ impl Interpreter for CursesV2 {
 
         fs::read(filename).unwrap()
     }
+
+    fn resources(&mut self, sounds: HashMap<u8, super::Sound>) {
+        self.sounds = sounds;
+    }
 }
 
 const COLOR_TABLE: [i16; 8] = [
@@ -1047,7 +1170,7 @@ impl CursesV2 {
                 Flag::TimedInputAvailable,
                 Flag::PicturesAvailable,
                 Flag::ColoursAvailable,
-                Flag::SoundEffectsAvailable
+                Flag::SoundEffectsAvailable,
             ],
             _ => vec![],
         };

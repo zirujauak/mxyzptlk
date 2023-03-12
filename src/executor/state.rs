@@ -12,6 +12,7 @@ use crate::iff::quetzal::stks::StackFrame;
 use crate::iff::quetzal::Quetzal;
 use crate::interpreter::Input;
 use crate::interpreter::Interpreter;
+use crate::interpreter::Sound;
 use crate::interpreter::Spec;
 
 #[derive(Debug)]
@@ -184,11 +185,6 @@ impl OutputStreamTable {
     }
 }
 
-pub struct Sound {
-    data: Vec<u8>,
-    repeat: u8,
-}
-
 pub struct State {
     memory_map: Vec<u8>,
     pub pristine_memory_map: Vec<u8>,
@@ -205,7 +201,6 @@ pub struct State {
     undo: VecDeque<Quetzal>,
     stream_3: Vec<OutputStreamTable>,
     output_stream: u8,
-    sounds: HashMap<u8, Sound>,
 }
 
 impl State {
@@ -241,7 +236,6 @@ impl State {
             undo: VecDeque::new(),
             stream_3: Vec::new(),
             output_stream: 1,
-            sounds: HashMap::new(),
         }
     }
 
@@ -709,12 +703,13 @@ impl State {
             None => {}
         }
 
+        let mut sounds = HashMap::new();
         for entry in blorb.ridx.entries {
             trace!("Checking index entry: '{}' #{}", entry.usage, entry.number);
             match entry.usage.as_str() {
                 "Snd " => match blorb.snds.get(&(entry.start as usize)) {
                     Some(s) => {
-                        self.sounds.insert(
+                        sounds.insert(
                             entry.number as u8,
                             Sound {
                                 data: s.data.clone(),
@@ -731,7 +726,7 @@ impl State {
         match blorb.sloop {
             Some(sloop) => {
                 for entry in sloop.entries {
-                    match self.sounds.get_mut(&(entry.number as u8)) {
+                    match sounds.get_mut(&(entry.number as u8)) {
                         Some(s) => {
                             s.repeat = entry.repeats as u8;
                         },
@@ -742,10 +737,12 @@ impl State {
             None => {}
         }
 
-        for k in self.sounds.keys() {
-            let s = self.sounds.get(k).unwrap();
+        for k in sounds.keys() {
+            let s = sounds.get(k).unwrap();
             trace!("Loaded sound effect #{}, repeat = {}", k, s.repeat);
         }
+
+        self.interpreter.resources(sounds);
     }
 }
 
@@ -911,5 +908,8 @@ impl Interpreter for State {
     }
     fn restore(&mut self) -> Vec<u8> {
         self.interpreter.restore()
+    }
+    fn resources(&mut self, sounds: HashMap<u8, Sound>) {
+        todo!()
     }
 }
