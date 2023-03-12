@@ -1,7 +1,4 @@
-use std::{
-    fs::{self, File},
-    io::{Read, Write}, collections::HashMap,
-};
+use std::collections::HashMap;
 
 use ridx::RIdx;
 
@@ -14,10 +11,10 @@ pub mod oggv;
 pub mod sloop;
 
 pub struct Blorb {
-    ridx: RIdx,
-    ifhd: Option<IFhd>,
-    snds: HashMap<usize,OGGV>,
-    sloop: Option<Loop>,
+    pub ridx: RIdx,
+    pub ifhd: Option<IFhd>,
+    pub snds: HashMap<usize,OGGV>,
+    pub sloop: Option<Loop>,
 }
 
 impl Blorb {

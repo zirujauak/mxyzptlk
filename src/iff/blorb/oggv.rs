@@ -1,7 +1,7 @@
 use super::super::*;
 
 pub struct OGGV {
-    data: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 impl OGGV {

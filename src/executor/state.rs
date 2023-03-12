@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::VecDeque;
 
 use rand::Rng;
@@ -6,11 +7,12 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::executor::header;
 
+use crate::iff::blorb::Blorb;
+use crate::iff::quetzal::stks::StackFrame;
+use crate::iff::quetzal::Quetzal;
 use crate::interpreter::Input;
 use crate::interpreter::Interpreter;
 use crate::interpreter::Spec;
-use crate::iff::quetzal::Quetzal;
-use crate::iff::quetzal::stks::StackFrame;
 
 #[derive(Debug)]
 pub struct Frame {
@@ -182,6 +184,11 @@ impl OutputStreamTable {
     }
 }
 
+pub struct Sound {
+    data: Vec<u8>,
+    repeat: u8,
+}
+
 pub struct State {
     memory_map: Vec<u8>,
     pub pristine_memory_map: Vec<u8>,
@@ -198,6 +205,7 @@ pub struct State {
     undo: VecDeque<Quetzal>,
     stream_3: Vec<OutputStreamTable>,
     output_stream: u8,
+    sounds: HashMap<u8, Sound>,
 }
 
 impl State {
@@ -233,6 +241,7 @@ impl State {
             undo: VecDeque::new(),
             stream_3: Vec::new(),
             output_stream: 1,
+            sounds: HashMap::new(),
         }
     }
 
@@ -559,26 +568,38 @@ impl State {
                 None => match &data.umem {
                     Some(u) => u.data.len(),
                     None => 0,
-                }
+                },
             },
             data.stks.stks.len()
         );
 
         // Match IFHd data with story file
         if data.ifhd.release_number != header::release_number(self) {
-            error!("Save file release numbers do not match: {} != {}", data.ifhd.release_number, header::release_number(self));
+            error!(
+                "Save file release numbers do not match: {} != {}",
+                data.ifhd.release_number,
+                header::release_number(self)
+            );
             return None;
         }
 
         for i in 0..6 as usize {
             if data.ifhd.serial_number[i] != header::serial_number(self)[i] {
-                error!("Save file serial numbers do not match: {:?} != {:?}", data.ifhd.serial_number, header::serial_number(self));
+                error!(
+                    "Save file serial numbers do not match: {:?} != {:?}",
+                    data.ifhd.serial_number,
+                    header::serial_number(self)
+                );
                 return None;
             }
         }
 
         if data.ifhd.checksum != header::checksum(self) {
-            error!("Save file checksums do not match: {:#04x} != {:#04x}", data.ifhd.checksum, header::checksum(self));
+            error!(
+                "Save file checksums do not match: {:#04x} != {:#04x}",
+                data.ifhd.checksum,
+                header::checksum(self)
+            );
             return None;
         }
 
@@ -589,8 +610,8 @@ impl State {
             Some(c) => c.to_vec(self),
             None => match &data.umem {
                 Some(u) => u.data.clone(),
-                None => vec![]
-            }
+                None => vec![],
+            },
         };
         self.memory_map.append(&mut static_memory);
 
@@ -620,8 +641,8 @@ impl State {
                     Some(c) => c.to_vec(self),
                     None => match u.umem {
                         Some(u) => u.data.clone(),
-                        None => vec![]
-                    }
+                        None => vec![],
+                    },
                 };
                 self.memory_map.append(&mut static_memory);
 
@@ -651,7 +672,80 @@ impl State {
         let end = address + (width * height);
         let data = self.memory_map[address..end].to_vec();
 
-        self.interpreter.print_table(data, width as u16, height as u16, skip as u16);
+        self.interpreter
+            .print_table(data, width as u16, height as u16, skip as u16);
+    }
+
+    pub fn resources(&mut self, blorb: Blorb) {
+        match blorb.ifhd {
+            Some(ifhd) => {
+                if ifhd.release_number != header::release_number(self) {
+                    error!(
+                        "Resource file release number doesnt match: {} != {}",
+                        ifhd.release_number,
+                        header::release_number(self)
+                    );
+                    return;
+                }
+
+                if ifhd.serial_number != header::serial_number(self) {
+                    error!(
+                        "Resource file serial number doesnt match: {:?} != {:?}",
+                        ifhd.serial_number,
+                        header::serial_number(self)
+                    );
+                    return;
+                }
+
+                if ifhd.checksum != header::checksum(self) {
+                    error!(
+                        "Resource file checuksum doesn't match: {:#04x} != {:#04x}",
+                        ifhd.checksum,
+                        header::checksum(self)
+                    );
+                    return;
+                }
+            }
+            None => {}
+        }
+
+        for entry in blorb.ridx.entries {
+            trace!("Checking index entry: '{}' #{}", entry.usage, entry.number);
+            match entry.usage.as_str() {
+                "Snd " => match blorb.snds.get(&(entry.start as usize)) {
+                    Some(s) => {
+                        self.sounds.insert(
+                            entry.number as u8,
+                            Sound {
+                                data: s.data.clone(),
+                                repeat: 1,
+                            },
+                        );
+                    }
+                    None => {}
+                },
+                _ => {}
+            };
+        }
+
+        match blorb.sloop {
+            Some(sloop) => {
+                for entry in sloop.entries {
+                    match self.sounds.get_mut(&(entry.number as u8)) {
+                        Some(s) => {
+                            s.repeat = entry.repeats as u8;
+                        },
+                        None => warn!("Loop has repeat for missing sound #{}", entry.number)
+                    }
+                }
+            },
+            None => {}
+        }
+
+        for k in self.sounds.keys() {
+            let s = self.sounds.get(k).unwrap();
+            trace!("Loaded sound effect #{}, repeat = {}", k, s.repeat);
+        }
     }
 }
 
@@ -755,8 +849,7 @@ impl Interpreter for State {
         }
     }
 
-    fn print_table(&mut self, _text: Vec<u8>, _width: u16, _height: u16, _skip: u16) {
-    }
+    fn print_table(&mut self, _text: Vec<u8>, _width: u16, _height: u16, _skip: u16) {}
 
     fn read(
         &mut self,
@@ -764,9 +857,11 @@ impl Interpreter for State {
         time: u16,
         existing_input: &Vec<char>,
         redraw: bool,
-        terminators: Vec<u8>
+        terminators: Vec<u8>,
     ) -> (Vec<char>, bool, Input) {
-        let (data, timed_out, terminator) = self.interpreter.read(length, time, existing_input, redraw, terminators);
+        let (data, timed_out, terminator) =
+            self.interpreter
+                .read(length, time, existing_input, redraw, terminators);
         if terminator.zscii_value as u8 == 254 || terminator.zscii_value as u8 == 253 {
             header::set_extension_word(self, 0, terminator.x);
             header::set_extension_word(self, 1, terminator.y);

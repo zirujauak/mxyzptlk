@@ -2,16 +2,16 @@
 #[macro_use]
 extern crate log;
 
+use std::env;
 use std::fs::File;
 use std::io::prelude::*;
-use std::{env};
 
 pub mod executor;
-pub mod interpreter;
 pub mod iff;
+pub mod interpreter;
 
 use executor::Executor;
-use iff::blorb::{Blorb, self};
+use iff::blorb::Blorb;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -30,19 +30,22 @@ fn main() {
                         Ok(mut rf) => {
                             let mut rbuf = Vec::new();
                             match rf.read_to_end(&mut rbuf) {
-                                Ok(_) => Blorb::from_vec(rbuf),
-                                Err(_) => None
+                                Ok(_) => match Blorb::from_vec(rbuf) {
+                                    Some(b) => e.state.resources(b),
+                                    None => (),
+                                },
+                                Err(_) => (),
                             }
-                        },
-                        Err(_) => None
+                        }
+                        Err(_) => (),
                     };
-                    e.run();                
-                },
+                    e.run();
+                }
                 Err(e) => {
                     panic!("Error reading file '{}': {}", filename, e);
                 }
-            }  
-        },
+            }
+        }
         Err(e) => {
             panic!("Error opening '{}': {}", filename, e);
         }

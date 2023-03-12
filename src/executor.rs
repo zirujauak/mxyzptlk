@@ -12,7 +12,7 @@ use crate::interpreter::curses_v2::CursesV2;
 use crate::interpreter::Interpreter;
 
 pub struct Executor {
-    state: State,
+    pub state: State,
 }
 
 impl Executor {

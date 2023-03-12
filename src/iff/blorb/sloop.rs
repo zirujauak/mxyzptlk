@@ -1,8 +1,8 @@
 use super::super::*;
 
 pub struct Entry {
-    number: u32,
-    repeats: u32
+    pub number: u32,
+    pub repeats: u32
 }
 
 impl Entry {
@@ -27,7 +27,7 @@ impl Loop {
         let mut entries = Vec::new();
 
         for i in 0..chunk.length as usize / 8 {
-            let index = Entry::from_vec(&chunk.data, (8 * i as usize));
+            let index = Entry::from_vec(&chunk.data, 8 * i as usize);
             entries.push(index);
         }   
 
