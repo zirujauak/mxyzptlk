@@ -180,10 +180,10 @@ fn lookup_entry(
             let w = state.word_value(addr + (i * 2));
             if w > word[i] {
                 trace!("Min/Pivot/Max: {}/{}/{} -- vvv", min, pivot, max);
-                max = pivot - 1;
-                if max < min {
+                if pivot == min {
                     break 'outer;
                 }
+                max = pivot - 1;
                 let new_pivot = min + ((max - min) / 2);
                 if new_pivot == pivot {
                     pivot = new_pivot - 1;
@@ -193,10 +193,10 @@ fn lookup_entry(
                 continue 'outer;
             } else if w < word[i] {
                 trace!("Min/Pivot/Max: {}/{}/{} -- ^^^", min, pivot, max);
-                min = pivot + 1;
-                if min > max {
+                if pivot == max {
                     break 'outer;
                 }
+                min = pivot + 1;
                 let new_pivot = min + ((max - min) / 2);
                 if new_pivot == pivot {
                     pivot = new_pivot + 1;

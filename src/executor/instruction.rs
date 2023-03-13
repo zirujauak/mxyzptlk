@@ -1766,6 +1766,7 @@ impl Instruction {
         if parse > 0 || state.version < 5 {
             let dictionary = header::dictionary_table(state) as usize;
             let separators = text::separators(state, dictionary);
+            trace!("Separators: {:?}", separators);
             let mut word = Vec::new();
             let mut word_start: usize = 0;
             let mut word_count: usize = 0;
