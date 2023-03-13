@@ -1994,9 +1994,14 @@ impl Instruction {
             } else { 
                 (0,0)
             };
-            state.sound_effect(operands[0], effect, volume, repeats);
+            let routine = if operands.len() == 4 {
+                Some(state.packed_routine_address(operands[3]))
+            } else {
+                None
+            };
+            state.sound_effect(operands[0], effect, volume, repeats, routine);
         } else {
-            state.sound_effect(operands[0], 0, 0, 0);
+            state.sound_effect(operands[0], 0, 0, 0, None);
         }
         self.next_address
     }

@@ -30,7 +30,7 @@ pub trait Interpreter {
     fn set_text_style(&mut self, style: u16);
     fn set_window(&mut self, window: u16);
     fn show_status(&mut self, location: &str, status: &str);
-    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8);
+    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8, routine: Option<usize>);
     fn split_window(&mut self, lines: u16);
     fn save(&mut self, data: &Vec<u8>);
     fn restore(&mut self) -> Vec<u8>;

@@ -255,7 +255,7 @@ impl State {
         self.set_byte(0x1E, spec.interpreter_number);
         self.set_byte(0x1F, spec.interpreter_version);
 
-        if self.version < 5 {
+        if self.version >= 4 {
             // Screen size
             self.set_byte(0x20, spec.screen_lines);
             self.set_byte(0x21, spec.screen_columns);
@@ -719,7 +719,7 @@ impl State {
                             entry.number as u8,
                             Sound {
                                 data: s.data.clone(),
-                                repeat: Some(1),
+                                repeat: if self.version == 3 { Some(1) } else { None },
                             },
                         );
                     }
@@ -729,18 +729,20 @@ impl State {
             };
         }
 
-        match blorb.sloop {
-            Some(sloop) => {
-                for entry in sloop.entries {
-                    match sounds.get_mut(&(entry.number as u8)) {
-                        Some(s) => {
-                            s.repeat = Some(entry.repeats as u8);
-                        },
-                        None => warn!("Loop has repeat for missing sound #{}", entry.number)
+        if self.version == 3 {
+            match blorb.sloop {
+                Some(sloop) => {
+                    for entry in sloop.entries {
+                        match sounds.get_mut(&(entry.number as u8)) {
+                            Some(s) => {
+                                s.repeat = Some(entry.repeats as u8);
+                            }
+                            None => warn!("Loop has repeat for missing sound #{}", entry.number),
+                        }
                     }
                 }
-            },
-            None => {}
+                None => {}
+            }
         }
 
         for k in sounds.keys() {
@@ -931,9 +933,9 @@ impl Interpreter for State {
     fn show_status(&mut self, location: &str, status: &str) {
         self.interpreter.show_status(location, status)
     }
-    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8) {
+    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8, routine: Option<usize>) {
         self.interpreter
-            .sound_effect(number, effect, volume, repeats)
+            .sound_effect(number, effect, volume, repeats, routine)
     }
     fn split_window(&mut self, lines: u16) {
         self.interpreter.split_window(lines);
@@ -951,5 +953,4 @@ impl Interpreter for State {
     fn spec(&mut self, _version: u8) -> Spec {
         self.interpreter.spec(self.version)
     }
-    
 }

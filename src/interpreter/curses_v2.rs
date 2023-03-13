@@ -47,6 +47,7 @@ pub struct CursesV2 {
     output_stream_handle: OutputStreamHandle,
     pub sounds: HashMap<u8, Sound>,
     current_effect: u8,
+    effect_routine: Option<usize>, // runs after a sound has finished playing, including repeates
     sink: Option<Sink>,
 }
 
@@ -117,6 +118,7 @@ impl CursesV2 {
             output_stream_handle: stream_handle,
             sounds: HashMap::new(),
             current_effect: 0,
+            effect_routine: None,
             sink: None,
         }
     }
@@ -950,7 +952,7 @@ impl Interpreter for CursesV2 {
         ));
     }
 
-    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8) {
+    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8, routine: Option<usize>) {
         match number {
             1 => {
                 pancurses::beep();
@@ -1020,7 +1022,9 @@ impl Interpreter for CursesV2 {
                                                                     }
                                                                 }
                                                                 sink.play();
+                                                                trace!("Sink len/empty: {}/{}", sink.len(), sink.empty());
                                                                 self.current_effect = number as u8;
+                                                                self.effect_routine = routine;
                                                             }
                                                             None => (),
                                                         }
@@ -1042,19 +1046,6 @@ impl Interpreter for CursesV2 {
                                     },
                                     Err(e) => error!("Error opening temp file for writing: {}", e),
                                 }
-                                // let mut tf = NamedTempFile::new().unwrap();
-                                // let tfr = tf.reopen().unwrap();
-                                // let s = self.sounds.get(&(number as u8)).unwrap();
-                                // tf.write_all(&s.data).unwrap();
-                                // let source = Decoder::new(tfr).unwrap();
-                                // let sink = Sink::try_new(&self.output_stream_handle).unwrap();
-                                // sink.set_volume(volume as f32 / 128.0);
-                                // if s.repeat == 0 {
-                                //     sink.append(source.repeat_infinite());
-                                // }
-                                // sink.play();
-                                // self.current_effect = number as u8;
-                                // self.sink = Some(sink);
                             }
                         },
                         3 | 4 => {
