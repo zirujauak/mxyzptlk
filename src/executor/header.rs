@@ -35,6 +35,9 @@ pub fn version(state: &State) -> u8 {
 }
 
 /// Identifies the bit in a Flags structure that corresponds to a specific flag
+///
+/// ```TODO: Refactor this to return an option to indicate an invalid Flag was used
+/// instead of returning 0?```
 fn flag_bit(version: u8, flag: &Flag) -> u8 {
     match version {
         1 | 2 => {
@@ -253,7 +256,7 @@ pub fn terminating_character_table(state: &State) -> u16 {
 }
 
 /// Sets a word in the header extension table.
-/// 
+///
 /// # Arguments
 /// * `index`: 0-based index in the table of the word to set
 /// * `value`: word to set
@@ -261,8 +264,345 @@ pub fn set_extension_word(state: &mut State, index: usize, value: u16) {
     let table = state.word_value(0x36) as usize;
     if table > 0 {
         let size = state.word_value(table) as usize;
-        if size >= index {
+        if size > index {
             state.set_word(table + ((index + 1) * 2), value);
+        } else {
+            // TODO: This should probably halt execution
+            error!(
+                "Attempt to set entry {} in header extension table with size {}",
+                index, size
+            );
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::interpreter::Interpreter;
+
+    use super::*;
+
+    fn memory_map() -> Vec<u8> {
+        let mut memory = Vec::new();
+        for i in 0..0x40 {
+            memory.push(i as u8);
+        }
+
+        // Header extension table at 0x40
+        memory[0x36] = 0x00;
+        memory[0x37] = 0x40;
+
+        memory.append(&mut vec![
+            0x00 as u8, 0x03, 0x11, 0x11, 0x22, 0x22, 0x33, 0x33,
+        ]);
+
+        memory
+    }
+
+    struct DummyInterpreter;
+
+    impl Interpreter for DummyInterpreter {
+        fn buffer_mode(&mut self, mode: bool) {
+            todo!()
+        }
+
+        fn erase_line(&mut self, value: u16) {
+            todo!()
+        }
+
+        fn erase_window(&mut self, window: i16) {
+            todo!()
+        }
+
+        fn get_cursor(&mut self) -> (u16, u16) {
+            todo!()
+        }
+
+        fn input_stream(&mut self, stream: u16) {
+            todo!()
+        }
+
+        fn new_line(&mut self) {
+            todo!()
+        }
+
+        fn output_stream(&mut self, stream: i16, table: usize) {
+            todo!()
+        }
+
+        fn print(&mut self, text: String) {
+            todo!()
+        }
+
+        fn print_table(&mut self, data: Vec<u8>, width: u16, height: u16, skip: u16) {
+            todo!()
+        }
+
+        fn read(
+            &mut self,
+            length: u8,
+            time: u16,
+            existing_input: &Vec<char>,
+            redraw: bool,
+            terminators: Vec<u8>,
+        ) -> (Vec<char>, bool, crate::interpreter::Input) {
+            todo!()
+        }
+
+        fn read_char(&mut self, time: u16) -> crate::interpreter::Input {
+            todo!()
+        }
+
+        fn set_colour(&mut self, foreground: u16, background: u16) {
+            todo!()
+        }
+
+        fn set_cursor(&mut self, line: u16, column: u16) {
+            todo!()
+        }
+
+        fn set_font(&mut self, font: u16) -> u16 {
+            todo!()
+        }
+
+        fn set_text_style(&mut self, style: u16) {
+            todo!()
+        }
+
+        fn set_window(&mut self, window: u16) {
+            todo!()
+        }
+
+        fn show_status(&mut self, location: &str, status: &str) {
+            todo!()
+        }
+
+        fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8, routine: Option<usize>) {
+            todo!()
+        }
+
+        fn split_window(&mut self, lines: u16) {
+            todo!()
+        }
+
+        fn save(&mut self, data: &Vec<u8>) {
+            todo!()
+        }
+
+        fn restore(&mut self) -> Vec<u8> {
+            todo!()
+        }
+
+        fn resources(&mut self, sounds: std::collections::HashMap<u8, crate::interpreter::Sound>) {
+            todo!()
+        }
+
+        fn spec(&mut self, version: u8) -> crate::interpreter::Spec {
+            todo!()
+        }
+    }
+
+    #[test]
+    fn version_test() {
+        let state = State::new(&memory_map(), Box::new(DummyInterpreter {}));
+        assert_eq!(0x00, version(&state));
+    }
+
+    #[test]
+    fn flag_bit_test() {
+        // V1
+        assert_eq!(1, flag_bit(1, &Flag::StatusLineType));
+        assert_eq!(3, flag_bit(1, &Flag::TandyBit));
+        assert_eq!(4, flag_bit(1, &Flag::StatusLineNotAvailable));
+        assert_eq!(5, flag_bit(1, &Flag::ScreenSplittingAvailable));
+        assert_eq!(6, flag_bit(1, &Flag::VariablePitchDefaultFont));
+        assert_eq!(0, flag_bit(1, &Flag::Transcripting));
+        // TODO: See refactor note in code, this test may need to change
+        assert_eq!(0, flag_bit(1, &Flag::PicturesAvailable));
+
+        // V2
+        assert_eq!(1, flag_bit(2, &Flag::StatusLineType));
+        assert_eq!(3, flag_bit(2, &Flag::TandyBit));
+        assert_eq!(4, flag_bit(2, &Flag::StatusLineNotAvailable));
+        assert_eq!(5, flag_bit(2, &Flag::ScreenSplittingAvailable));
+        assert_eq!(6, flag_bit(2, &Flag::VariablePitchDefaultFont));
+        assert_eq!(0, flag_bit(2, &Flag::Transcripting));
+        assert_eq!(0, flag_bit(2, &Flag::PicturesAvailable));
+
+        // V3
+        assert_eq!(1, flag_bit(3, &Flag::StatusLineType));
+        assert_eq!(3, flag_bit(3, &Flag::TandyBit));
+        assert_eq!(4, flag_bit(3, &Flag::StatusLineNotAvailable));
+        assert_eq!(5, flag_bit(3, &Flag::ScreenSplittingAvailable));
+        assert_eq!(6, flag_bit(3, &Flag::VariablePitchDefaultFont));
+        assert_eq!(0, flag_bit(3, &Flag::Transcripting));
+        assert_eq!(1, flag_bit(3, &Flag::ForceFixedPitch));
+        assert_eq!(0, flag_bit(3, &Flag::PicturesAvailable));
+
+        // V4
+        assert_eq!(2, flag_bit(4, &Flag::BoldfaceAvailable));
+        assert_eq!(3, flag_bit(4, &Flag::ItalicAvailable));
+        assert_eq!(4, flag_bit(4, &Flag::FixedSpaceAvailable));
+        assert_eq!(7, flag_bit(4, &Flag::TimedInputAvailable));
+        assert_eq!(0, flag_bit(4, &Flag::Transcripting));
+        assert_eq!(1, flag_bit(4, &Flag::ForceFixedPitch));
+        assert_eq!(0, flag_bit(4, &Flag::StatusLineNotAvailable));
+
+        // V5
+        assert_eq!(0, flag_bit(5, &Flag::ColoursAvailable));
+        assert_eq!(1, flag_bit(5, &Flag::PicturesAvailable));
+        assert_eq!(2, flag_bit(5, &Flag::BoldfaceAvailable));
+        assert_eq!(3, flag_bit(5, &Flag::ItalicAvailable));
+        assert_eq!(4, flag_bit(5, &Flag::FixedSpaceAvailable));
+        assert_eq!(5, flag_bit(5, &Flag::SoundEffectsAvailable));
+        assert_eq!(7, flag_bit(5, &Flag::TimedInputAvailable));
+        assert_eq!(0, flag_bit(5, &Flag::Transcripting));
+        assert_eq!(1, flag_bit(5, &Flag::ForceFixedPitch));
+        assert_eq!(3, flag_bit(5, &Flag::GameWantsPictures));
+        assert_eq!(4, flag_bit(5, &Flag::GameWantsUndo));
+        assert_eq!(5, flag_bit(5, &Flag::GameWantsMouse));
+        assert_eq!(6, flag_bit(5, &Flag::GameWantsColour));
+        assert_eq!(7, flag_bit(5, &Flag::GameWantsSoundEffects));
+        assert_eq!(0, flag_bit(5, &Flag::StatusLineNotAvailable));
+
+        // V6
+        assert_eq!(0, flag_bit(6, &Flag::ColoursAvailable));
+        assert_eq!(1, flag_bit(6, &Flag::PicturesAvailable));
+        assert_eq!(2, flag_bit(6, &Flag::BoldfaceAvailable));
+        assert_eq!(3, flag_bit(6, &Flag::ItalicAvailable));
+        assert_eq!(4, flag_bit(6, &Flag::FixedSpaceAvailable));
+        assert_eq!(5, flag_bit(6, &Flag::SoundEffectsAvailable));
+        assert_eq!(7, flag_bit(6, &Flag::TimedInputAvailable));
+        assert_eq!(0, flag_bit(6, &Flag::Transcripting));
+        assert_eq!(1, flag_bit(6, &Flag::ForceFixedPitch));
+        assert_eq!(2, flag_bit(6, &Flag::RequestRedraw));
+        assert_eq!(3, flag_bit(6, &Flag::GameWantsPictures));
+        assert_eq!(4, flag_bit(6, &Flag::GameWantsUndo));
+        assert_eq!(5, flag_bit(6, &Flag::GameWantsMouse));
+        assert_eq!(6, flag_bit(6, &Flag::GameWantsColour));
+        assert_eq!(7, flag_bit(6, &Flag::GameWantsSoundEffects));
+        assert_eq!(8, flag_bit(6, &Flag::GameWantsMenus));
+        assert_eq!(0, flag_bit(6, &Flag::StatusLineNotAvailable));
+
+        // V7
+        assert_eq!(0, flag_bit(7, &Flag::ColoursAvailable));
+        assert_eq!(1, flag_bit(7, &Flag::PicturesAvailable));
+        assert_eq!(2, flag_bit(7, &Flag::BoldfaceAvailable));
+        assert_eq!(3, flag_bit(7, &Flag::ItalicAvailable));
+        assert_eq!(4, flag_bit(7, &Flag::FixedSpaceAvailable));
+        assert_eq!(5, flag_bit(7, &Flag::SoundEffectsAvailable));
+        assert_eq!(7, flag_bit(7, &Flag::TimedInputAvailable));
+        assert_eq!(0, flag_bit(7, &Flag::Transcripting));
+        assert_eq!(1, flag_bit(7, &Flag::ForceFixedPitch));
+        assert_eq!(3, flag_bit(7, &Flag::GameWantsPictures));
+        assert_eq!(4, flag_bit(7, &Flag::GameWantsUndo));
+        assert_eq!(5, flag_bit(7, &Flag::GameWantsMouse));
+        assert_eq!(6, flag_bit(7, &Flag::GameWantsColour));
+        assert_eq!(7, flag_bit(7, &Flag::GameWantsSoundEffects));
+        assert_eq!(0, flag_bit(7, &Flag::StatusLineNotAvailable));
+
+        // V8
+        assert_eq!(0, flag_bit(8, &Flag::ColoursAvailable));
+        assert_eq!(1, flag_bit(8, &Flag::PicturesAvailable));
+        assert_eq!(2, flag_bit(8, &Flag::BoldfaceAvailable));
+        assert_eq!(3, flag_bit(8, &Flag::ItalicAvailable));
+        assert_eq!(4, flag_bit(8, &Flag::FixedSpaceAvailable));
+        assert_eq!(5, flag_bit(8, &Flag::SoundEffectsAvailable));
+        assert_eq!(7, flag_bit(8, &Flag::TimedInputAvailable));
+        assert_eq!(0, flag_bit(8, &Flag::Transcripting));
+        assert_eq!(1, flag_bit(8, &Flag::ForceFixedPitch));
+        assert_eq!(3, flag_bit(8, &Flag::GameWantsPictures));
+        assert_eq!(4, flag_bit(8, &Flag::GameWantsUndo));
+        assert_eq!(5, flag_bit(8, &Flag::GameWantsMouse));
+        assert_eq!(6, flag_bit(8, &Flag::GameWantsColour));
+        assert_eq!(7, flag_bit(8, &Flag::GameWantsSoundEffects));
+        assert_eq!(0, flag_bit(8, &Flag::StatusLineNotAvailable));
+
+        // Invalid version
+        assert_eq!(0, flag_bit(9, &Flag::Transcripting));
+    }
+
+    #[test]
+    fn is_flag1_test() {
+        assert_eq!(true, is_flag1(&Flag::StatusLineType));
+        assert_eq!(true, is_flag1(&Flag::StatusLineNotAvailable));
+        assert_eq!(true, is_flag1(&Flag::TandyBit));
+        assert_eq!(true, is_flag1(&Flag::ScreenSplittingAvailable));
+        assert_eq!(true, is_flag1(&Flag::VariablePitchDefaultFont));
+        assert_eq!(true, is_flag1(&Flag::ColoursAvailable));
+        assert_eq!(true, is_flag1(&Flag::PicturesAvailable));
+        assert_eq!(true, is_flag1(&Flag::BoldfaceAvailable));
+        assert_eq!(true, is_flag1(&Flag::ItalicAvailable));
+        assert_eq!(true, is_flag1(&Flag::FixedSpaceAvailable));
+        assert_eq!(true, is_flag1(&Flag::SoundEffectsAvailable));
+        assert_eq!(true, is_flag1(&Flag::TimedInputAvailable));
+        assert_eq!(false, is_flag1(&Flag::Transcripting));
+        assert_eq!(false, is_flag1(&Flag::ForceFixedPitch));
+        assert_eq!(false, is_flag1(&Flag::RequestRedraw));
+        assert_eq!(false, is_flag1(&Flag::GameWantsPictures));
+        assert_eq!(false, is_flag1(&Flag::GameWantsUndo));
+        assert_eq!(false, is_flag1(&Flag::GameWantsMouse));
+        assert_eq!(false, is_flag1(&Flag::GameWantsColour));
+        assert_eq!(false, is_flag1(&Flag::GameWantsSoundEffects));
+        assert_eq!(false, is_flag1(&Flag::GameWantsMenus));
+    }
+
+    fn flag_test() {
+        let mut memory = memory_map();
+        memory[0x01] = 0;
+        memory[0x10] = 0;
+        memory[0x11] = 0;
+        let mut state = State::new(&memory, Box::new(DummyInterpreter{}));
+
+    }
+    #[test]
+    fn static_memory_base_test() {
+        let state = State::new(&memory_map(), Box::new(DummyInterpreter {}));
+        assert_eq!(0x0E0F, static_memory_base(&state));
+    }
+
+    #[test]
+    fn length_text() {
+        let state = State::new(&memory_map(), Box::new(DummyInterpreter {}));
+        assert_eq!(0x1A1B, length(&state));
+    }
+
+    #[test]
+    fn checksum_test() {
+        let state = State::new(&memory_map(), Box::new(DummyInterpreter {}));
+        assert_eq!(0x1C1D, checksum(&state));
+    }
+
+    #[test]
+    fn terminating_character_table_test() {
+        let state = State::new(&memory_map(), Box::new(DummyInterpreter {}));
+        assert_eq!(0x2E2F, terminating_character_table(&state));
+    }
+
+    #[test]
+    fn set_extension_word_test() {
+        let mut state = State::new(&memory_map(), Box::new(DummyInterpreter {}));
+        // Initial state
+        assert_eq!(0x1111, state.word_value(0x42));
+        assert_eq!(0x2222, state.word_value(0x44));
+        assert_eq!(0x3333, state.word_value(0x46));
+
+        // Set table entry 1 (index 0)
+        set_extension_word(&mut state, 0, 0xABCD);
+        assert_eq!(0xABCD, state.word_value(0x42));
+        assert_eq!(0x2222, state.word_value(0x44));
+        assert_eq!(0x3333, state.word_value(0x46));
+
+        // Set table entry 3 (index 2)
+        set_extension_word(&mut state, 2, 0xFEDC);
+        assert_eq!(0xABCD, state.word_value(0x42));
+        assert_eq!(0x2222, state.word_value(0x44));
+        assert_eq!(0xFEDC, state.word_value(0x46));
+
+        // Set table entry 4 (index 3), which is out of range
+        set_extension_word(&mut state, 3, 0x1234);
+        assert_eq!(0xABCD, state.word_value(0x42));
+        assert_eq!(0x2222, state.word_value(0x44));
+        assert_eq!(0xFEDC, state.word_value(0x46));
     }
 }
