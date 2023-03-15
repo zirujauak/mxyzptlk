@@ -17,7 +17,7 @@ use crate::interpreter::Spec;
 
 #[derive(Debug)]
 pub struct Frame {
-    _address: usize,
+    address: usize,
     pub pc: usize,
     pub local_variables: Vec<u16>,
     pub argument_count: u8,
@@ -46,6 +46,17 @@ fn byte_value(memory_map: &Vec<u8>, address: usize) -> u8 {
     memory_map[address]
 }
 
+
+fn variable_name(var: u8) -> String {
+    if var == 0 {
+        "(SP)+".to_string()
+    } else if var < 16 {
+        format!("L{:02x}", var - 1).to_string()
+    } else {
+        format!("G{:02x}", var - 16).to_string()
+    }
+}
+
 impl Frame {
     fn from_stack_frame(frame: &StackFrame) -> Frame {
         let mut argument_count = 0;
@@ -56,7 +67,7 @@ impl Frame {
         }
 
         Frame {
-            _address: 0,
+            address: 0,
             pc: 0,
             local_variables: frame.local_variables.clone(),
             argument_count,
@@ -77,7 +88,7 @@ impl Frame {
 
     fn initial(_memory_map: &Vec<u8>, address: usize) -> Frame {
         Frame {
-            _address: address,
+            address: address,
             pc: address,
             local_variables: Vec::new(),
             argument_count: 0,
@@ -92,6 +103,23 @@ impl Frame {
         }
     }
 
+    fn log_call(address: usize, arguments: &Vec<u16>, var_count: u8, result: Option<u8>, return_address: usize) {
+        let mut args = String::new();
+        args.push('(');
+        if arguments.len() > 0 {
+            args.push_str(&format!("{:04x}", arguments[0]))
+        }
+        for i in 1..arguments.len() {
+            args.push_str(&format!(",{:04x}", arguments[i]));
+        }
+        args.push(')');
+
+        match result {
+            Some(r) => info!(target: "app::frame", "Call: ${:05x} {} [Lv: {}, Sr: {}] return to ${:05x}", address, args, var_count, variable_name(r), return_address),
+            None => info!(target: "app::frame", "Call: ${:05x} {} [Lv: {}] return to ${:05x}", address, args, var_count, return_address)
+        }
+    }
+
     fn call(
         memory_map: &Vec<u8>,
         version: u8,
@@ -101,7 +129,6 @@ impl Frame {
         return_address: usize,
     ) -> Frame {
         let var_count = byte_value(memory_map, address) as usize;
-        trace!("{} local variables", var_count);
         let (initial_pc, mut local_variables) = match version {
             1 | 2 | 3 | 4 => {
                 let mut local_variables = Vec::new();
@@ -121,8 +148,10 @@ impl Frame {
             }
         }
 
+        Frame::log_call(address, arguments, var_count as u8, result, return_address);
+
         Frame {
-            _address: address,
+            address: address,
             pc: initial_pc,
             local_variables,
             argument_count: arguments.len() as u8,
@@ -138,12 +167,14 @@ impl Frame {
     }
 
     pub fn pop(&mut self) -> Option<u16> {
-        trace!(
-            "stack[{}]: pop -> #{:04x}",
-            self.stack.len(),
-            self.stack.last().unwrap()
-        );
-        self.stack.pop()
+        let value = self.stack.pop();
+
+        match value {
+            Some (v) => info!(target: "app::stack", "Pop -> #{:04x}", v),
+            None => info!(target: "app::stack", "Pop on an empty stack"),
+        }
+
+        value
     }
 
     pub fn peek(&self) -> Option<&u16> {
@@ -151,7 +182,7 @@ impl Frame {
     }
 
     pub fn push(&mut self, value: u16) {
-        trace!("stack[{}]: push <- #{:04x}", self.stack.len(), value);
+        info!(target: "app::stack", "Push <- #{:04x}", value);
         self.stack.push(value);
     }
 }
@@ -293,12 +324,6 @@ impl State {
         arguments: &Vec<u16>,
         result: Option<u8>,
     ) -> usize {
-        trace!(
-            "Call routine @ ${:05x} with {} args",
-            address,
-            arguments.len()
-        );
-
         let f = Frame::call(
             &self.memory_map(),
             self.version,
@@ -320,16 +345,14 @@ impl State {
             f.read_interrupt_result = result;
         } else {
             match f.result {
-                Some(variable) => self.set_variable(variable, result),
+                Some(variable) => {
+                    self.set_variable(variable, result);
+                    info!("Return from ${:05x} store #{:04x} to {}", f.address, result, variable_name(variable));
+                },
                 None => {}
             }
         }
 
-        trace!(
-            "Return to ${:05x} with result #{:04x}",
-            f.return_address,
-            result
-        );
         f.return_address
     }
 
@@ -437,7 +460,7 @@ impl State {
     }
 
     pub fn set_variable(&mut self, var: u8, value: u16) {
-        trace!("variable: set #{:02x} to #{:04x}", var, value);
+        info!(target: "app::variable", "Set {} to #{:04x}", variable_name(var), value);
         if var == 0 {
             self.current_frame_mut().push(value)
         } else if var < 16 {
@@ -449,7 +472,7 @@ impl State {
     }
 
     pub fn set_variable_indirect(&mut self, var: u8, value: u16) {
-        trace!("variable indirect: set #{:02x} to #{:04x}", var, value);
+        info!(target: "app::variable", "Set [indirect] {} to #{:04x}", variable_name(var), value);
         if var == 0 {
             self.current_frame_mut().pop();
             self.current_frame_mut().push(value)
@@ -460,6 +483,7 @@ impl State {
             self.set_word(address, value)
         }
     }
+
     pub fn random(&mut self, range: u16) -> u16 {
         let v = &self.rng.gen_range(1..=range);
         trace!("Random 1..{}: {}", range, v);
@@ -520,13 +544,14 @@ impl State {
             self.output_stream = self.output_stream & 0xFD;
             self.interpreter.output_stream(-2, 0);
         }
-        trace!("memory: set ${:05x} to #{:04x}", address, value)
+
+        info!(target: "app::memory", "Set {:#04x} to {:#02x}", address, value);
     }
 
     pub fn set_byte(&mut self, address: usize, value: u8) {
         self.memory_map[address] = value;
 
-        trace!("memory: set ${:05x} to #{:02x}", address, value);
+        info!(target: "app::memory", "Set {:#04x} to {:#02x}", address, value);
     }
 
     pub fn checksum(&self) -> u16 {
