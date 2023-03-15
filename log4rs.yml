@@ -4,19 +4,47 @@ appenders:
   stdout:
     kind: console
 
+  frame:
+    kind: file
+    path: "frame.log"
+    append: false
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+
   instruction:
     kind: file
     path: "instruction.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)}:{f}/{L} - {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
       
+  memory:
+    kind: file
+    path: "memory.log"
+    append: false
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+
+  stack:
+    kind: file
+    path: "stack.log"
+    append: false
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+
+  variable:
+    kind: file
+    path: "variable.log"
+    append: false
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+
   trace:
     kind: file
     path: "trace.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)}:{f}/{L} - {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]:{f}/{L} - {m}{n}"
 
   transcript:
     kind: file
@@ -31,12 +59,36 @@ root:
     - trace
 
 loggers:
+  app::frame:
+    level: info
+    appenders:
+      - frame
+    additive: false
+
   app::instruction:
     level: info
     appenders:
       - instruction
     additive: false
-    
+
+  app::memory:
+    level: info
+    appenders:
+      - memory
+    additive: false
+
+  app::stack:
+    level: info
+    appenders:
+      - stack
+    additive: false
+
+  app::variable:
+    level: info
+    appenders:
+      - variable
+    additive: false
+
   app::trace:
     level: trace
     appenders:
