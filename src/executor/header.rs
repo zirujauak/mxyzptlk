@@ -278,7 +278,7 @@ pub fn set_extension_word(state: &mut State, index: usize, value: u16) {
 
 #[cfg(test)]
 mod test {
-    use crate::interpreter::Interpreter;
+    use crate::interpreter::{Interpreter, self, Interrupt};
 
     use super::*;
 
@@ -302,15 +302,15 @@ mod test {
     struct DummyInterpreter;
 
     impl Interpreter for DummyInterpreter {
-        fn buffer_mode(&mut self, mode: bool) {
+        fn buffer_mode(&mut self, _mode: bool) {
             todo!()
         }
 
-        fn erase_line(&mut self, value: u16) {
+        fn erase_line(&mut self, _value: u16) {
             todo!()
         }
 
-        fn erase_window(&mut self, window: i16) {
+        fn erase_window(&mut self, _window: i16) {
             todo!()
         }
 
@@ -318,7 +318,7 @@ mod test {
             todo!()
         }
 
-        fn input_stream(&mut self, stream: u16) {
+        fn input_stream(&mut self, _stream: u16) {
             todo!()
         }
 
@@ -326,66 +326,71 @@ mod test {
             todo!()
         }
 
-        fn output_stream(&mut self, stream: i16, table: usize) {
+        fn output_stream(&mut self, _stream: i16, _tablee: usize) {}
+
+        fn print(&mut self, _text: String) {
             todo!()
         }
 
-        fn print(&mut self, text: String) {
-            todo!()
-        }
-
-        fn print_table(&mut self, data: Vec<u8>, width: u16, height: u16, skip: u16) {
+        fn print_table(&mut self, _data: Vec<u8>, _width: u16, _height: u16, _skip: u16) {
             todo!()
         }
 
         fn read(
             &mut self,
-            length: u8,
-            time: u16,
-            existing_input: &Vec<char>,
-            redraw: bool,
-            terminators: Vec<u8>,
-        ) -> (Vec<char>, bool, crate::interpreter::Input) {
+            _length: u8,
+            _time: u16,
+            _existing_input: &Vec<char>,
+            _redraw: bool,
+            _terminators: Vec<u8>,
+        ) -> (Vec<char>, Option<Interrupt>, interpreter::Input) {
             todo!()
         }
 
-        fn read_char(&mut self, time: u16) -> crate::interpreter::Input {
+        fn read_char(&mut self, _time: u16) -> (interpreter::Input, Option<Interrupt>) {
             todo!()
         }
 
-        fn set_colour(&mut self, foreground: u16, background: u16) {
+        fn set_colour(&mut self, _foreground: u16, _background: u16) {
             todo!()
         }
 
-        fn set_cursor(&mut self, line: u16, column: u16) {
+        fn set_cursor(&mut self, _line: u16, _column: u16) {
             todo!()
         }
 
-        fn set_font(&mut self, font: u16) -> u16 {
+        fn set_font(&mut self, _font: u16) -> u16 {
             todo!()
         }
 
-        fn set_text_style(&mut self, style: u16) {
+        fn set_text_style(&mut self, _style: u16) {
             todo!()
         }
 
-        fn set_window(&mut self, window: u16) {
+        fn set_window(&mut self, _window: u16) {
             todo!()
         }
 
-        fn show_status(&mut self, location: &str, status: &str) {
+        fn show_status(&mut self, _location: &str, _status: &str) {
             todo!()
         }
 
-        fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8, routine: Option<usize>) {
+        fn sound_effect(
+            &mut self,
+            _number: u16,
+            _effect: u16,
+            _volume: u8,
+            _repeats: u8,
+            _routine: Option<u16>,
+        ) {
             todo!()
         }
 
-        fn split_window(&mut self, lines: u16) {
+        fn split_window(&mut self, _lines: u16) {
             todo!()
         }
 
-        fn save(&mut self, data: &Vec<u8>) {
+        fn save(&mut self, _data: &Vec<u8>) {
             todo!()
         }
 
@@ -393,11 +398,15 @@ mod test {
             todo!()
         }
 
-        fn resources(&mut self, sounds: std::collections::HashMap<u8, crate::interpreter::Sound>) {
+        fn resources(&mut self, _sounds: std::collections::HashMap<u8, crate::interpreter::Sound>) {
             todo!()
         }
 
-        fn spec(&mut self, version: u8) -> crate::interpreter::Spec {
+        fn spec(&mut self, _version: u8) -> crate::interpreter::Spec {
+            todo!()
+        }
+
+        fn check_sound_interrupt(&mut self) -> Option<u16> {
             todo!()
         }
     }
@@ -547,14 +556,23 @@ mod test {
         assert_eq!(false, is_flag1(&Flag::GameWantsMenus));
     }
 
+    #[test]
     fn flag_test() {
         let mut memory = memory_map();
+        memory[0] = 1;
         memory[0x01] = 0;
         memory[0x10] = 0;
         memory[0x11] = 0;
-        let mut state = State::new(&memory, Box::new(DummyInterpreter{}));
+        let mut state = State::new(&memory, Box::new(DummyInterpreter {}));
 
+        set_flag(&mut state, Flag::ScreenSplittingAvailable);
+        assert_eq!(0x20, state.byte_value(0x01));
+        assert_eq!(0x00, state.word_value(0x10));
+        set_flag(&mut state, Flag::Transcripting);
+        assert_eq!(0x20, state.byte_value(0x01));
+        assert_eq!(0x01, state.word_value(0x10));
     }
+
     #[test]
     fn static_memory_base_test() {
         let state = State::new(&memory_map(), Box::new(DummyInterpreter {}));

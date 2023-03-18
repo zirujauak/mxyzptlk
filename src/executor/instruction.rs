@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fmt, process};
 
-use crate::interpreter::Interpreter;
+use crate::interpreter::{Interpreter, Interrupt};
 
 use super::state::State;
 use super::text;
@@ -990,7 +990,7 @@ impl Instruction {
                             }
                         }
                     }
-                },
+                }
                 None => {
                     if state.version < 4 {
                         self.execute_branch(state, false)
@@ -1736,14 +1736,20 @@ impl Instruction {
         let (input, interrupt, terminator) =
             state.read(len, time, &existing_input, redraw, terminators);
         state.print_in_interrupt = false;
-        if interrupt {
-            trace!("READ interrupt: {} bytes in input buffer", input.len());
-            state.set_read_interrupt(true);
-            state.set_byte(text + 1, input.len() as u8);
-            for i in 0..input.len() {
-                state.set_byte(text + 2 + i, input[i] as u8);
-            }
-            return state.call_read_interrupt(routine, self.address);
+        match interrupt {
+            Some(t) => match t {
+                Interrupt::Timeout => {
+                    trace!("READ interrupt: {} bytes in input buffer", input.len());
+                    state.set_read_interrupt(true);
+                    state.set_byte(text + 1, input.len() as u8);
+                    for i in 0..input.len() {
+                        state.set_byte(text + 2 + i, input[i] as u8);
+                    }
+                    return state.call_read_interrupt(routine, self.address);
+                },
+                _ => ()
+            },
+            None => ()
         }
 
         trace!("Read <= \"{:?}\"", &input);
@@ -1992,11 +1998,11 @@ impl Instruction {
             let effect = operands[1];
             let (volume, repeats) = if operands.len() > 2 {
                 ((operands[2] & 0xFF) as u8, (operands[2] >> 8) as u8 & 0xFF)
-            } else { 
-                (0,0)
+            } else {
+                (0, 0)
             };
             let routine = if operands.len() == 4 {
-                Some(state.packed_routine_address(operands[3]))
+                Some(operands[3])
             } else {
                 None
             };
@@ -2034,15 +2040,20 @@ impl Instruction {
         if self.operands.len() == 3 && operands[1] > 0 && operands[2] > 0 {
             let time = operands[1];
             let routine = operands[2];
-            let c = state.read_char(time / 10).zscii_value as u16;
-            if c == 0 {
-                return state.call_read_char_interrupt(routine, self.address);
-                // Set state.read_char_interrupt = true
-                // Call routine, returning to address of this instruction
+            let (input, interrupt) = state.read_char(time / 10);
+            match interrupt {
+                Some(t) => {
+                    match t {
+                        Interrupt::Timeout => return state.call_read_char_interrupt(routine, self.address),
+                        _ => ()
+                    }
+                },
+                None => ()
             }
-            self.store_result(state, c);
+            self.store_result(state, input.zscii_value as u16);
         } else {
-            let c = state.read_char(0).zscii_value as u16;
+            let (input, _) = state.read_char(0);
+            let c = input.zscii_value as u16;
             self.store_result(state, c);
         }
 

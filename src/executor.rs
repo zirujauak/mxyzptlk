@@ -80,6 +80,7 @@ impl Executor {
     pub fn run(&mut self) {
         let mut n = 1;
         loop {
+            // Returned from the initial frame ... no bueno
             if self.state.current_frame().pc == 0 {
                 self.state.interpreter.read_char(0);
                 self.state.new_line();
@@ -87,6 +88,15 @@ impl Executor {
                 pancurses::curs_set(1);
                 trace!("Unimplemented instruction ... ending execution");
                 panic!("Ending execution")
+            }
+
+            // Check for sound interrupt
+            match self.state.check_sound_interrupt() {
+                Some(r) => {
+                    trace!("Sound interrupt -> ${:05x}", r);
+                    self.state.call(self.state.packed_routine_address(r as u16), self.state.current_frame().pc, &Vec::new(), None);
+                },
+                None => ()
             }
 
             log_mdc::insert("instruction_count", n.to_string());

@@ -16,7 +16,7 @@ use pancurses::{
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use tempfile::NamedTempFile;
 
-use super::{Input as OtherInput, Interpreter, Sound, Spec};
+use super::{Input as OtherInput, Interpreter, Sound, Spec, Interrupt};
 use crate::executor::{header::Flag, text};
 
 #[derive(Debug)]
@@ -47,7 +47,7 @@ pub struct CursesV2 {
     output_stream_handle: OutputStreamHandle,
     pub sounds: HashMap<u8, Sound>,
     current_effect: u8,
-    effect_routine: Option<usize>, // runs after a sound has finished playing, including repeates
+    effect_routine: Option<u16>, // runs after a sound has finished playing, including repeates
     sink: Option<Sink>,
 }
 
@@ -643,10 +643,8 @@ impl Interpreter for CursesV2 {
         existing_input: &Vec<char>,
         redraw: bool,
         terminators: Vec<u8>,
-    ) -> (Vec<char>, bool, OtherInput) {
+    ) -> (Vec<char>, Option<Interrupt>, OtherInput) {
         self.window.refresh();
-        // self.window_0
-        //     .mv(self.window_0.get_cur_y(), self.window_0.get_cur_x());
         pancurses::noecho();
         pancurses::curs_set(1);
 
@@ -655,7 +653,10 @@ impl Interpreter for CursesV2 {
                 self.addch(*c as u16);
             }
 
-            trace!("Last input: {:#02x}", *existing_input.last().unwrap() as u8)
+            match existing_input.last() {
+                Some(c) => trace!("Last input: {:#02x}", *c as u8),
+                None => ()
+            }
         }
 
         self.window.refresh();
@@ -665,7 +666,7 @@ impl Interpreter for CursesV2 {
                 if self.is_terminator(&terminators, *x as u8) {
                     return (
                         existing_input.clone(),
-                        false,
+                        Some(Interrupt::Timeout),
                         super::Input::from_char(*x, *x as u8).unwrap(),
                     );
                 }
@@ -699,6 +700,7 @@ impl Interpreter for CursesV2 {
                     > end
             {
                 i = super::Input::from_u8(0, 0);
+                return (input, Some(Interrupt::Timeout), i.unwrap());
             } else {
                 i = self.getch();
                 match i {
@@ -774,10 +776,10 @@ impl Interpreter for CursesV2 {
             self.command_file.as_mut().unwrap().write_all(&d).unwrap();
             self.command_file.as_mut().unwrap().flush().unwrap();
         }
-        (input, false, i.unwrap())
+        (input, None, i.unwrap())
     }
 
-    fn read_char(&mut self, time: u16) -> super::Input {
+    fn read_char(&mut self, time: u16) -> (super::Input, Option<Interrupt>) {
         pancurses::noecho();
         pancurses::curs_set(1);
 
@@ -810,9 +812,9 @@ impl Interpreter for CursesV2 {
                 thread::sleep(delay);
             }
 
-            let result = match result {
-                Some(r) => r,
-                None => super::Input::from_u8(0, 0).unwrap(),
+            let (result, interrupt) = match result {
+                Some(r) => (r, None),
+                None => (super::Input::from_u8(0, 0).unwrap(), Some(Interrupt::Timeout)),
             };
 
             // Re-enable block on input
@@ -828,7 +830,7 @@ impl Interpreter for CursesV2 {
                 self.command_file.as_mut().unwrap().flush().unwrap();
             }
 
-            result
+            (result, interrupt)
         } else {
             self.window.nodelay(false);
             let result = match self.getch() {
@@ -846,7 +848,7 @@ impl Interpreter for CursesV2 {
                 self.command_file.as_mut().unwrap().flush().unwrap();
             }
 
-            result
+            (result, None)
         }
     }
 
@@ -952,7 +954,14 @@ impl Interpreter for CursesV2 {
         ));
     }
 
-    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8, routine: Option<usize>) {
+    fn sound_effect(
+        &mut self,
+        number: u16,
+        effect: u16,
+        volume: u8,
+        repeats: u8,
+        routine: Option<u16>,
+    ) {
         match number {
             1 => {
                 pancurses::beep();
@@ -989,21 +998,22 @@ impl Interpreter for CursesV2 {
                                     Ok(mut write) => match write.reopen() {
                                         Ok(read) => match self.sounds.get(&(number as u8)) {
                                             Some(s) => match write.write_all(&s.data) {
-                                                Ok(_) => match Decoder::new(read) {
-                                                    Ok(source) => {
-                                                        match self.sink {
+                                                Ok(_) => {
+                                                    match Decoder::new(read) {
+                                                        Ok(source) => {
+                                                            match self.sink {
                                                                     None => match Sink::try_new(&self.output_stream_handle) {
                                                                         Ok(sink) => self.sink = Some(sink),
                                                                         Err(e) => error!("Error creating playback sink: {}", e)
                                                                     }
                                                                     Some(_) => ()
                                                                 }
-                                                        match self.sink.as_ref() {
-                                                            Some(sink) => {
-                                                                sink.set_volume(
-                                                                    volume as f32 / 128.0,
-                                                                );
-                                                                match s.repeat {
+                                                            match self.sink.as_ref() {
+                                                                Some(sink) => {
+                                                                    sink.set_volume(
+                                                                        volume as f32 / 128.0,
+                                                                    );
+                                                                    match s.repeat {
                                                                     Some(repeats) => {
                                                                         match repeats {
                                                                             0 => sink.append(source.repeat_infinite()),
@@ -1021,19 +1031,25 @@ impl Interpreter for CursesV2 {
                                                                         }
                                                                     }
                                                                 }
-                                                                sink.play();
-                                                                trace!("Sink len/empty: {}/{}", sink.len(), sink.empty());
-                                                                self.current_effect = number as u8;
-                                                                self.effect_routine = routine;
+                                                                    sink.play();
+                                                                    trace!(
+                                                                        "Sink len/empty: {}/{}",
+                                                                        sink.len(),
+                                                                        sink.empty()
+                                                                    );
+                                                                    self.current_effect =
+                                                                        number as u8;
+                                                                    self.effect_routine = routine;
+                                                                }
+                                                                None => (),
                                                             }
-                                                            None => (),
                                                         }
+                                                        Err(e) => error!(
+                                                            "Error getting playback source: {}",
+                                                            e
+                                                        ),
                                                     }
-                                                    Err(e) => error!(
-                                                        "Error getting playback source: {}",
-                                                        e
-                                                    ),
-                                                },
+                                                }
                                                 Err(e) => {
                                                     error!("Error getting playback decoder: {}", e)
                                                 }
@@ -1047,13 +1063,13 @@ impl Interpreter for CursesV2 {
                                     Err(e) => error!("Error opening temp file for writing: {}", e),
                                 }
                             }
-                        },
+                        }
                         3 | 4 => {
                             match &self.sink {
                                 Some(sink) => {
                                     trace!("Stopping playback");
                                     sink.stop()
-                                },
+                                }
                                 None => (),
                             }
                             self.current_effect = 0;
@@ -1154,10 +1170,7 @@ impl Interpreter for CursesV2 {
             _ => vec![],
         };
         let clear_flags = match version {
-            1 | 2 | 3 => vec![
-                Flag::StatusLineNotAvailable,
-                Flag::VariablePitchDefaultFont,
-            ],
+            1 | 2 | 3 => vec![Flag::StatusLineNotAvailable, Flag::VariablePitchDefaultFont],
             4 | 5 | 6 | 7 | 8 => vec![
                 Flag::GameWantsSoundEffects,
                 Flag::GameWantsPictures,
@@ -1171,7 +1184,8 @@ impl Interpreter for CursesV2 {
         self.window_0_top = self.status_line;
         self.cursor[1].column = 0;
         self.cursor[1].line = 0;
-        self.window.color_set(CursesV2::color_pair(COLOR_GREEN, COLOR_BLACK));
+        self.window
+            .color_set(CursesV2::color_pair(COLOR_GREEN, COLOR_BLACK));
         self.window
             .setscrreg(self.window_0_top - 1, self.screen_lines - 1);
         self.window.scrollok(true);
@@ -1190,6 +1204,22 @@ impl Interpreter for CursesV2 {
         }
     }
 
+    fn check_sound_interrupt(&mut self) -> Option<u16> {
+        match &mut self.sink {
+            Some(sink) => match self.effect_routine {
+                Some(r) => {
+                    if sink.empty() {
+                        self.effect_routine = None;
+                        Some(r)
+                    } else {
+                        None
+                    }
+                }
+                None => None,
+            },
+            None => None
+        }
+    }
 }
 
 const COLOR_TABLE: [i16; 8] = [
@@ -1224,7 +1254,6 @@ impl CursesV2 {
     fn color_pair(fg: i16, bg: i16) -> i16 {
         (fg * 8) + bg
     }
-
 
     fn next_filename(&self, extension: &str) -> String {
         let mut index = 0;

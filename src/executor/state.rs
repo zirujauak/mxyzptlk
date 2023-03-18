@@ -12,6 +12,7 @@ use crate::iff::quetzal::stks::StackFrame;
 use crate::iff::quetzal::Quetzal;
 use crate::interpreter::Input;
 use crate::interpreter::Interpreter;
+use crate::interpreter::Interrupt;
 use crate::interpreter::Sound;
 use crate::interpreter::Spec;
 
@@ -917,8 +918,8 @@ impl Interpreter for State {
         existing_input: &Vec<char>,
         redraw: bool,
         terminators: Vec<u8>,
-    ) -> (Vec<char>, bool, Input) {
-        let (data, timed_out, terminator) =
+    ) -> (Vec<char>, Option<Interrupt>, Input) {
+        let (data, interrupt, terminator) =
             self.interpreter
                 .read(length, time, existing_input, redraw, terminators);
         if terminator.zscii_value as u8 == 254 || terminator.zscii_value as u8 == 253 {
@@ -926,10 +927,10 @@ impl Interpreter for State {
             header::set_extension_word(self, 1, terminator.y);
         }
 
-        (data, timed_out, terminator)
+        (data, interrupt, terminator)
     }
-    fn read_char(&mut self, time: u16) -> Input {
-        let input = self.interpreter.read_char(time);
+    fn read_char(&mut self, time: u16) -> (Input, Option<Interrupt>) {
+        let (input, interrupt) = self.interpreter.read_char(time);
         match input.zscii_value as u8 {
             253 | 254 => {
                 header::set_extension_word(self, 0, input.x);
@@ -938,7 +939,7 @@ impl Interpreter for State {
             _ => {}
         }
 
-        input
+        (input, interrupt)
     }
     fn set_colour(&mut self, foreground: u16, background: u16) {
         self.interpreter.set_colour(foreground, background)
@@ -958,7 +959,7 @@ impl Interpreter for State {
     fn show_status(&mut self, location: &str, status: &str) {
         self.interpreter.show_status(location, status)
     }
-    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8, routine: Option<usize>) {
+    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8, routine: Option<u16>) {
         self.interpreter
             .sound_effect(number, effect, volume, repeats, routine)
     }
@@ -977,5 +978,9 @@ impl Interpreter for State {
 
     fn spec(&mut self, _version: u8) -> Spec {
         self.interpreter.spec(self.version)
+    }
+
+    fn check_sound_interrupt(&mut self) -> Option<u16> {
+        self.interpreter.check_sound_interrupt()
     }
 }

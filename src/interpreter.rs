@@ -5,6 +5,12 @@ use crate::executor::header::Flag;
 //pub mod curses;
 pub mod curses_v2;
 
+#[derive(Debug)]
+pub enum Interrupt {
+    Timeout,
+    Sound
+}
+
 pub trait Interpreter {
     fn buffer_mode(&mut self, mode: bool);
     fn erase_line(&mut self, value: u16);
@@ -22,20 +28,21 @@ pub trait Interpreter {
         existing_input: &Vec<char>,
         redraw: bool,
         terminators: Vec<u8>,
-    ) -> (Vec<char>, bool, Input);
-    fn read_char(&mut self, time: u16) -> Input;
+    ) -> (Vec<char>, Option<Interrupt>, Input);
+    fn read_char(&mut self, time: u16) -> (Input, Option<Interrupt>);
     fn set_colour(&mut self, foreground: u16, background: u16);
     fn set_cursor(&mut self, line: u16, column: u16);
     fn set_font(&mut self, font: u16) -> u16;
     fn set_text_style(&mut self, style: u16);
     fn set_window(&mut self, window: u16);
     fn show_status(&mut self, location: &str, status: &str);
-    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8, routine: Option<usize>);
+    fn sound_effect(&mut self, number: u16, effect: u16, volume: u8, repeats: u8, routine: Option<u16>);
     fn split_window(&mut self, lines: u16);
     fn save(&mut self, data: &Vec<u8>);
     fn restore(&mut self) -> Vec<u8>;
 
     fn resources(&mut self, sounds: HashMap<u8, Sound>);
+    fn check_sound_interrupt(&mut self) -> Option<u16>;
     fn spec(&mut self, version: u8) -> Spec;
 }
 
