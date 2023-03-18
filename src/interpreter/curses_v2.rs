@@ -16,7 +16,7 @@ use pancurses::{
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use tempfile::NamedTempFile;
 
-use super::{Input as OtherInput, Interpreter, Sound, Spec, Interrupt};
+use super::{Input as OtherInput, Interpreter, Interrupt, Sound, Spec};
 use crate::executor::{header::Flag, text};
 
 #[derive(Debug)]
@@ -631,8 +631,10 @@ impl Interpreter for CursesV2 {
             for j in 0..width as usize {
                 self.addch(data[(i * (width as usize + skip as usize)) + j] as u16);
             }
-            self.addch('\n' as u8 as u16);
-            self.cursor[self.selected_window].column = column;
+            if i < height as usize - 1 {
+                self.addch('\n' as u8 as u16);
+                self.cursor[self.selected_window].column = column;
+            }
         }
     }
 
@@ -655,7 +657,7 @@ impl Interpreter for CursesV2 {
 
             match existing_input.last() {
                 Some(c) => trace!("Last input: {:#02x}", *c as u8),
-                None => ()
+                None => (),
             }
         }
 
@@ -702,51 +704,59 @@ impl Interpreter for CursesV2 {
                 i = super::Input::from_u8(0, 0);
                 return (input, Some(Interrupt::Timeout), i.unwrap());
             } else {
-                i = self.getch();
-                match i {
-                    Some(inp) => {
-                        trace!("Input: {:?}", inp);
-                        match inp.original_value {
-                            // Backspace
-                            '\u{7f}' => {
-                                if input.len() > 0 {
-                                    // Remove from the input array
-                                    input.pop();
+                match self.check_sound_interrupt() {
+                    Some(r) => {
+                        return (input, Some(Interrupt::Sound(r)), super::Input::from_u8(0, 0).unwrap());
+                    },
+                    _ => {
+                        i = self.getch();
+                        match i {
+                            Some(inp) => {
+                                trace!("Input: {:?}", inp);
+                                match inp.original_value {
+                                    // Backspace
+                                    '\u{7f}' => {
+                                        if input.len() > 0 {
+                                            // Remove from the input array
+                                            input.pop();
 
-                                    // Back cursor up and delete character
-                                    self.cursor[self.selected_window].column =
-                                        self.cursor[self.selected_window].column - 1;
-                                    self.window.mv(
-                                        self.cursor[self.selected_window].line - 1,
-                                        self.cursor[self.selected_window].column - 1,
-                                    );
-                                    self.window.delch();
-                                    self.window.refresh();
+                                            // Back cursor up and delete character
+                                            self.cursor[self.selected_window].column =
+                                                self.cursor[self.selected_window].column - 1;
+                                            self.window.mv(
+                                                self.cursor[self.selected_window].line - 1,
+                                                self.cursor[self.selected_window].column - 1,
+                                            );
+                                            self.window.delch();
+                                            self.window.refresh();
+                                        }
+                                    }
+                                    //
+                                    _ => {
+                                        if input.len() < length as usize
+                                            && self
+                                                .is_terminator(&terminators, inp.zscii_value as u8)
+                                        {
+                                            input.push(inp.original_value);
+                                            done = true;
+                                            if inp.original_value == '\n' {
+                                                self.addch('\n' as u16);
+                                            }
+                                        } else if input.len() < length as usize
+                                            && text::valid_input(inp.zscii_value)
+                                        {
+                                            input.push(inp.zscii_value);
+                                            self.addch(inp.original_value as u16);
+                                            self.window.refresh();
+                                        }
+                                    }
                                 }
                             }
-                            //
-                            _ => {
-                                if input.len() < length as usize
-                                    && self.is_terminator(&terminators, inp.zscii_value as u8)
-                                {
-                                    input.push(inp.original_value);
-                                    done = true;
-                                    if inp.original_value == '\n' {
-                                        self.addch('\n' as u16);
-                                    }
-                                } else if input.len() < length as usize
-                                    && text::valid_input(inp.zscii_value)
-                                {
-                                    input.push(inp.zscii_value);
-                                    self.addch(inp.original_value as u16);
-                                    self.window.refresh();
-                                }
+                            None => {
+                                // Brief sleep
+                                thread::sleep(delay);
                             }
                         }
-                    }
-                    None => {
-                        // Brief sleep
-                        thread::sleep(delay);
                     }
                 }
             }
@@ -814,7 +824,10 @@ impl Interpreter for CursesV2 {
 
             let (result, interrupt) = match result {
                 Some(r) => (r, None),
-                None => (super::Input::from_u8(0, 0).unwrap(), Some(Interrupt::Timeout)),
+                None => (
+                    super::Input::from_u8(0, 0).unwrap(),
+                    Some(Interrupt::Timeout),
+                ),
             };
 
             // Re-enable block on input
@@ -965,10 +978,12 @@ impl Interpreter for CursesV2 {
         match number {
             1 => {
                 pancurses::beep();
+                self.effect_routine = None;
             }
             2 => {
                 pancurses::beep();
                 pancurses::beep();
+                self.effect_routine = None;
             }
             _ => {
                 trace!("Current effect: {}", self.current_effect);
@@ -976,11 +991,13 @@ impl Interpreter for CursesV2 {
                     match effect {
                         2 => {
                             if number == 0 {
+                                self.effect_routine = None;
                                 match &self.sink {
                                     Some(sink) => sink.stop(),
                                     None => (),
                                 }
                             } else if number as u8 == self.current_effect {
+                                self.effect_routine = routine;
                                 let vol = volume as f32 / 128.0;
                                 trace!("Adjusting volume to {}", vol);
                                 match self.sink.as_ref() {
@@ -989,6 +1006,7 @@ impl Interpreter for CursesV2 {
                                 }
                             } else {
                                 self.current_effect = 0;
+                                self.effect_routine = None;
                                 match self.sink.as_ref() {
                                     Some(sink) => sink.stop(),
                                     None => (),
@@ -1073,6 +1091,7 @@ impl Interpreter for CursesV2 {
                                 None => (),
                             }
                             self.current_effect = 0;
+                            self.effect_routine = None;
                         }
                         _ => (),
                     }
@@ -1217,7 +1236,7 @@ impl Interpreter for CursesV2 {
                 }
                 None => None,
             },
-            None => None
+            None => None,
         }
     }
 }

@@ -8,7 +8,7 @@ pub mod curses_v2;
 #[derive(Debug)]
 pub enum Interrupt {
     Timeout,
-    Sound
+    Sound(u16)
 }
 
 pub trait Interpreter {
