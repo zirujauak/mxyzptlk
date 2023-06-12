@@ -6,12 +6,13 @@ use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 
-pub mod executor;
-pub mod iff;
-pub mod interpreter;
+pub mod state;
+pub mod error;
 
-use executor::Executor;
-use iff::blorb::Blorb;
+use state::State;
+use state::header;
+use state::header::*;
+use state::memory::*;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -22,24 +23,27 @@ fn main() {
             let mut buffer = Vec::new();
             match f.read_to_end(&mut buffer) {
                 Ok(_) => {
-                    let name: Vec<&str> = filename.split(".").collect();
-                    let mut e = Executor::from_vec(name[0].to_string(), buffer);
-                    // blorb::rebuild_blorb(name[0].to_string());
-                    let rs = format!("{}-new.blorb", name[0].to_string());
-                    match File::open(rs) {
-                        Ok(mut rf) => {
-                            let mut rbuf = Vec::new();
-                            match rf.read_to_end(&mut rbuf) {
-                                Ok(_) => match Blorb::from_vec(rbuf) {
-                                    Some(b) => e.state.resources(b),
-                                    None => (),
-                                },
-                                Err(_) => (),
-                            }
-                        }
-                        Err(_) => (),
-                    };
-                    e.run();
+                    let memory = Memory::new(&buffer);
+                    let state = State::new(memory, 80, 24).expect("Error creating state");
+                    state.run();
+                    // let name: Vec<&str> = filename.split(".").collect();
+                    // let mut e = Executor::from_vec(name[0].to_string(), buffer);
+                    // // blorb::rebuild_blorb(name[0].to_string());
+                    // let rs = format!("{}-new.blorb", name[0].to_string());
+                    // match File::open(rs) {
+                    //     Ok(mut rf) => {
+                    //         let mut rbuf = Vec::new();
+                    //         match rf.read_to_end(&mut rbuf) {
+                    //             Ok(_) => match Blorb::from_vec(rbuf) {
+                    //                 Some(b) => e.state.resources(b),
+                    //                 None => (),
+                    //             },
+                    //             Err(_) => (),
+                    //         }
+                    //     }
+                    //     Err(_) => (),
+                    // };
+                    // e.run();
                 }
                 Err(e) => {
                     panic!("Error reading file '{}': {}", filename, e);
