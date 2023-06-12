@@ -80,6 +80,7 @@ impl State {
         &mut self.screen
     }
 
+    // MMU
     pub fn read_byte(&self, address: usize) -> Result<u8,RuntimeError> {
         if address < 0x10000 {
             self.memory.read_byte(address)
@@ -112,6 +113,7 @@ impl State {
         }
     }    
     
+    // Variables
     pub fn run(&self) -> Result<(),RuntimeError> {
         let address = header::field_word(&self.memory, HeaderField::InitialPC)? as usize;
         let instruction = decoder::decode_instruction(&self.memory, address)?;
