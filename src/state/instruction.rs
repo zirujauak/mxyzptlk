@@ -9,11 +9,12 @@ pub enum OpcodeForm {
     Ext,
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone,Copy)]
 pub enum OperandType {
     LargeConstant,
     SmallConstant,
-    Variable
+    Variable,
+    Omitted
 }
 
 pub struct Operand {
@@ -24,16 +25,31 @@ pub struct Operand {
 impl fmt::Display for Operand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.operand_type {
-            OperandType::LargeConstant => write!(f, "#{:04x}", self.operand_value),
-            OperandType::SmallConstant => write!(f, "#{:02x}", self.operand_value as u8),
-            OperandType::Variable => if self.operand_value == 0 {
+            OperandType::LargeConstant => write!(f, "#{:04x}", self.value),
+            OperandType::SmallConstant => write!(f, "#{:02x}", self.value as u8),
+            OperandType::Variable => if self.value == 0 {
                 write!(f, "(SP)+")
-            } else if self.operand_value < 16 {
-                write!(f, "L{:02x}", self.operand_value - 1)
+            } else if self.value < 16 {
+                write!(f, "L{:02x}", self.value - 1)
             } else {
-                write!(f, "G{:02x}", self.operand_value - 16)
+                write!(f, "G{:02x}", self.value - 16)
             }
+            OperandType::Omitted => write!(f, "")
         }
+    }
+}
+
+impl Operand {
+    fn new(operand_type: OperandType, value: u16) -> Operand {
+        Operand { operand_type, value }
+    }
+
+    fn operand_type(&self) -> OperandType {
+        self.operand_type
+    }
+
+    fn value(&self) -> u16 {
+        self.value
     }
 }
 
@@ -105,14 +121,14 @@ pub struct Opcode {
     opcode: u8,
     form: OpcodeForm,
     instruction: u8,
-    opcount: OperandCount,
+    operand_count: OperandCount,
 }
 
 impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}",
         match self.form {
-            OpcodeForm::Extended => match self.instruction {
+            OpcodeForm::Ext => match self.instruction() {
                 0x00 => "SAVE",
                 0x01 => "RESTORE",
                 0x02 => "LOG_SHIFT",
@@ -143,8 +159,8 @@ impl fmt::Display for Opcode {
                 0x1D => "BUFFER_SCREEN",
                 _ => "UNKNOWN!",
             },
-            _ => match self.opcount {
-                OperandCount::_0OP => match self.instruction {
+            _ => match self.operand_count() {
+                OperandCount::_0OP => match self.instruction() {
                     0x0 => "RTRUE",
                     0x1 => "RFALSE",
                     0x2 => "PRINT",
@@ -155,7 +171,7 @@ impl fmt::Display for Opcode {
                     0x7 => "RESTART",
                     0x8 => "RET_POPPED",
                     0x9 => {
-                        if self.version < 5 {
+                        if self.version() < 5 {
                             "POP"
                         } else {
                             "CATCH"
@@ -168,7 +184,7 @@ impl fmt::Display for Opcode {
                     0xF => "PIRACY",
                     _ => "UNKNOWN!",
                 },
-                OperandCount::_1OP => match self.instruction {
+                OperandCount::_1OP => match self.instruction() {
                     0x0 => "JZ",
                     0x1 => "GET_SIBLING",
                     0x2 => "GET_CHILD",
@@ -193,7 +209,7 @@ impl fmt::Display for Opcode {
                     }
                     _ => "UNKNOWN!",
                 },
-                OperandCount::_2OP => match self.instruction {
+                OperandCount::_2OP => match self.instruction() {
                     0x01 => "JE",
                     0x02 => "JL",
                     0x03 => "JG",
@@ -224,7 +240,7 @@ impl fmt::Display for Opcode {
                     0x1C => "THROW",
                     _ => "UNKNOWN!",
                 },
-                OperandCount::_VAR => match self.instruction {
+                OperandCount::_VAR => match self.instruction() {
                     0x00 => {
                         if self.version < 4 {
                             "CALL"
@@ -277,6 +293,23 @@ impl fmt::Display for Opcode {
 }
 
 impl Opcode {
+    pub fn new(version: u8, opcode: u8, instruction: u8, form: OpcodeForm, operand_count: OperandCount) -> Opcode {
+        Opcode {
+            version,
+            opcode,
+            instruction,
+            form,
+            operand_count,
+        }
+    }
+
+    pub fn version(&self) -> u8 {
+        self.version
+    }
+
+    pub fn opcode(&self) -> u8 {
+        self.opcode
+    }
     pub fn form(&self) -> &OpcodeForm {
         &self.form
     }
@@ -285,15 +318,15 @@ impl Opcode {
         self.instruction
     }
 
-    pub fn opcount(&self) -> &OperandCount {
-        &self.opcount
+    pub fn operand_count(&self) -> &OperandCount {
+        &self.operand_count
     }
 }
 
 pub struct Instruction {
     address: usize,
     opcode: Opcode,
-    operands: Vec<u16>,
+    operands: Vec<Operand>,
     store: Option<StoreResult>,
     branch: Option<Branch>,
     next_address: usize,
@@ -301,25 +334,62 @@ pub struct Instruction {
 
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "${:05x} ", self.address)?;
-        match self.opcode.form {
-            OpcodeForm::Extended => write!(f, "be {:02x}", self.opcode.opcode)?,
-            _ => write!(f, "{:02x}", self.opcode.opcode)?
+        write!(f, "${:05x} ", self.address())?;
+        match self.opcode().form() {
+            OpcodeForm::Ext => write!(f, "be {:02x}", self.opcode().opcode())?,
+            _ => write!(f, "{:02x}", self.opcode().opcode())?
         }
-        write!(f, " {}", self.opcode)?;
+        write!(f, " {}", self.opcode())?;
 
-        for o in &self.operands {
+        for o in self.operands() {
             write!(f, " {}", o)?;
         }
 
-        if let Some(s) = self.store {
+        if let Some(s) = self.store() {
             write!(f, " -> {}", s)?
         }
 
-        if let Some(b) = &self.branch {
+        if let Some(b) = self.branch() {
             write!(f, " {}", b)?
         }
 
         write!(f, "")
+    }
+}
+
+impl Instruction {
+    fn new(address: usize, opcode: Opcode, operands: Vec<Operand>, store: Option<StoreResult>, branch: Option<Branch>, next_address: usize) -> Instruction {
+        Instruction {
+            address,
+            opcode,
+            operands,
+            store,
+            branch,
+            next_address
+        }
+    }
+
+    pub fn address(&self) -> usize {
+        self.address
+    }
+
+    fn opcode(&self) -> &Opcode {
+        &self.opcode
+    }
+
+    fn operands(&self) -> &Vec<Operand> {
+        &self.operands
+    }
+
+    fn store(&self) -> Option<&StoreResult> {
+        self.store.as_ref()
+    }
+
+    fn branch(&self) -> Option<&Branch> {
+        self.branch.as_ref()
+    }
+
+    pub fn next_address(&self) -> usize {
+        self.next_address
     }
 }

@@ -119,6 +119,8 @@ impl State {
         let address = header::field_word(&self.memory, HeaderField::InitialPC)? as usize;
         let instruction = decoder::decode_instruction(&self.memory, address)?;
         println!("{}", instruction);
+        let instruction = decoder::decode_instruction(&self.memory, instruction.next_address())?;
+        println!("{}", instruction);
         Ok(())
     }
 }
