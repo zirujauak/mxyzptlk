@@ -2,8 +2,12 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum ErrorCode {
+    FrameUnderflow,
     IllegalAccess,
     InvalidAddress,
+    InvalidLocalVariable,
+    StackUnderflow,
+    UnimplementedInstruction,
     UnsupportedVersion,
 }
 

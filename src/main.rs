@@ -24,8 +24,10 @@ fn main() {
             match f.read_to_end(&mut buffer) {
                 Ok(_) => {
                     let memory = Memory::new(&buffer);
-                    let state = State::new(memory, 80, 24).expect("Error creating state");
-                    state.run();
+                    let mut state = State::new(memory, 80, 24).expect("Error creating state");
+                    if let Err(r) = state.run() {
+                        panic!("{}", r)
+                    }
                     // let name: Vec<&str> = filename.split(".").collect();
                     // let mut e = Executor::from_vec(name[0].to_string(), buffer);
                     // // blorb::rebuild_blorb(name[0].to_string());

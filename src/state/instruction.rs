@@ -1,6 +1,7 @@
 use std::fmt;
 
 pub mod decoder;
+pub mod processor;
 
 pub enum OpcodeForm {
     Short,
@@ -14,7 +15,6 @@ pub enum OperandType {
     LargeConstant,
     SmallConstant,
     Variable,
-    Omitted
 }
 
 pub struct Operand {
@@ -34,7 +34,6 @@ impl fmt::Display for Operand {
             } else {
                 write!(f, "G{:02x}", self.value - 16)
             }
-            OperandType::Omitted => write!(f, "")
         }
     }
 }
@@ -53,6 +52,7 @@ impl Operand {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct StoreResult {
     address: usize,
     variable: u8,
