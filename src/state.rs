@@ -3,6 +3,7 @@ mod screen;
 mod instruction;
 pub mod memory;
 pub mod header;
+mod frame;
 
 use std::fmt;
 use screen::*;
