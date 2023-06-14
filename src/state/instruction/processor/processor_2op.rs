@@ -2,6 +2,7 @@ use super::*;
 use crate::error::*;
 use crate::state::object::attribute;
 use crate::state::object::property;
+use crate::state::object;
 use crate::state::State;
 
 pub fn je(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
@@ -109,42 +110,42 @@ pub fn store(state: &mut State, instruction: &Instruction) -> Result<usize, Runt
     Ok(instruction.next_address())
 }
 
-// pub fn insert_obj(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn insert_obj(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     let object = operands[0] as usize;
-//     if object != 0 {
-//         let new_parent = operands[1] as usize;
-//         let old_parent = object::parent(context, object)?;
+    let object = operands[0] as usize;
+    if object != 0 {
+        let new_parent = operands[1] as usize;
+        let old_parent = object::parent(state, object)?;
 
-//         if old_parent != new_parent {
-//             if old_parent != 0 {
-//                 let old_parent_child = object::child(context, old_parent)?;
+        if old_parent != new_parent {
+            if old_parent != 0 {
+                let old_parent_child = object::child(state, old_parent)?;
 
-//                 if old_parent_child == object {
-//                     object::set_child(context, old_parent, object::sibling(context, object)?)?;
-//                 } else {
-//                     let mut sibling = old_parent_child;
-//                     while sibling != 0 && object::sibling(context, sibling)? != object {
-//                         sibling = object::sibling(context, sibling)?;
-//                     }
+                if old_parent_child == object {
+                    object::set_child(state, old_parent, object::sibling(state, object)?)?;
+                } else {
+                    let mut sibling = old_parent_child;
+                    while sibling != 0 && object::sibling(state, sibling)? != object {
+                        sibling = object::sibling(state, sibling)?;
+                    }
 
-//                     if sibling == 0 {
-//                         panic!("Inconsistent object tree");
-//                     }
+                    if sibling == 0 {
+                        return Err(RuntimeError::new(ErrorCode::ObjectTreeState, format!("Unable to find previous sibling of object {} in parent {}", object, old_parent)));
+                    }
 
-//                     object::set_sibling(context, sibling, object::sibling(context, object)?)?;
-//                 }
-//             }
+                    object::set_sibling(state, sibling, object::sibling(state, object)?)?;
+                }
+            }
 
-//             object::set_sibling(context, object, object::child(context, new_parent)?)?;
-//             object::set_child(context, new_parent, object)?;
-//             object::set_parent(context, object, new_parent)?;
-//         }
-//     }
+            object::set_sibling(state, object, object::child(state, new_parent)?)?;
+            object::set_child(state, new_parent, object)?;
+            object::set_parent(state, object, new_parent)?;
+        }
+    }
 
-//     Ok(instruction.next_address())
-// }
+    Ok(instruction.next_address())
+}
 
 pub fn test_attr(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
@@ -216,35 +217,29 @@ pub fn get_prop(state: &mut State, instruction: &Instruction) -> Result<usize, R
 //     Ok(instruction.next_address())
 // }
 
-// pub fn add(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn add(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     let mut value = operands[0] as i16;
-//     for i in 1..operands.len() {
-//         value = i16::overflowing_add(value, operands[i] as i16).0;
-//     }
+    let mut value = operands[0] as i16;
+    for i in 1..operands.len() {
+        value = i16::overflowing_add(value, operands[i] as i16).0;
+    }
 
-//     trace!(
-//         "ADD {} + {} = {}",
-//         operands[0] as i16,
-//         operands[1] as i16,
-//         value as i16
-//     );
-//     store_result(context, instruction, value as u16)?;
-//     Ok(instruction.next_address())
-// }
+    store_result(state, instruction, value as u16)?;
+    Ok(instruction.next_address())
+}
 
-// pub fn sub(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn sub(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     let mut value = operands[0] as i16;
-//     for i in 1..operands.len() {
-//         value = i16::overflowing_sub(value, operands[i] as i16).0;
-//     }
+    let mut value = operands[0] as i16;
+    for i in 1..operands.len() {
+        value = i16::overflowing_sub(value, operands[i] as i16).0;
+    }
 
-//     store_result(context, instruction, value as u16);
-//     Ok(instruction.next_address())
-// }
+    store_result(state, instruction, value as u16);
+    Ok(instruction.next_address())
+}
 
 // pub fn mul(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;

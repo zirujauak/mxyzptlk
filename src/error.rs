@@ -6,6 +6,7 @@ pub enum ErrorCode {
     IllegalAccess,
     InvalidAddress,
     InvalidLocalVariable,
+    ObjectTreeState,
     PropertySize,
     StackUnderflow,
     UnimplementedInstruction,

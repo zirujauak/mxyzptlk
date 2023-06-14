@@ -58,3 +58,40 @@ pub fn sibling(state: &State, object: usize) -> Result<usize, RuntimeError> {
 
     relative(state, object, offset)
 }
+
+pub fn set_relative(state: &mut State, offset: usize, object: usize, relative: usize) -> Result<(), RuntimeError> {
+    let object_address = object_address(state, object)?;
+
+    match header::field_byte(state.memory(), HeaderField::Version)? {
+        3 => state.write_byte(object_address + offset, relative as u8),
+        _ => state.write_word(object_address + offset, relative as u16)
+    }
+}
+
+pub fn set_parent(state: &mut State, object: usize, parent: usize) -> Result<(),RuntimeError> {
+    let offset = match header::field_byte(state.memory(), HeaderField::Version)? {
+        3 => 4,
+        _ => 6
+    };
+
+    set_relative(state, offset, object, parent)
+}
+
+pub fn set_child(state: &mut State, object: usize, child: usize) -> Result<(),RuntimeError> {
+    let offset = match header::field_byte(state.memory(), HeaderField::Version)? {
+        3 => 6,
+        _ => 10
+    };
+
+    set_relative(state, offset, object, child)
+}
+
+pub fn set_sibling(state: &mut State, object: usize, sibling: usize) -> Result<(),RuntimeError> {
+    let offset = match header::field_byte(state.memory(), HeaderField::Version)? {
+        3 => 5,
+        _ => 8
+    };
+
+    set_relative(state, offset, object, sibling)
+}
+

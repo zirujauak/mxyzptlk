@@ -8,10 +8,10 @@ use crate::state::object::property::*;
 use crate::state::State;
 use crate::state::text;
 
-// pub fn jz(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     branch(context, instruction, operands[0] == 0)
-// }
+pub fn jz(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    branch(state, instruction, operands[0] == 0)
+}
 
 pub fn get_sibling(
     state: &mut State,
@@ -124,10 +124,10 @@ pub fn print_obj(state: &mut State, instruction: &Instruction) -> Result<usize, 
     Ok(instruction.next_address())
 }
 
-// pub fn ret(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     context.return_fn(operands[0])
-// }
+pub fn ret(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    state.return_routine(operands[0])
+}
 
 pub fn jump(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
