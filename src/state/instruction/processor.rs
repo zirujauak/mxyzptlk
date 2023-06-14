@@ -250,7 +250,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 //             0x04 => processor_var::read(context, instruction),
                 0x05 => processor_var::print_char(state, instruction),
                 0x06 => processor_var::print_num(state, instruction),
-                //             0x07 => processor_var::random(context, instruction),
+                0x07 => processor_var::random(state, instruction),
                 //             0x08 => processor_var::push(context, instruction),
                 //             0x09 => processor_var::pull(context, instruction),
                 //             0x0a => processor_var::split_window(context, instruction),

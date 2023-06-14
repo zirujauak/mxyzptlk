@@ -93,24 +93,24 @@ pub fn print_num(state: &mut State, instruction: &Instruction) -> Result<usize, 
     Ok(instruction.next_address())
 }
 
-// pub fn random(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn random(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     let range = operands[0] as i16;
-//     if range < 1 {
-//         if range == 0 || range.abs() >= 1000 {
-//             context.seed(range.abs() as u16)
-//         } else if range.abs() < 1000 {
-//             context.predictable(range.abs() as u16)
-//         }
-//         store_result(context, instruction, 0)?;
-//     } else {
-//         let value = context.interpreter_mut().rng_mut().random(range as u16);
-//         store_result(context, instruction, value)?;
-//     }
+    let range = operands[0] as i16;
+    if range < 1 {
+        if range == 0 || range.abs() >= 1000 {
+            state.seed(range.abs() as u16)
+        } else if range.abs() < 1000 {
+            state.predictable(range.abs() as u16)
+        }
+        store_result(context, instruction, 0)?;
+    } else {
+        let value = state.random(range as u16);
+        store_result(state, instruction, value)?;
+    }
 
-//     Ok(instruction.next_address())
-// }
+    Ok(instruction.next_address())
+}
 
 // pub fn push(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
