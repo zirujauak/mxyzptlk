@@ -4,6 +4,7 @@ mod input;
 mod instruction;
 pub mod memory;
 mod screen;
+mod object;
 
 use crate::error::*;
 use frame_stack::*;

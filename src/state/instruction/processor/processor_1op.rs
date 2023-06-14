@@ -1,6 +1,10 @@
 use super::*;
 use crate::error::*;
 use crate::state::memory::Memory;
+use crate::state::object;
+use crate::state::object::*;
+use crate::state::object::property;
+use crate::state::object::property::*;
 use crate::state::State;
 
 // pub fn jz(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
@@ -8,35 +12,32 @@ use crate::state::State;
 //     branch(context, instruction, operands[0] == 0)
 // }
 
-// pub fn get_sibling(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let sibling = object::sibling(context, operands[0] as usize)?;
-//     store_result(context, instruction, sibling as u16)?;
-//     branch(context, instruction, sibling != 0)
-// }
+pub fn get_sibling(
+    state: &mut State,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let sibling = object::sibling(state, operands[0] as usize)?;
+    store_result(state, instruction, sibling as u16)?;
+    branch(state, instruction, sibling != 0)
+}
 
-// pub fn get_child(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let child = object::child(context, operands[0] as usize)?;
-//     store_result(context, instruction, child as u16)?;
-//     branch(context, instruction, child != 0)
-// }
+pub fn get_child(
+    state: &mut State,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let child = object::child(state, operands[0] as usize)?;
+    store_result(state, instruction, child as u16)?;
+    branch(state, instruction, child != 0)
+}
 
-// pub fn get_parent(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let parent = object::parent(context, operands[0] as usize)?;
-//     store_result(context, instruction, parent as u16)?;
-//     Ok(instruction.next_address())
-// }
+pub fn get_parent(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let parent = object::parent(state, operands[0] as usize)?;
+    store_result(state, instruction, parent as u16)?;
+    Ok(instruction.next_address())
+}
 
 // pub fn get_prop_len(
 //     context: &mut Context,
@@ -56,13 +57,13 @@ pub fn inc(state: &mut State, instruction: &Instruction) -> Result<usize, Runtim
     Ok(instruction.next_address())
 }
 
-// pub fn dec(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let val = context.peek_variable(operands[0] as u8)?;
-//     let new_val = i16::overflowing_sub(val as i16, 1);
-//     context.set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
-//     Ok(instruction.next_address())
-// }
+pub fn dec(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let val = state.peek_variable(operands[0] as u8)?;
+    let new_val = i16::overflowing_sub(val as i16, 1);
+    state.set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
+    Ok(instruction.next_address())
+}
 
 // pub fn print_addr(
 //     context: &mut Context,
@@ -113,34 +114,36 @@ pub fn inc(state: &mut State, instruction: &Instruction) -> Result<usize, Runtim
 //     Ok(instruction.next_address())
 // }
 
-// pub fn print_obj(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let ztext = property::short_name(context, operands[0] as usize)?;
-//     let text = text::from_vec(context, &ztext)?;
+pub fn print_obj(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let ztext = property::short_name(state, operands[0] as usize)?;
+    println!("SHORT NAME: {:?}", ztext);
+    // let text = text::from_vec(context, &ztext)?;
 
-//     context.print_string(text);
-//     Ok(instruction.next_address())
-// }
+    // context.print_string(text);
+    Ok(instruction.next_address())
+}
 
 // pub fn ret(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
 //     context.return_fn(operands[0])
 // }
 
-// pub fn jump(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let address = (instruction.next_address() as isize) + (operands[0] as i16) as isize - 2;
-//     Ok(address as usize)
-// }
+pub fn jump(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let address = (instruction.next_address() as isize) + (operands[0] as i16) as isize - 2;
+    Ok(address as usize)
+}
 
-// pub fn print_paddr(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let address = packed_string_address(context, operands[0]);
-//     let text = text::as_text(context, address)?;
+pub fn print_paddr(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let address = packed_string_address(state.memory(), operands[0])?;
+    println!("ZTEXT @ ${:05x}", address);
+    // let text = text::as_text(context, address)?;
 
-//     context.print_string(text);
-//     Ok(instruction.next_address())
-// }
+    // context.print_string(text);
+    Ok(instruction.next_address())
+}
 
 // pub fn load(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;

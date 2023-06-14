@@ -6,29 +6,30 @@ pub fn rtrue(state: &mut State, instruction: &Instruction) -> Result<usize, Runt
     state.return_routine(1)
 }
 
-// pub fn rfalse(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     context.return_fn(0)
-// }
+pub fn rfalse(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    state.return_routine(0)
+}
 
-// fn literal_text(context: &Context, address: usize) -> Result<Vec<u16>, ContextError> {
-//     let mut text = Vec::new();
-//     let mut done = false;
+fn literal_text(state: &State, address: usize) -> Result<Vec<u16>, RuntimeError> {
+    let mut text = Vec::new();
+    let mut done = false;
 
-//     while !done {
-//         let w = context.read_word(address + (text.len() * 2))?;
-//         done = w & 0x8000 == 0x8000;
-//         text.push(w);
-//     }
+    while !done {
+        let w = state.read_word(address + (text.len() * 2))?;
+        done = w & 0x8000 == 0x8000;
+        text.push(w);
+    }
 
-//     Ok(text)
-// }
-// pub fn print(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let ztext = literal_text(context, instruction.address() + 1)?;
-//     let text = text::from_vec(context, &ztext)?;
+    Ok(text)
+}
 
-//     context.print_string(text);
-//     Ok(instruction.next_address() + (ztext.len() * 2))
-// }
+pub fn print(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let ztext = literal_text(state, instruction.address() + 1)?;
+    // let text = text::from_vec(state, &ztext)?;
+
+    println!("ZTEXT literal");
+    Ok(instruction.next_address() + (ztext.len() * 2))
+}
 
 // pub fn print_ret(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let ztext = literal_text(context, instruction.address + 1)?;
@@ -72,10 +73,11 @@ pub fn rtrue(state: &mut State, instruction: &Instruction) -> Result<usize, Runt
 //     process::exit(0);
 // }
 
-// pub fn new_line(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     context.new_line();
-//     Ok(instruction.next_address())
-// }
+pub fn new_line(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    println!("NEW LINE");
+    // context.new_line();
+    Ok(instruction.next_address())
+}
 
 // pub fn show_status(
 //     context: &mut Context,

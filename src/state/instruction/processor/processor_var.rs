@@ -1,6 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::*;
+use crate::state::object::property;
+// use crate::state::object::property::*;
 
 pub fn call_vs(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
@@ -30,17 +32,17 @@ pub fn storeb(state: &mut State, instruction: &Instruction) -> Result<usize, Run
     Ok(instruction.next_address())
 }
 
-// pub fn put_prop(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn put_prop(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     property::set_property(
-//         context,
-//         operands[0] as usize,
-//         operands[1] as u8,
-//         operands[2],
-//     )?;
-//     Ok(instruction.next_address())
-// }
+    property::set_property(
+        state,
+        operands[0] as usize,
+        operands[1] as u8,
+        operands[2],
+    )?;
+    Ok(instruction.next_address())
+}
 
 // pub fn read(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
@@ -77,18 +79,19 @@ pub fn storeb(state: &mut State, instruction: &Instruction) -> Result<usize, Run
 
 // }
 
-// pub fn print_char(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     context.print_string(format!("{}", (operands[0] as u8) as char));
-//     Ok(instruction.next_address())
-// }
+pub fn print_char(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    println!("{}", (operands[0] as u8) as char);
+    // context.print_string(format!("{}", (operands[0] as u8) as char));
+    Ok(instruction.next_address())
+}
 
-// pub fn print_num(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-
-//     context.print_string(format!("{}", operands[0] as i16));
-//     Ok(instruction.next_address())
-// }
+pub fn print_num(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    println!("{}", operands[0] as u16);
+    // context.print_string(format!("{}", operands[0] as i16));
+    Ok(instruction.next_address())
+}
 
 // pub fn random(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;

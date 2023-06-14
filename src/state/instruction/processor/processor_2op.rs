@@ -1,26 +1,28 @@
 use super::*;
-use crate::state::State;
 use crate::error::*;
+use crate::state::object::attribute;
+use crate::state::object::property;
+use crate::state::State;
 
-// pub fn je(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     for i in 1..operands.len() {
-//         if operands[0] as i16 == operands[i] as i16 {
-//             return branch(context, instruction, true);
-//         }
-//     }
+pub fn je(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    for i in 1..operands.len() {
+        if operands[0] as i16 == operands[i] as i16 {
+            return branch(state, instruction, true);
+        }
+    }
 
-//     branch(context, instruction, false)
-// }
+    branch(state, instruction, false)
+}
 
-// pub fn jl(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     branch(
-//         context,
-//         instruction,
-//         (operands[0] as i16) < (operands[1] as i16),
-//     )
-// }
+pub fn jl(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    branch(
+        state,
+        instruction,
+        (operands[0] as i16) < (operands[1] as i16),
+    )
+}
 
 // pub fn jg(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
@@ -76,16 +78,16 @@ use crate::error::*;
 //     Ok(instruction.next_address())
 // }
 
-// pub fn and(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let mut result = operands[0];
-//     for i in 1..operands.len() {
-//         result = result & operands[i]
-//     }
+pub fn and(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let mut result = operands[0];
+    for i in 1..operands.len() {
+        result = result & operands[i]
+    }
 
-//     store_result(context, instruction, result)?;
-//     Ok(instruction.next_address())
-// }
+    store_result(state, instruction, result)?;
+    Ok(instruction.next_address())
+}
 
 pub fn loadw(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
@@ -94,18 +96,18 @@ pub fn loadw(state: &mut State, instruction: &Instruction) -> Result<usize, Runt
     Ok(instruction.next_address())
 }
 
-// pub fn loadb(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let address = (operands[0] as isize + (operands[1] as i16) as isize) as usize;
-//     store_result(context, instruction, context.read_byte(address)? as u16)?;
-//     Ok(instruction.next_address())
-// }
+pub fn loadb(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let address = (operands[0] as isize + (operands[1] as i16) as isize) as usize;
+    store_result(state, instruction, state.read_byte(address)? as u16)?;
+    Ok(instruction.next_address())
+}
 
-// pub fn store(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     context.set_variable_indirect(operands[0] as u8, operands[1])?;
-//     Ok(instruction.next_address())
-// }
+pub fn store(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    state.set_variable_indirect(operands[0] as u8, operands[1])?;
+    Ok(instruction.next_address())
+}
 
 // pub fn insert_obj(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
@@ -144,21 +146,21 @@ pub fn loadw(state: &mut State, instruction: &Instruction) -> Result<usize, Runt
 //     Ok(instruction.next_address())
 // }
 
-// pub fn test_attr(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let condition =
-//         operands[0] > 0 && attribute::value(context, operands[0] as usize, operands[1] as u8)?;
-//     branch(context, instruction, condition)
-// }
+pub fn test_attr(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let condition =
+        operands[0] > 0 && attribute::value(state, operands[0] as usize, operands[1] as u8)?;
+    branch(state, instruction, condition)
+}
 
-// pub fn set_attr(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     if operands[0] > 0 {
-//         attribute::set(context, operands[0] as usize, operands[1] as u8)?;
-//     }
+pub fn set_attr(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    if operands[0] > 0 {
+        attribute::set(state, operands[0] as usize, operands[1] as u8)?;
+    }
 
-//     Ok(instruction.next_address())
-// }
+    Ok(instruction.next_address())
+}
 
 pub fn clear_attr(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
@@ -166,21 +168,21 @@ pub fn clear_attr(state: &mut State, instruction: &Instruction) -> Result<usize,
         attribute::clear(state, operands[0] as usize, operands[1] as u8)?;
     }
 
-//     Ok(instruction.next_address())
-// }
+    Ok(instruction.next_address())
+}
 
-// pub fn get_prop(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn get_prop(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     if operands[0] == 0 {
-//         store_result(context, instruction, 0)?;
-//     } else {
-//         let value = property::property(context, operands[0] as usize, operands[1] as u8)?;
-//         store_result(context, instruction, value)?;
-//     }
+    if operands[0] == 0 {
+        store_result(state, instruction, 0)?;
+    } else {
+        let value = property::property(state, operands[0] as usize, operands[1] as u8)?;
+        store_result(state, instruction, value)?;
+    }
 
-//     Ok(instruction.next_address())
-// }
+    Ok(instruction.next_address())
+}
 
 // pub fn get_prop_addr(
 //     context: &mut Context,
