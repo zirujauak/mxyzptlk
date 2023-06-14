@@ -16,6 +16,8 @@ use instruction::*;
 use memory::*;
 use screen::*;
 use std::fmt;
+use rng::RNG;
+use rng::chacha_rng::*;
 
 pub struct State {
     version: u8,
@@ -23,12 +25,15 @@ pub struct State {
     static_mark: usize,
     screen: Screen,
     frame_stack: FrameStack,
+    rng: Box<dyn RNG>,
 }
 
 impl State {
     pub fn new(memory: Memory, rows: u32, columns: u32) -> Result<State, RuntimeError> {
         let version = header::field_byte(&memory, HeaderField::Version)?;
         let static_mark = header::field_word(&memory, HeaderField::StaticMark)? as usize;
+        let rng = ChaChaRng::new();
+
         if version < 3 || version == 6 || version > 8 {
             Err(RuntimeError::new(
                 ErrorCode::UnsupportedVersion,
@@ -49,6 +54,7 @@ impl State {
                 static_mark: static_mark,
                 screen,
                 frame_stack,
+                rng: Box::new(rng),
             })
         }
     }
@@ -228,13 +234,16 @@ impl State {
 
     // RNG
     pub fn random(&mut self, range: u16) -> u16 {
-        let v = &self.rng.gen_range(1..=range);
-        trace!("Random 1..{}: {}", range, v);
-        *v
+        let v = self.rng.random(range);
+        v
     }
 
-    pub fn seed(&mut self, seed: u64) {
-        self.rng = ChaCha8Rng::seed_from_u64(seed as u64);
+    pub fn seed(&mut self, seed: u16) {
+        self.rng.seed(seed)
+    }
+
+    pub fn predictable(&mut self, seed: u16) {
+        self.rng.predictable(seed)
     }
 
     // Run

@@ -103,7 +103,7 @@ pub fn random(state: &mut State, instruction: &Instruction) -> Result<usize, Run
         } else if range.abs() < 1000 {
             state.predictable(range.abs() as u16)
         }
-        store_result(context, instruction, 0)?;
+        store_result(state, instruction, 0)?;
     } else {
         let value = state.random(range as u16);
         store_result(state, instruction, value)?;
