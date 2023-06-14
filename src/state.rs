@@ -5,6 +5,7 @@ mod instruction;
 pub mod memory;
 mod screen;
 mod object;
+mod rng;
 
 use crate::error::*;
 use frame_stack::*;
@@ -235,7 +236,7 @@ impl State {
     pub fn seed(&mut self, seed: u64) {
         self.rng = ChaCha8Rng::seed_from_u64(seed as u64);
     }
-    
+
     // Run
     pub fn run(&mut self) -> Result<(), RuntimeError> {
         loop {
