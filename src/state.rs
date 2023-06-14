@@ -225,6 +225,17 @@ impl State {
         Ok(())
     }
 
+    // RNG
+    pub fn random(&mut self, range: u16) -> u16 {
+        let v = &self.rng.gen_range(1..=range);
+        trace!("Random 1..{}: {}", range, v);
+        *v
+    }
+
+    pub fn seed(&mut self, seed: u64) {
+        self.rng = ChaCha8Rng::seed_from_u64(seed as u64);
+    }
+    
     // Run
     pub fn run(&mut self) -> Result<(), RuntimeError> {
         loop {
