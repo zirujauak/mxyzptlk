@@ -1,6 +1,7 @@
 use super::*;
 use crate::error::*;
 use crate::state::State;
+use crate::state::text;
 
 pub fn rtrue(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     state.return_routine(1)
@@ -25,9 +26,8 @@ fn literal_text(state: &State, address: usize) -> Result<Vec<u16>, RuntimeError>
 
 pub fn print(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let ztext = literal_text(state, instruction.address() + 1)?;
-    // let text = text::from_vec(state, &ztext)?;
-
-    println!("ZTEXT literal");
+    let text = text::from_vec(state, &ztext)?;
+    state.print(&text)?;
     Ok(instruction.next_address() + (ztext.len() * 2))
 }
 
@@ -74,7 +74,7 @@ pub fn print(state: &mut State, instruction: &Instruction) -> Result<usize, Runt
 // }
 
 pub fn new_line(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    println!("NEW LINE");
+    state.new_line()?;
     // context.new_line();
     Ok(instruction.next_address())
 }

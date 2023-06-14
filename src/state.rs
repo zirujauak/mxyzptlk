@@ -6,6 +6,7 @@ pub mod memory;
 mod screen;
 mod object;
 mod rng;
+mod text;
 
 use crate::error::*;
 use frame_stack::*;
@@ -244,6 +245,37 @@ impl State {
 
     pub fn predictable(&mut self, seed: u16) {
         self.rng.predictable(seed)
+    }
+
+    // Screen
+    pub fn print(&mut self, text: &Vec<u16>) -> Result<(),RuntimeError> {
+        self.screen.print(text);
+
+        Ok(())
+    }
+
+    pub fn print_char(&mut self, char: u16) -> Result<(),RuntimeError> {
+        self.screen.print_char(char);
+        Ok(())
+    }
+
+    pub fn print_num(&mut self, n: i16) -> Result<(),RuntimeError> {
+        let s = format!("{}", n);
+        let mut text = Vec::new();
+        for c in s.chars() {
+            text.push(c as u16);
+        }
+
+        self.screen.print(&text);
+        Ok(())
+    }
+
+    pub fn new_line(&mut self) -> Result<(),RuntimeError> {
+        self.screen.new_line();
+        Ok(())
+    }
+    pub fn flush_screen(&mut self) -> Result<(),RuntimeError> {
+        self.screen.flush_buffer()
     }
 
     // Run

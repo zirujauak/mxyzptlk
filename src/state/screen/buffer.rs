@@ -61,11 +61,12 @@ impl Buffer {
     }
 
     pub fn clear(&mut self, colors: (Color, Color), at: (u32,u32)) {
-        self.buffer[at.0 as usize][at.1 as usize] = BufferCell::new(' ' as u16, colors, CellStyle::new());
+        self.buffer[at.0 as usize - 1][at.1 as usize - 1] = BufferCell::new(' ' as u16, colors, CellStyle::new());
     }
 
     pub fn print(&mut self, zchar: u16, colors: (Color, Color), style: &CellStyle, at: (u32, u32)) {
-        self.buffer[at.0 as usize][at.1 as usize] = BufferCell::new(zchar, colors, style.clone());
+        println!("Print {:02x} at {},{}", zchar, at.0, at.1);
+        self.buffer[at.0 as usize - 1][at.1 as usize - 1] = BufferCell::new(zchar, colors, style.clone());
     }
 
     pub fn scroll(&mut self, top: u32, colors: (Color, Color)) {
@@ -76,5 +77,14 @@ impl Buffer {
             r.push(BufferCell::new(' ' as u16, colors, CellStyle::new()))
         }
         self.buffer.push(r);
+    }
+
+    pub fn flush(&mut self) {
+        for i in 0..self.buffer.len() {
+            for j in 0..self.buffer[i].len() {
+                print!("{}", (self.buffer[i][j].zchar as u8) as char);
+            }
+            println!("");
+        }
     }
 }

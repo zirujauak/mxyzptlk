@@ -1,8 +1,8 @@
 mod buffer;
 
+use crate::error::*;
 use buffer::Buffer;
 use buffer::CellStyle;
-use crate::error::*;
 
 #[derive(Clone, Copy)]
 pub enum Color {
@@ -41,6 +41,7 @@ pub struct Screen {
     // row, column with 1,1 as origin
     cursor_0: (u32, u32),
     cursor_1: Option<(u32, u32)>,
+    buffered: bool,
 }
 
 impl Screen {
@@ -62,6 +63,7 @@ impl Screen {
             current_style: CellStyle::new(),
             cursor_0: (rows, 1),
             cursor_1: None,
+            buffered: true,
         }
     }
 
@@ -83,6 +85,7 @@ impl Screen {
             current_style: CellStyle::new(),
             cursor_0: (rows, 1),
             cursor_1: None,
+            buffered: true,
         }
     }
 
@@ -104,6 +107,7 @@ impl Screen {
             current_style: CellStyle::new(),
             cursor_0: (1, 1),
             cursor_1: None,
+            buffered: true,
         }
     }
 
@@ -111,7 +115,7 @@ impl Screen {
         self.rows
     }
 
-    pub fn columns (&self) -> u32 {
+    pub fn columns(&self) -> u32 {
         self.columns
     }
 
@@ -136,7 +140,10 @@ impl Screen {
     }
 
     pub fn split_window(&mut self, lines: u32) {
-        let top = match self.status_line { true => 2, false => 1};
+        let top = match self.status_line {
+            true => 2,
+            false => 1,
+        };
         if lines == 0 {
             self.window_0_top = top;
             self.window_1_top = None;
@@ -146,7 +153,7 @@ impl Screen {
             let bottom = top + lines - 1;
             self.window_1_top = Some(top);
             self.window_1_bottom = Some(bottom);
-            self.cursor_1 = Some((1,1));
+            self.cursor_1 = Some((1, 1));
             self.window_0_top = bottom + 1;
             if self.cursor_0.0 < self.window_0_top {
                 self.cursor_0 = (self.window_0_top, self.cursor_0.1)
@@ -160,7 +167,7 @@ impl Screen {
             }
         }
     }
-    
+
     pub fn select_window(&mut self, window: u8) {
         if window == 0 {
             self.selected_window = 0;
@@ -177,14 +184,18 @@ impl Screen {
                         self.buffer.clear(self.current_colors, (i, j));
                     }
                 }
-                self.cursor_0 = if self.version == 4 { (self.rows, 1) } else { (self.window_0_top, 1) };
+                self.cursor_0 = if self.version == 4 {
+                    (self.rows, 1)
+                } else {
+                    (self.window_0_top, 1)
+                };
             }
             1 => {
                 if let Some(start) = self.window_1_top {
                     if let Some(end) = self.window_1_bottom {
                         for i in start..end {
                             for j in 1..self.columns {
-                              self.buffer.clear(self.current_colors, (i, j));
+                                self.buffer.clear(self.current_colors, (i, j));
                             }
                         }
                         self.cursor_1 = Some((start, 1))
@@ -201,7 +212,11 @@ impl Screen {
                         self.buffer.clear(self.current_colors, (i, j));
                     }
                 }
-                self.cursor_0 = if self.version == 4 { (self.rows, 1) } else { (self.window_0_top, 1) };
+                self.cursor_0 = if self.version == 4 {
+                    (self.rows, 1)
+                } else {
+                    (self.window_0_top, 1)
+                };
                 self.selected_window = 0;
             }
             -2 => {
@@ -212,15 +227,23 @@ impl Screen {
                     if let Some(_) = self.cursor_1 {
                         self.cursor_1 = Some((1, 1))
                     }
-                    self.cursor_0 = if self.version == 4 { (self.rows, 1) } else { (self.window_0_top, 1) };
+                    self.cursor_0 = if self.version == 4 {
+                        (self.rows, 1)
+                    } else {
+                        (self.window_0_top, 1)
+                    };
                 }
             }
-            _ => () // This is an error
+            _ => (), // This is an error
         }
     }
 
     pub fn erase_line(&mut self) {
-        let (row,col) = if self.selected_window == 0 { self.cursor_0 } else { self.cursor_1.unwrap() };
+        let (row, col) = if self.selected_window == 0 {
+            self.cursor_0
+        } else {
+            self.cursor_1.unwrap()
+        };
         for i in col..self.columns {
             self.buffer.clear(self.current_colors, (row, i));
         }
@@ -257,12 +280,66 @@ impl Screen {
         }
     }
 
-    pub fn print_char(&mut self, zchar: u16) {
-        if self.selected_window == 0 {
-            self.buffer.print(zchar, self.current_colors, &self.current_style, self.cursor_0);
-        } else {
-            self.buffer.print(zchar, self.current_colors, &self.current_style, self.cursor_1.unwrap());
+    pub fn print_word(&mut self, word: &Vec<u16>) {
+        for c in word {
+            self.print_char(*c);
         }
-        self.advance_cursor();
+    }
+
+    pub fn print(&mut self, text: &Vec<u16>) {
+        if self.selected_window == 1 || !self.buffered {
+            self.print_word(text);
+        } else {
+            let words = text.split_inclusive(|c| *c == 0x20);
+            for word in words {
+                if self.columns - self.cursor_0.1 < word.len() as u32 {
+                    self.new_line();
+                }
+                self.print_word(&word.to_vec());
+            }
+        }
+    }
+
+    pub fn print_char(&mut self, zchar: u16) {
+        if zchar == 0xd {
+            self.new_line();
+        } else {
+            if self.selected_window == 0 {
+                self.buffer.print(
+                    zchar,
+                    self.current_colors,
+                    &self.current_style,
+                    self.cursor_0,
+                );
+            } else {
+                self.buffer.print(
+                    zchar,
+                    self.current_colors,
+                    &self.current_style,
+                    self.cursor_1.unwrap(),
+                );
+            }
+            self.advance_cursor();
+        }
+    }
+
+    pub fn new_line(&mut self) {
+        if self.selected_window == 0 {
+            if self.cursor_0.0 == self.rows {
+                self.buffer.scroll(self.window_0_top, self.current_colors);
+                self.cursor_0 = (self.rows, 1)
+            } else {
+                self.cursor_0 = (self.cursor_0.0 + 1, 1);
+            }
+        } else {
+            if self.cursor_1.unwrap().0 < self.window_1_bottom.unwrap() {
+                self.cursor_1 = Some((self.cursor_1.unwrap().0 + 1, 1));
+            }
+        }
+    }
+
+    pub fn flush_buffer(&mut self) -> Result<(), RuntimeError> {
+        self.buffer.flush();
+        Ok(())
     }
 }

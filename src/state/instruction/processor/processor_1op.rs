@@ -6,6 +6,7 @@ use crate::state::object::*;
 use crate::state::object::property;
 use crate::state::object::property::*;
 use crate::state::State;
+use crate::state::text;
 
 // pub fn jz(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
@@ -117,9 +118,8 @@ pub fn dec(state: &mut State, instruction: &Instruction) -> Result<usize, Runtim
 pub fn print_obj(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
     let ztext = property::short_name(state, operands[0] as usize)?;
-    println!("SHORT NAME: {:?}", ztext);
-    // let text = text::from_vec(context, &ztext)?;
-
+    let text = text::from_vec(state, &ztext)?;
+    state.print(&text)?;
     // context.print_string(text);
     Ok(instruction.next_address())
 }
@@ -138,9 +138,8 @@ pub fn jump(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
 pub fn print_paddr(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
     let address = packed_string_address(state.memory(), operands[0])?;
-    println!("ZTEXT @ ${:05x}", address);
-    // let text = text::as_text(context, address)?;
-
+    let text = text::as_text(state, address)?;
+    state.print(&text)?;
     // context.print_string(text);
     Ok(instruction.next_address())
 }

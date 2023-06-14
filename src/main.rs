@@ -24,7 +24,7 @@ fn main() {
             match f.read_to_end(&mut buffer) {
                 Ok(_) => {
                     let memory = Memory::new(&buffer);
-                    let mut state = State::new(memory, 80, 24).expect("Error creating state");
+                    let mut state = State::new(memory, 24, 80).expect("Error creating state");
                     if let Err(r) = state.run() {
                         panic!("{}", r)
                     }
