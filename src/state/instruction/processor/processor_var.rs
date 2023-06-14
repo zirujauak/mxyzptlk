@@ -16,12 +16,12 @@ pub fn call_vs(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
     )
 }
 
-// pub fn storew(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let address = operands[0] as isize + (operands[1] as i16 * 2) as isize;
-//     context.write_word(address as usize, operands[2])?;
-//     Ok(instruction.next_address())
-// }
+pub fn storew(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let address = operands[0] as isize + (operands[1] as i16 * 2) as isize;
+    state.write_word(address as usize, operands[2])?;
+    Ok(instruction.next_address())
+}
 
 pub fn storeb(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
