@@ -44,40 +44,75 @@ pub fn put_prop(state: &mut State, instruction: &Instruction) -> Result<usize, R
     Ok(instruction.next_address())
 }
 
-// pub fn read(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+fn terminators(state: &State) -> Result<Vec<u16>, RuntimeError> {
+    let mut terminators = vec!['\r' as u16];
 
-//     let text_buffer = operands[0] as usize;
-//     let parse = if operands.len() > 1 {
-//         operands[1] as usize
-//     } else {
-//         0
-//     };
+    if header::field_byte(state.memory(), HeaderField::Version)? > 4 {
+        let mut table_addr = header::field_word(state.memory(), HeaderField::TerminatorTable)? as usize;
+        loop {
+            let b = state.read_byte(table_addr)?;
+            if b == 0 {
+                break;
+            } else if (b >= 129 && b <= 154) || (b >= 252 && b <= 255) {
+                terminators.push(b as u16);
+            }
+            table_addr = table_addr + 1;
+        }
+    }
 
-//     let len = if context.version() < 5 {
-//         context.read_byte(text_buffer)? - 1
-//     } else {
-//         context.read_byte(text_buffer)?
-//     };
+    Ok(terminators)
+}
 
-//     let timeout = if operands.len() > 2 { operands[2] } else { 0 };
-//     let routine = if operands.len() > 2 { operands[3] } else { 0 };
+pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     if context.version() < 4 {
-//         // TODO: Show status line
-//     }
+    let text_buffer = operands[0] as usize;
+    let parse = if operands.len() > 1 {
+        operands[1] as usize
+    } else {
+        0
+    };
 
-//     // Read input
-//     let mut input = context.read_line(timeout)?;
-//     // TODO: unwrap()
-//     let terminator = match input.pop() {
-//         Some(code) => code,
-//         None => InputCode::new(0 as char, 0 as char, None, None)
-//     };
+    let version = header::field_byte(state.memory(), HeaderField::Version)?;
 
-//     Ok(())
+    let len = if version < 5 {
+        state.read_byte(text_buffer)? - 1
+    } else {
+        state.read_byte(text_buffer)?
+    } as usize;
 
-// }
+    let timeout = if operands.len() > 2 { operands[2] } else { 0 };
+    let routine = if operands.len() > 2 { operands[3] } else { 0 };
+
+    if version < 4 {
+        state.status_line();
+    }
+
+    let terminators = terminators(state)?;
+    let mut input_buffer = Vec::new();
+    loop {
+        match state.read_key(timeout)? {
+            Some(key) => if terminators.contains(&key) {
+                break;
+            } else {
+                if input_buffer.len() < len {
+                    if key == 0x8 && input_buffer.len() > 0 {
+                        input_buffer.pop();
+                        state.backspace();
+                    } else {
+                        input_buffer.push(key);
+                        state.print(&vec![key]);
+                    }
+                }
+            },
+            None => break
+        }
+    }
+
+    
+    Ok(0)
+
+}
 
 pub fn print_char(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;

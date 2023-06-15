@@ -28,6 +28,7 @@ fn main() {
     info!(target: "app::memory", "Start memory log for '{}'", name);
     info!(target: "app::stack", "Start stack log for '{}'", name);
     info!(target: "app::variable", "Start variable log for '{}'", name);
+    log_mdc::insert("instruction_count", "0");
 
     match File::open(filename) {
         Ok(mut f) => {
@@ -40,7 +41,7 @@ fn main() {
                     if let Err(r) = state.run() {
                         let error:Vec<_> = format!("\r{}\rPress any key to exit", r).as_bytes().iter().map(|x| *x as u16).collect();
                         state.print(&error);
-                        state.read_key();
+                        state.read_key(0);
                         panic!("{}", r)
                     }
                     // let name: Vec<&str> = filename.split(".").collect();

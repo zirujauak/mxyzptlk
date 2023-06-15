@@ -9,6 +9,7 @@ pub enum ErrorCode {
     ObjectTreeState,
     PropertySize,
     StackUnderflow,
+    System,
     UnimplementedInstruction,
     UnsupportedVersion,
 }

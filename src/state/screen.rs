@@ -380,8 +380,13 @@ impl Screen {
         Ok(())
     }
 
-    pub fn read_key(&mut self) {
-        self.terminal.read_key();
+    pub fn read_key(&mut self, timeout: u128) -> Option<u16> {
+        self.terminal.read_key(timeout)
+    }
+
+    pub fn backspace(&mut self) -> Result<(), RuntimeError> {
+        self.terminal.backspace((self.cursor_0.0, self.cursor_0.1));
+        Ok(())
     }
 }
 
@@ -389,6 +394,7 @@ pub trait Terminal {
     fn size(&self) -> (u32, u32);
     fn print_at(&mut self, c: char, row: u32, cursor: u32, colors: (Color, Color), style: &CellStyle);
     fn flush(&mut self);
-    fn read_key(&mut self);
+    fn read_key(&mut self, timeout: u128) -> Option<u16>;
     fn scroll(&mut self, row: u32);
+    fn backspace(&mut self, at: (u32, u32));
 }

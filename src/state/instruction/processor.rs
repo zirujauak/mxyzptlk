@@ -23,14 +23,22 @@ fn operand_value(state: &mut State, operand: &Operand) -> Result<u16, RuntimeErr
 
 fn operand_values(state: &mut State, instruction: &Instruction) -> Result<Vec<u16>, RuntimeError> {
     let mut v = Vec::new();
+    let mut s = "Operands: ".to_string();
     for o in instruction.operands() {
         let value = operand_value(state, &o);
         match value {
-            Ok(val) => v.push(val),
+            Ok(val) => {
+                match o.operand_type() {
+                    OperandType::SmallConstant => s.push_str(&format!(" {:#02x}", val)),
+                    _ => s.push_str(&format!(" {:#04x}", val)),
+                };
+                v.push(val)
+            },
             Err(e) => return Err(e),
         }
     }
 
+    info!(target: "app::instruction", "{}", s);
     Ok(v)
 }
 

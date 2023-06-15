@@ -11,17 +11,17 @@ mod text;
 use crate::error::*;
 use frame_stack::*;
 use header::*;
-use instruction::decoder::*;
-use instruction::processor::*;
 use instruction::*;
 use memory::*;
+use object::property;
 use rng::chacha_rng::*;
 use rng::RNG;
-use screen::*;
-use std::fmt;
-use object::property;
-use object::property::*;
 use screen::buffer::CellStyle;
+use screen::*;
+use std::thread;
+use std::time;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 pub struct State {
     version: u8,
@@ -267,12 +267,20 @@ impl State {
         let mut right: Vec<u16> = if status_type == 0 {
             let score = self.variable(17)? as i16;
             let turns = self.variable(18)?;
-            format!("{:<8}", format!("{}/{}", score, turns)).as_bytes().iter().map(|x| *x as u16).collect()
+            format!("{:<8}", format!("{}/{}", score, turns))
+                .as_bytes()
+                .iter()
+                .map(|x| *x as u16)
+                .collect()
         } else {
             let hour = self.variable(17)?;
             let minute = self.variable(18)?;
             let suffix = if hour > 11 { "PM" } else { "AM" };
-            format!("{} ", format!("{}:{} {}", hour % 12, minute, suffix)).as_bytes().iter().map(|x| *x as u16).collect()
+            format!("{} ", format!("{}:{} {}", hour % 12, minute, suffix))
+                .as_bytes()
+                .iter()
+                .map(|x| *x as u16)
+                .collect()
         };
 
         let width = self.screen.columns() as usize;
@@ -289,8 +297,8 @@ impl State {
     }
 
     // Input
-    pub fn read_key(&mut self) {
-        self.screen.read_key();
+    pub fn read_key(&mut self, timeout: u16) -> Result<Option<u16>, RuntimeError> {
+        Ok(self.screen.read_key(timeout as u128 * 1000))
     }
 
     // pub fn print_char(&mut self, char: u16) -> Result<(),RuntimeError> {
@@ -313,17 +321,25 @@ impl State {
         self.screen.new_line();
         Ok(())
     }
+
     pub fn flush_screen(&mut self) -> Result<(), RuntimeError> {
         self.screen.flush_buffer()
+    }
+    
+    pub fn backspace(&mut self) -> Result<(), RuntimeError> {
+        self.screen.backspace()
     }
 
     // Run
     pub fn run(&mut self) -> Result<(), RuntimeError> {
+        let mut n = 1;
         loop {
+            log_mdc::insert("instruction_count", format!("{:8x}", n));
             let pc = self.frame_stack.pc()?;
             let instruction = decoder::decode_instruction(&self.memory, pc)?;
             let pc = processor::dispatch(self, &instruction)?;
-            self.set_pc(pc)?
+            self.set_pc(pc)?;
+            n = n + 1;
         }
     }
 }
