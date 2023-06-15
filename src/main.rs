@@ -5,17 +5,17 @@ extern crate log;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
-use std::panic;
 
-pub mod state;
 pub mod error;
+pub mod state;
 
-use state::State;
 use state::header;
 use state::header::*;
 use state::memory::*;
+use state::State;
 
 fn main() {
+    log::init();
     let args: Vec<String> = env::args().collect();
 
     let filename = &args[1];
@@ -26,12 +26,9 @@ fn main() {
                 Ok(_) => {
                     let memory = Memory::new(&buffer);
                     let mut state = State::new(memory, 24, 80).expect("Error creating state");
-                    panic::set_hook(Box::new(move |info| {
-                        state::read_key();
-                        println!();
-                        prev(info);
-                    }));
-                                    if let Err(r) = state.run() {
+
+                    if let Err(r) = state.run() {
+                        state.read_key();
                         panic!("{}", r)
                     }
                     // let name: Vec<&str> = filename.split(".").collect();

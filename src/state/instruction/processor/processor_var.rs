@@ -44,13 +44,6 @@ pub fn put_prop(state: &mut State, instruction: &Instruction) -> Result<usize, R
     Ok(instruction.next_address())
 }
 
-pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    if header::field_byte(state.memory(), HeaderField::Version)? == 3 {
-        state.status_line();
-    }
-    state.read_key();
-    Err(RuntimeError::new(ErrorCode::UnimplementedInstruction, format!("Unimplemented instruction: {}", instruction.opcode())))
-}
 // pub fn read(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
 

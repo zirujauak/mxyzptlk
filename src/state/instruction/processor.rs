@@ -247,7 +247,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x01 => processor_var::storew(state, instruction),
                 0x02 => processor_var::storeb(state, instruction),
                 0x03 => processor_var::put_prop(state, instruction),
-                0x04 => processor_var::read(state, instruction),
+                //0x04 => processor_var::read(state, instruction),
                 0x05 => processor_var::print_char(state, instruction),
                 0x06 => processor_var::print_num(state, instruction),
                 0x07 => processor_var::random(state, instruction),
