@@ -121,7 +121,7 @@ fn packed_string_address(memory: &Memory, address: u16) -> Result<usize, Runtime
 }
 
 pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-   // println!("{}", instruction);
+    trace!("{}", instruction);
     match instruction.opcode().form() {
         OpcodeForm::Ext => Err(RuntimeError::new(
             ErrorCode::UnimplementedInstruction,
