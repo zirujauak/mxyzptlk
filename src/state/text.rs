@@ -178,6 +178,12 @@ fn search_entry(
     let mut max = entry_count - 1;
     let mut pivot = max / 2;
 
+    trace!(target: "app::trace", "count: {}, size {}", entry_count, entry_size);
+
+    for w in word {
+        trace!(target: "app::trace", "Word: {:04x}", w);
+    }
+
     // Binary search:
     // Set min to first entry, max to last entry
     // Set pivot to halfway point in dictionary
@@ -185,9 +191,11 @@ fn search_entry(
     // If entry is too low, set min to pivot, reset pivot to halfway between min and max, and repeat
     // If min exceeds max, the entry was not found
     'outer: loop {
+        trace!("Min/Pivot/Min: {}/{}/{}", min, pivot, max);
         let addr = address + (pivot * entry_size);
         for i in 0..word.len() {
             let w = state.read_word(addr + (i * 2))?;
+            trace!(target: "app::trace", "Entry word {}: {:04x}", i, w);
             if w > word[i] {
                 if pivot == min {
                     break 'outer;
@@ -255,29 +263,35 @@ pub fn from_dictionary(
     dictionary_address: usize,
     word: &Vec<char>,
 ) -> Result<usize, RuntimeError> {
-    let dictionary_address = header::field_word(state.memory(), HeaderField::Dictionary)? as usize;
+    //let dictionary_address = header::field_word(state.memory(), HeaderField::Dictionary)? as usize;
     let separator_count = state.read_byte(dictionary_address)? as usize;
-    let entry_size = state.read_byte(dictionary_address + 1)? as usize;
-    let entry_count = state.read_word(dictionary_address + 2 + separator_count)? as usize;
+    let entry_size = state.read_byte(dictionary_address + separator_count + 1)? as usize;
+    let entry_count = state.read_word(dictionary_address + separator_count + 2)? as usize;
     let word_count = if state.memory().read_byte(0)? < 4 {
         2
     } else {
         3
     };
 
+    trace!(target: "app::trace", "word: {:?}", word);
     let mut zchars = Vec::new();
     for i in 0..word_count * 3 {
-        let index = i * 3;
-        if let Some(c) = word.get(index) {
+        if let Some(c) = word.get(i) {
             zchars.append(&mut find_char(c))
         } else {
             zchars.push(5);
         }
     }
+
+    trace!(target: "app::trace", "zchars: {:?}", zchars);
     let mut words = Vec::new();
     for i in 0..word_count {
         let index = i * 3;
-        words.push(as_word(zchars[i], zchars[i + 1], zchars[i + 2]));
+        let mut w = as_word(zchars[index], zchars[index + 1], zchars[index + 2]);
+        if i == word_count - 1 {
+            w = w | 0x8000;
+        }
+        words.push(w);
     }
 
     if entry_count > 0 {
@@ -295,7 +309,7 @@ pub fn from_dictionary(
             i16::abs(entry_count as i16) as usize,
             entry_size,
             &words,
-        );
+        )?;
         'outer: for i in 0..i16::abs(entry_count as i16) as usize {
             let entry_address =
                 dictionary_address + separator_count as usize + 4 + (i * entry_size as usize);

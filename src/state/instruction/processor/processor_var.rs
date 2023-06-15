@@ -177,15 +177,13 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
                     state.write_byte(parse + 4 + (4 * word_count), word.len() as u8)?;
                     state.write_byte(parse + 5 + (4 * word_count), word_start as u8 + 2)?;
                     word_count = word_count + 1;
-                    trace!(target: "app::trace", "{:?} => ${:05x}", word, entry);
                 }
 
-                let entry = text::from_dictionary(state, dictionary, &word)?;
+                let entry = text::from_dictionary(state, dictionary, &vec![c])?;
                 state.write_word(parse + 2 + (4 * word_count), entry as u16)?;
                 state.write_byte(parse + 4 + (4 * word_count), 1)?;
                 state.write_byte(parse + 5 + (4 * word_count), i as u8 + 2)?;
                 word_count = word_count + 1;
-                trace!("{} => ${:05x}", data[i], entry);
 
                 word.clear();
                 word_start = i + 1;
@@ -196,7 +194,6 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
                     state.write_byte(parse + 4 + (4 * word_count), word.len() as u8)?;
                     state.write_byte(parse + 5 + (4 * word_count), word_start as u8 + 2)?;
                     word_count = word_count + 1;
-                    trace!("{:?} => ${:05x}", word, entry)
                 }
                 word.clear();
                 word_start = i + 1;
@@ -211,11 +208,9 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
             state.write_byte(parse + 4 + (4 * word_count), word.len() as u8)?;
             state.write_byte(parse + 5 + (4 * word_count), word_start as u8 + 2)?;
             word_count = word_count + 1;
-            trace!("{:?} => ${:05x}", word, entry)
         }
 
         state.write_byte(parse + 1, word_count as u8)?;
-        trace!("Parsed {} words", word_count);
     }
 
     if version > 4 {
