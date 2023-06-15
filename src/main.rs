@@ -19,7 +19,8 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     let filename = &args[1];
-    let name: Vec<&str> = filename.split(".").collect();
+    let name:Vec<&str> = filename.split(".").collect();
+    let name = name[0].to_string();
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
     trace!("Start trace log for '{}'", name);
     info!(target: "app::frame", "Start frame log for '{}'", name);
@@ -28,7 +29,6 @@ fn main() {
     info!(target: "app::stack", "Start stack log for '{}'", name);
     info!(target: "app::variable", "Start variable log for '{}'", name);
 
-    log::init(&name);
     match File::open(filename) {
         Ok(mut f) => {
             let mut buffer = Vec::new();
