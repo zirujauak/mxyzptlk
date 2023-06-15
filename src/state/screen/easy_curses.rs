@@ -4,6 +4,8 @@ use easycurses::ColorPair;
 
 use super::Terminal;
 use super::super::screen;
+use super::buffer::CellStyle;
+use super::Style;
 
 pub struct ECTerminal {
     easycurses: EasyCurses,
@@ -39,11 +41,18 @@ impl Terminal for ECTerminal {
         (rows as u32, columns as u32)
     }
 
-    fn print_at(&mut self, c: char, row: u32, column: u32, colors: (screen::Color, screen::Color)) {
+    fn print_at(&mut self, c: char, row: u32, column: u32, colors: (screen::Color, screen::Color), style: &CellStyle) {
         self.easycurses.move_rc(row as i32 - 1, column as i32 - 1);
         let fg = self.as_color(colors.0);
         let bg = self.as_color(colors.1);
-        self.easycurses.set_color_pair(colorpair!(fg on bg));
+        self.easycurses.set_bold(style.is_style(Style::Bold));
+        self.easycurses.set_underline(style.is_style(Style::Bold));
+        let colors = if style.is_style(Style::Reverse) {
+            colorpair!(bg on fg)
+        } else {
+            colorpair!(fg on bg)
+        };
+        self.easycurses.set_color_pair(colors);
         self.easycurses.print_char(c);
     }
 

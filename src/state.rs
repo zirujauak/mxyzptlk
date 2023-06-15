@@ -3,9 +3,9 @@ pub mod header;
 mod input;
 mod instruction;
 pub mod memory;
-mod screen;
 mod object;
 mod rng;
+mod screen;
 mod text;
 
 use crate::error::*;
@@ -15,10 +15,13 @@ use instruction::decoder::*;
 use instruction::processor::*;
 use instruction::*;
 use memory::*;
+use rng::chacha_rng::*;
+use rng::RNG;
 use screen::*;
 use std::fmt;
-use rng::RNG;
-use rng::chacha_rng::*;
+use object::property;
+use object::property::*;
+use screen::buffer::CellStyle;
 
 pub struct State {
     version: u8,
@@ -185,7 +188,8 @@ impl State {
         if variable == 0 {
             self.frame_stack.current_frame()?.peek()
         } else {
-            self.frame_stack.variable(&mut self.memory, variable as usize)
+            self.frame_stack
+                .variable(&mut self.memory, variable as usize)
         }
     }
 
@@ -197,8 +201,9 @@ impl State {
     pub fn set_variable_indirect(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
         if variable == 0 {
             self.frame_stack.current_frame_mut()?.pop();
-        } 
-        self.frame_stack.set_variable(&mut self.memory, variable as usize, value)
+        }
+        self.frame_stack
+            .set_variable(&mut self.memory, variable as usize, value)
     }
 
     // Routines
@@ -223,7 +228,7 @@ impl State {
         let result = self.frame_stack.return_routine(&mut self.memory, value)?;
         match result {
             Some(r) => self.set_variable(r.variable(), value)?,
-            None => ()
+            None => (),
         }
         self.frame_stack.pc()
     }
@@ -248,9 +253,38 @@ impl State {
     }
 
     // Screen
-    pub fn print(&mut self, text: &Vec<u16>) -> Result<(),RuntimeError> {
+    pub fn print(&mut self, text: &Vec<u16>) -> Result<(), RuntimeError> {
         self.screen.print(text);
 
+        Ok(())
+    }
+
+    pub fn status_line(&mut self) -> Result<(), RuntimeError> {
+        let status_type = header::flag1(self.memory(), Flags1v3::StatusLineType as u8)?;
+        let object = self.variable(16)? as usize;
+        let mut left = text::from_vec(self, &property::short_name(self, object)?)?;
+
+        let mut right: Vec<u16> = if status_type == 0 {
+            let score = self.variable(17)? as i16;
+            let turns = self.variable(18)?;
+            format!("{:<8}", format!("{}/{}", score, turns)).as_bytes().iter().map(|x| *x as u16).collect()
+        } else {
+            let hour = self.variable(17)?;
+            let minute = self.variable(18)?;
+            let suffix = if hour > 11 { "PM" } else { "AM" };
+            format!("{} ", format!("{}:{} {}", hour % 12, minute, suffix)).as_bytes().iter().map(|x| *x as u16).collect()
+        };
+
+        let width = self.screen.columns() as usize;
+        let mut spaces = vec![0x20 as u16; width - left.len() - right.len()];
+        let mut status_line = Vec::new();
+        status_line.append(&mut left);
+        status_line.append(&mut spaces);
+        status_line.append(&mut right);
+        let mut style = CellStyle::new();
+        style.set(Style::Reverse as u8);
+
+        self.screen.print_at(&status_line, (1, 1), &style);
         Ok(())
     }
 
@@ -264,7 +298,7 @@ impl State {
     //     Ok(())
     // }
 
-    pub fn print_num(&mut self, n: i16) -> Result<(),RuntimeError> {
+    pub fn print_num(&mut self, n: i16) -> Result<(), RuntimeError> {
         let s = format!("{}", n);
         let mut text = Vec::new();
         for c in s.chars() {
@@ -275,11 +309,11 @@ impl State {
         Ok(())
     }
 
-    pub fn new_line(&mut self) -> Result<(),RuntimeError> {
+    pub fn new_line(&mut self) -> Result<(), RuntimeError> {
         self.screen.new_line();
         Ok(())
     }
-    pub fn flush_screen(&mut self) -> Result<(),RuntimeError> {
+    pub fn flush_screen(&mut self) -> Result<(), RuntimeError> {
         self.screen.flush_buffer()
     }
 

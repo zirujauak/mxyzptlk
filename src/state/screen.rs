@@ -1,4 +1,4 @@
-mod buffer;
+pub mod buffer;
 mod easy_curses;
 
 use crate::error::*;
@@ -273,7 +273,8 @@ impl Screen {
                 // At the end of the row
                 if self.cursor_0.0 == self.rows {
                     // At bottom of screen, scroll window 0 up 1 row and set the cursor to the bottom left
-                    self.buffer.scroll(&mut self.terminal, self.window_0_top, self.current_colors);
+                    self.buffer
+                        .scroll(&mut self.terminal, self.window_0_top, self.current_colors);
                     self.cursor_0 = (self.rows, 1);
                 } else {
                     // Not at the bottom, so just move the cursor to the start of the next line
@@ -345,10 +346,24 @@ impl Screen {
         }
     }
 
+    pub fn print_at(&mut self, text: &Vec<u16>, at: (u32, u32), style: &CellStyle) {
+        for i in 0..text.len() {
+            self.buffer.print(
+                &mut self.terminal,
+                text[i],
+                self.current_colors,
+                style,
+                (at.0, at.1 + i as u32),
+            );
+        }
+        self.terminal.flush()
+    }
+
     pub fn new_line(&mut self) {
         if self.selected_window == 0 {
             if self.cursor_0.0 == self.rows {
-                self.buffer.scroll(&mut self.terminal, self.window_0_top, self.current_colors);
+                self.buffer
+                    .scroll(&mut self.terminal, self.window_0_top, self.current_colors);
                 self.cursor_0 = (self.rows, 1)
             } else {
                 self.cursor_0 = (self.cursor_0.0 + 1, 1);
@@ -372,7 +387,7 @@ impl Screen {
 
 pub trait Terminal {
     fn size(&self) -> (u32, u32);
-    fn print_at(&mut self, c: char, row: u32, cursor: u32, colors: (Color, Color));
+    fn print_at(&mut self, c: char, row: u32, cursor: u32, colors: (Color, Color), style: &CellStyle);
     fn flush(&mut self);
     fn read_key(&mut self);
     fn scroll(&mut self, row: u32);
