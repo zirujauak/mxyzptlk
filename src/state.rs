@@ -298,7 +298,9 @@ impl State {
 
     // Input
     pub fn read_key(&mut self, timeout: u16) -> Result<Option<u16>, RuntimeError> {
-        Ok(self.screen.read_key(timeout as u128 * 1000))
+        let key = self.screen.read_key(timeout as u128 * 1000);
+        info!(target: "app::input", "read_key -> {:?}", key);
+        Ok(key)
     }
 
     // pub fn print_char(&mut self, char: u16) -> Result<(),RuntimeError> {

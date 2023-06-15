@@ -61,11 +61,24 @@ pub fn to_lower_case(c: u16) -> u8 {
     if c > 0x40 && c < 0x5b {
         // Lowercase ASCII is 0x61 - 0x7A, so OR 0x20 to convert
         (c | 0x20) as u8
-    } else { 
+    } else {
         c as u8
     }
 }
 
+fn store_parsed_entry(
+    state: &mut State,
+    word: &Vec<char>,
+    word_start: usize,
+    entry_address: usize,
+    entry: u16,
+) -> Result<(), RuntimeError> {
+    info!(target: "app::input", "READ: dictionary for {:?} => stored to ${:04x}: {:#04x}/{}/{}", word, entry_address, entry, word.len(), word_start);
+    state.write_word(entry_address, entry as u16)?;
+    state.write_byte(entry_address + 2, word.len() as u8)?;
+    state.write_byte(entry_address + 3, word_start as u8)?;
+    Ok(())
+}
 pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
 
@@ -76,6 +89,7 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
         0
     };
 
+    info!(target: "app::input", "READ: text buffer ${:04x} / parse buffer ${:04x}", text_buffer, parse);
     let version = header::field_byte(state.memory(), HeaderField::Version)?;
 
     let len = if version < 5 {
@@ -87,12 +101,22 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
     let timeout = if operands.len() > 2 { operands[2] } else { 0 };
     let routine = if operands.len() > 2 { operands[3] } else { 0 };
 
+    let mut input_buffer = Vec::new();
+
     if version < 4 {
+        // V3 show status line before input
         state.status_line()?;
+    } else if version > 4 {
+        // text buffer may contain existing input
+        let existing_len = state.read_byte(text_buffer + 1)? as usize;
+        for i in 0..existing_len {
+            input_buffer.push(state.read_byte(text_buffer + 2 + i)? as u16);
+        }
     }
 
+    info!(target: "app::input", "READ initial input: {:?}", input_buffer);
+
     let terminators = terminators(state)?;
-    let mut input_buffer = Vec::new();
     loop {
         match state.read_key(timeout)? {
             Some(key) => {
@@ -101,7 +125,6 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
                     state.print(&vec![key])?;
                     break;
                 } else {
-                    trace!(target: "app::trace", "read_key => {}", key);
                     if input_buffer.len() < len {
                         if key == 0x08 && input_buffer.len() > 0 {
                             input_buffer.pop();
@@ -127,30 +150,35 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
         None
     };
 
-    let end = input_buffer.len() - match terminator {
-        Some(_) => 1,
-        None => 0
-    };
+    info!(target: "app::input", "READ: input {:?}", input_buffer);
+    info!(target: "app::input", "READ: terminator {:?}", terminator);
+
+    // TODO: If terminator is None, then input timed out, so do the needful
+    if let None = terminator {
+        todo!("Implement input timeout");
+    }
+
+    let end = input_buffer.len()
+        - match terminator {
+            Some(_) => 1,
+            None => 0,
+        };
 
     // Store input to the text buffer
     if version < 5 {
+        info!(target: "app::input", "READ: write input buffer to ${:04x}", text_buffer + 1);
         // Store the buffer contents
         for i in 0..end {
-            state.write_byte(
-                text_buffer + 1 + i,
-                to_lower_case(input_buffer[i])
-            )?;
+            state.write_byte(text_buffer + 1 + i, to_lower_case(input_buffer[i]))?;
         }
         // Terminated by a 0
         state.write_byte(text_buffer + 1 + end, 0)?;
     } else {
+        info!(target: "app::input", "READ: write input buffer to ${:04x}", text_buffer + 2);
         // Store the buffer length
         state.write_byte(text_buffer + 1, end as u8)?;
         for i in 0..end {
-            state.write_byte(
-                text_buffer + 2 + i,
-                to_lower_case(input_buffer[i]),
-            )?;
+            state.write_byte(text_buffer + 2 + i, to_lower_case(input_buffer[i]))?;
         }
     }
 
@@ -171,28 +199,53 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
             }
 
             if separators.contains(&c) {
+                // Store the word
                 if word.len() > 0 {
                     let entry = text::from_dictionary(state, dictionary, &word)?;
-                    state.write_word(parse + 2 + (4 * word_count), entry as u16)?;
-                    state.write_byte(parse + 4 + (4 * word_count), word.len() as u8)?;
-                    state.write_byte(parse + 5 + (4 * word_count), word_start as u8 + 2)?;
+                    let parse_address = parse + 2 + (4 * word_count);
+                    store_parsed_entry(state, &word, word_start + 1, parse_address, entry as u16)?;
+                    // info!(target: "app::input", "READ: dictionary for {:?} => ${:04x} store to ${:04x}", word, entry, parse_address);
+
+                    // state.write_word(parse_address, entry as u16)?;
+                    // state.write_byte(parse_address + 2, word.len() as u8)?;
+                    // state.write_byte(parse_address + 3, word_start as u8 + 2)?;
                     word_count = word_count + 1;
                 }
 
-                let entry = text::from_dictionary(state, dictionary, &vec![c])?;
-                state.write_word(parse + 2 + (4 * word_count), entry as u16)?;
-                state.write_byte(parse + 4 + (4 * word_count), 1)?;
-                state.write_byte(parse + 5 + (4 * word_count), i as u8 + 2)?;
-                word_count = word_count + 1;
+                // Store the separator
+                if word_count < max_words {
+                    let sep = vec![c];
+                    let entry = text::from_dictionary(state, dictionary, &sep)?;
+                    let parse_address = parse + 2 + (4 * word_count);
+                    store_parsed_entry(
+                        state,
+                        &sep,
+                        word_start + word.len() + 1,
+                        parse_address,
+                        entry as u16,
+                    )?;
 
+                    // let entry = text::from_dictionary(state, dictionary, &vec![c])?;
+                    // info!(target: "app::input", "READ: dictionary for {:?} => ${:04x}", vec![c], entry);
+                    // state.write_word(parse + 2 + (4 * word_count), entry as u16)?;
+                    // state.write_byte(parse + 4 + (4 * word_count), 1)?;
+                    // state.write_byte(parse + 5 + (4 * word_count), i as u8 + 2)?;
+                    word_count = word_count + 1;
+                }
                 word.clear();
                 word_start = i + 1;
             } else if c == ' ' {
+                // Store the word but not the space
                 if word.len() > 0 {
                     let entry = text::from_dictionary(state, dictionary, &word)?;
-                    state.write_word(parse + 2 + (4 * word_count), entry as u16)?;
-                    state.write_byte(parse + 4 + (4 * word_count), word.len() as u8)?;
-                    state.write_byte(parse + 5 + (4 * word_count), word_start as u8 + 2)?;
+                    let parse_address = parse + 2 + (4 * word_count);
+                    store_parsed_entry(state, &word, word_start + 1, parse_address, entry as u16)?;
+
+                    // let entry = text::from_dictionary(state, dictionary, &word)?;
+                    // info!(target: "app::input", "READ: dictionary for {:?} => ${:04x}", word, entry);
+                    // state.write_word(parse + 2 + (4 * word_count), entry as u16)?;
+                    // state.write_byte(parse + 4 + (4 * word_count), word.len() as u8)?;
+                    // state.write_byte(parse + 5 + (4 * word_count), word_start as u8 + 2)?;
                     word_count = word_count + 1;
                 }
                 word.clear();
@@ -202,14 +255,21 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
             }
         }
 
+        // End of input, parse anything collected
         if word.len() > 0 && word_count < max_words {
-            let entry = text::from_default_dictionary(state, &word)?;
-            state.write_word(parse + 2 + (4 * word_count), entry as u16)?;
-            state.write_byte(parse + 4 + (4 * word_count), word.len() as u8)?;
-            state.write_byte(parse + 5 + (4 * word_count), word_start as u8 + 2)?;
+            let entry = text::from_dictionary(state, dictionary, &word)?;
+            let parse_address = parse + 2 + (4 * word_count);
+            store_parsed_entry(state, &word, word_start + 1, parse_address, entry as u16)?;
+
+            // let entry = text::from_default_dictionary(state, &word)?;
+            // info!(target: "app::input", "READ: dictionary for {:?} => ${:04x}", word, entry);
+            // state.write_word(parse + 2 + (4 * word_count), entry as u16)?;
+            // state.write_byte(parse + 4 + (4 * word_count), word.len() as u8)?;
+            // state.write_byte(parse + 5 + (4 * word_count), word_start as u8 + 2)?;
             word_count = word_count + 1;
         }
 
+        info!(target: "app::input", "READ: parsed {} words", word_count);
         state.write_byte(parse + 1, word_count as u8)?;
     }
 
