@@ -1,8 +1,5 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use super::*;
-use crate::state::object::property;
-// use crate::state::object::property::*;
+use crate::state::{object::property, text};
 
 pub fn call_vs(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
@@ -35,12 +32,7 @@ pub fn storeb(state: &mut State, instruction: &Instruction) -> Result<usize, Run
 pub fn put_prop(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
 
-    property::set_property(
-        state,
-        operands[0] as usize,
-        operands[1] as u8,
-        operands[2],
-    )?;
+    property::set_property(state, operands[0] as usize, operands[1] as u8, operands[2])?;
     Ok(instruction.next_address())
 }
 
@@ -48,12 +40,13 @@ fn terminators(state: &State) -> Result<Vec<u16>, RuntimeError> {
     let mut terminators = vec!['\r' as u16];
 
     if header::field_byte(state.memory(), HeaderField::Version)? > 4 {
-        let mut table_addr = header::field_word(state.memory(), HeaderField::TerminatorTable)? as usize;
+        let mut table_addr =
+            header::field_word(state.memory(), HeaderField::TerminatorTable)? as usize;
         loop {
             let b = state.read_byte(table_addr)?;
             if b == 0 {
                 break;
-            } else if (b >= 129 && b <= 154) || (b >= 252 && b <= 255) {
+            } else if (b >= 129 && b <= 154) || b >= 252 {
                 terminators.push(b as u16);
             }
             table_addr = table_addr + 1;
@@ -61,6 +54,16 @@ fn terminators(state: &State) -> Result<Vec<u16>, RuntimeError> {
     }
 
     Ok(terminators)
+}
+
+pub fn to_lower_case(c: u16) -> u8 {
+    // Uppercase ASCII is 0x41 - 0x5A
+    if c > 0x40 && c < 0x5b {
+        // Lowercase ASCII is 0x61 - 0x7A, so OR 0x20 to convert
+        (c | 0x20) as u8
+    } else { 
+        c as u8
+    }
 }
 
 pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
@@ -85,33 +88,145 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
     let routine = if operands.len() > 2 { operands[3] } else { 0 };
 
     if version < 4 {
-        state.status_line();
+        state.status_line()?;
     }
 
     let terminators = terminators(state)?;
     let mut input_buffer = Vec::new();
     loop {
         match state.read_key(timeout)? {
-            Some(key) => if terminators.contains(&key) {
-                break;
-            } else {
-                if input_buffer.len() < len {
-                    if key == 0x8 && input_buffer.len() > 0 {
-                        input_buffer.pop();
-                        state.backspace();
-                    } else {
-                        input_buffer.push(key);
-                        state.print(&vec![key]);
+            Some(key) => {
+                if terminators.contains(&key) {
+                    input_buffer.push(key);
+                    state.print(&vec![key])?;
+                    break;
+                } else {
+                    trace!(target: "app::trace", "read_key => {}", key);
+                    if input_buffer.len() < len {
+                        if key == 0x08 && input_buffer.len() > 0 {
+                            input_buffer.pop();
+                            state.backspace()?;
+                        } else {
+                            input_buffer.push(key);
+                            state.print(&vec![key])?;
+                        }
                     }
                 }
-            },
-            None => break
+            }
+            None => break,
         }
     }
 
-    
-    Ok(0)
+    let terminator = if let Some(c) = input_buffer.last() {
+        if terminators.contains(c) {
+            Some(c)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
+    let end = input_buffer.len() - match terminator {
+        Some(_) => 1,
+        None => 0
+    };
+
+    // Store input to the text buffer
+    if version < 5 {
+        // Store the buffer contents
+        for i in 0..end {
+            state.write_byte(
+                text_buffer + 1 + i,
+                to_lower_case(input_buffer[i])
+            )?;
+        }
+        // Terminated by a 0
+        state.write_byte(text_buffer + 1 + end, 0)?;
+    } else {
+        // Store the buffer length
+        state.write_byte(text_buffer + 1, end as u8 - 1)?;
+        for i in 0..end {
+            state.write_byte(
+                text_buffer + 2 + i,
+                to_lower_case(input_buffer[i]),
+            )?;
+        }
+    }
+
+    // Lexical analysis
+    if parse > 0 || state.version < 5 {
+        let dictionary = header::field_word(state.memory(), HeaderField::Dictionary)? as usize;
+        let separators = text::separators(state, dictionary)?;
+        let mut word = Vec::new();
+        let mut word_start: usize = 0;
+        let mut word_count: usize = 0;
+        let max_words = state.read_byte(parse)? as usize;
+
+        let data = input_buffer[0..end].to_vec();
+        for i in 0..data.len() {
+            let c = ((data[i] as u8) as char).to_ascii_lowercase();
+            if word_count > max_words {
+                break;
+            }
+
+            if separators.contains(&c) {
+                if word.len() > 0 {
+                    let entry = text::from_dictionary(state, dictionary, &word)?;
+                    state.write_word(parse + 2 + (4 * word_count), entry as u16)?;
+                    state.write_byte(parse + 4 + (4 * word_count), word.len() as u8)?;
+                    state.write_byte(parse + 5 + (4 * word_count), word_start as u8 + 2)?;
+                    word_count = word_count + 1;
+                    trace!(target: "app::trace", "{:?} => ${:05x}", word, entry);
+                }
+
+                let entry = text::from_dictionary(state, dictionary, &word)?;
+                state.write_word(parse + 2 + (4 * word_count), entry as u16)?;
+                state.write_byte(parse + 4 + (4 * word_count), 1)?;
+                state.write_byte(parse + 5 + (4 * word_count), i as u8 + 2)?;
+                word_count = word_count + 1;
+                trace!("{} => ${:05x}", data[i], entry);
+
+                word.clear();
+                word_start = i + 1;
+            } else if c == ' ' {
+                if word.len() > 0 {
+                    let entry = text::from_dictionary(state, dictionary, &word)?;
+                    state.write_word(parse + 2 + (4 * word_count), entry as u16)?;
+                    state.write_byte(parse + 4 + (4 * word_count), word.len() as u8)?;
+                    state.write_byte(parse + 5 + (4 * word_count), word_start as u8 + 2)?;
+                    word_count = word_count + 1;
+                    trace!("{:?} => ${:05x}", word, entry)
+                }
+                word.clear();
+                word_start = i + 1;
+            } else {
+                word.push(c)
+            }
+        }
+
+        if word.len() > 0 && word_count < max_words {
+            let entry = text::from_default_dictionary(state, &word)?;
+            state.write_word(parse + 2 + (4 * word_count), entry as u16)?;
+            state.write_byte(parse + 4 + (4 * word_count), word.len() as u8)?;
+            state.write_byte(parse + 5 + (4 * word_count), word_start as u8 + 2)?;
+            word_count = word_count + 1;
+            trace!("{:?} => ${:05x}", word, entry)
+        }
+
+        state.write_byte(parse + 1, word_count as u8)?;
+        trace!("Parsed {} words", word_count);
+    }
+
+    if version > 4 {
+        if let Some(t) = terminator {
+            store_result(state, instruction, *t)?;
+        } else {
+            store_result(state, instruction, 0)?;
+        }
+    }
+
+    Ok(instruction.next_address())
 }
 
 pub fn print_char(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {

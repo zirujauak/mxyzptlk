@@ -33,7 +33,7 @@ fn operand_values(state: &mut State, instruction: &Instruction) -> Result<Vec<u1
                     _ => s.push_str(&format!(" {:#04x}", val)),
                 };
                 v.push(val)
-            },
+            }
             Err(e) => return Err(e),
         }
     }
@@ -219,7 +219,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
             OperandCount::_2OP => match instruction.opcode().instruction() {
                 0x01 => processor_2op::je(state, instruction),
                 0x02 => processor_2op::jl(state, instruction),
-                //             0x03 => processor_2op::jg(context, instruction),
+                0x03 => processor_2op::jg(state, instruction),
                 //             0x04 => processor_2op::dec_chk(context, instruction),
                 //             0x05 => processor_2op::inc_chk(context, instruction),
                 //             0x06 => processor_2op::jin(context, instruction),
@@ -238,7 +238,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 //             0x13 => processor_2op::get_next_prop(context, instruction),
                 0x14 => processor_2op::add(state, instruction),
                 0x15 => processor_2op::sub(state, instruction),
-                //             0x16 => processor_2op::mul(context, instruction),
+                0x16 => processor_2op::mul(state, instruction),
                 //             0x17 => processor_2op::div(context, instruction),
                 //             0x18 => processor_2op::modulus(context, instruction),
                 //             0x19 => processor_2op::call_2s(context, instruction),
@@ -255,7 +255,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x01 => processor_var::storew(state, instruction),
                 0x02 => processor_var::storeb(state, instruction),
                 0x03 => processor_var::put_prop(state, instruction),
-                //0x04 => processor_var::read(state, instruction),
+                0x04 => processor_var::read(state, instruction),
                 0x05 => processor_var::print_char(state, instruction),
                 0x06 => processor_var::print_num(state, instruction),
                 0x07 => processor_var::random(state, instruction),

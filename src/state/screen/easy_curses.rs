@@ -1,11 +1,11 @@
-use easycurses::*;
 use easycurses::Color;
 use easycurses::ColorPair;
+use easycurses::*;
 
-use super::Terminal;
 use super::super::screen;
 use super::buffer::CellStyle;
 use super::Style;
+use super::Terminal;
 
 pub struct ECTerminal {
     easycurses: EasyCurses,
@@ -37,26 +37,36 @@ impl ECTerminal {
 
     fn input_to_u16(&self, input: Input) -> u16 {
         match input {
-            Input::Character(c) => match c as u8 {
-                0xFf => 8,
-                _ => c as u16
-            },
+            Input::Character(c) => {
+                match c as u8 {
+                    0x0a => 0x0d,
+                    0x7f => 0x08,
+                    _ => c as u16,
+                }
+            }
             Input::KeyUp => 129,
             Input::KeyDown => 130,
             Input::KeyLeft => 131,
             Input::KeyRight => 132,
-            _ => 0
+            _ => 0,
         }
     }
 }
 
 impl Terminal for ECTerminal {
-    fn size(&self) -> (u32,u32) {
+    fn size(&self) -> (u32, u32) {
         let (rows, columns) = self.easycurses.get_row_col_count();
         (rows as u32, columns as u32)
     }
 
-    fn print_at(&mut self, c: char, row: u32, column: u32, colors: (screen::Color, screen::Color), style: &CellStyle) {
+    fn print_at(
+        &mut self,
+        c: char,
+        row: u32,
+        column: u32,
+        colors: (screen::Color, screen::Color),
+        style: &CellStyle,
+    ) {
         self.easycurses.move_rc(row as i32 - 1, column as i32 - 1);
         let fg = self.as_color(colors.0);
         let bg = self.as_color(colors.1);
@@ -84,7 +94,7 @@ impl Terminal for ECTerminal {
         };
         self.easycurses.set_input_timeout(mode);
         if let Some(i) = self.easycurses.get_input() {
-            trace!(target: "app::trace", "{:?}", i);
+            trace!(target: "app::trace", "curses input: {:?}", i);
             Some(self.input_to_u16(i))
         } else {
             None
@@ -97,7 +107,7 @@ impl Terminal for ECTerminal {
     }
 
     fn backspace(&mut self, at: (u32, u32)) {
-        self.easycurses.move_rc(at.0 as i32 - 1, at.1 as i32 - 1);
+        self.easycurses.move_rc(at.0 as i32 - 1, at.1 as i32 - 2);
         self.easycurses.delete_char();
     }
 }

@@ -1,5 +1,5 @@
 use super::*;
-use crate::error::*;
+use crate::error::RuntimeError;
 use crate::state::object::attribute;
 use crate::state::object::property;
 use crate::state::object;
@@ -25,14 +25,14 @@ pub fn jl(state: &mut State, instruction: &Instruction) -> Result<usize, Runtime
     )
 }
 
-// pub fn jg(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     branch(
-//         context,
-//         instruction,
-//         (operands[0] as i16) > (operands[1] as i16),
-//     )
-// }
+pub fn jg(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    branch(
+        state,
+        instruction,
+        (operands[0] as i16) > (operands[1] as i16),
+    )
+}
 
 // pub fn dec_chk(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
@@ -237,21 +237,21 @@ pub fn sub(state: &mut State, instruction: &Instruction) -> Result<usize, Runtim
         value = i16::overflowing_sub(value, operands[i] as i16).0;
     }
 
-    store_result(state, instruction, value as u16);
+    store_result(state, instruction, value as u16)?;
     Ok(instruction.next_address())
 }
 
-// pub fn mul(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn mul(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     let mut value = operands[0] as i16;
-//     for i in 1..operands.len() {
-//         value = i16::overflowing_mul(value, operands[i] as i16).0;
-//     }
+    let mut value = operands[0] as i16;
+    for i in 1..operands.len() {
+        value = i16::overflowing_mul(value, operands[i] as i16).0;
+    }
 
-//     store_result(context, instruction, value as u16);
-//     Ok(instruction.next_address())
-// }
+    store_result(state, instruction, value as u16)?;
+    Ok(instruction.next_address())
+}
 
 // pub fn div(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
