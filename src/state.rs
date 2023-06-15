@@ -276,8 +276,8 @@ impl State {
         };
 
         let width = self.screen.columns() as usize;
-        let mut spaces = vec![0x20 as u16; width - left.len() - right.len()];
-        let mut status_line = Vec::new();
+        let mut spaces = vec![0x20 as u16; width - left.len() - right.len() - 1];
+        let mut status_line = vec![0x20 as u16];
         status_line.append(&mut left);
         status_line.append(&mut spaces);
         status_line.append(&mut right);
