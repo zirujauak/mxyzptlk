@@ -1,8 +1,8 @@
 use super::*;
 use crate::error::RuntimeError;
+use crate::state::object;
 use crate::state::object::attribute;
 use crate::state::object::property;
-use crate::state::object;
 use crate::state::State;
 
 pub fn je(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
@@ -34,21 +34,21 @@ pub fn jg(state: &mut State, instruction: &Instruction) -> Result<usize, Runtime
     )
 }
 
-// pub fn dec_chk(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let val = context.peek_variable(operands[0] as u8)? as i16;
-//     let new_val = i16::overflowing_sub(val, 1);
-//     context.set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
-//     branch(context, instruction, new_val.0 < operands[1] as i16)
-// }
+pub fn dec_chk(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let val = state.peek_variable(operands[0] as u8)? as i16;
+    let new_val = i16::overflowing_sub(val, 1);
+    state.set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
+    branch(state, instruction, new_val.0 < operands[1] as i16)
+}
 
-// pub fn inc_chk(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let val = context.peek_variable(operands[0] as u8)? as i16;
-//     let new_val = i16::overflowing_add(val, 1);
-//     context.set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
-//     branch(context, instruction, new_val.0 > operands[1] as i16)
-// }
+pub fn inc_chk(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let val = state.peek_variable(operands[0] as u8)? as i16;
+    let new_val = i16::overflowing_add(val, 1);
+    state.set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
+    branch(state, instruction, new_val.0 > operands[1] as i16)
+}
 
 // pub fn jin(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
@@ -131,7 +131,13 @@ pub fn insert_obj(state: &mut State, instruction: &Instruction) -> Result<usize,
                     }
 
                     if sibling == 0 {
-                        return Err(RuntimeError::new(ErrorCode::ObjectTreeState, format!("Unable to find previous sibling of object {} in parent {}", object, old_parent)));
+                        return Err(RuntimeError::new(
+                            ErrorCode::ObjectTreeState,
+                            format!(
+                                "Unable to find previous sibling of object {} in parent {}",
+                                object, old_parent
+                            ),
+                        ));
                     }
 
                     object::set_sibling(state, sibling, object::sibling(state, object)?)?;
@@ -185,21 +191,18 @@ pub fn get_prop(state: &mut State, instruction: &Instruction) -> Result<usize, R
     Ok(instruction.next_address())
 }
 
-// pub fn get_prop_addr(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn get_prop_addr(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     if operands[0] == 0 {
-//         store_result(context, instruction, 0)?;
-//     } else {
-//         let value = property::property_data_addr(context, operands[0] as usize, operands[1] as u8)?;
-//         store_result(context, instruction, value as u16)?;
-//     }
+    if operands[0] == 0 {
+        store_result(state, instruction, 0)?;
+    } else {
+        let value = property::property_data_address(state, operands[0] as usize, operands[1] as u8)?;
+        store_result(state, instruction, value as u16)?;
+    }
 
-//     Ok(instruction.next_address())
-// }
+    Ok(instruction.next_address())
+}
 
 // pub fn get_next_prop(
 //     context: &mut Context,
@@ -253,29 +256,29 @@ pub fn mul(state: &mut State, instruction: &Instruction) -> Result<usize, Runtim
     Ok(instruction.next_address())
 }
 
-// pub fn div(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn div(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     let mut value = operands[0] as i16;
-//     for i in 1..operands.len() {
-//         value = i16::overflowing_div(value, operands[i] as i16).0;
-//     }
+    let mut value = operands[0] as i16;
+    for i in 1..operands.len() {
+        value = i16::overflowing_div(value, operands[i] as i16).0;
+    }
 
-//     store_result(context, instruction, value as u16);
-//     Ok(instruction.next_address())
-// }
+    store_result(state, instruction, value as u16)?;
+    Ok(instruction.next_address())
+}
 
-// pub fn modulus(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn modulus(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     let mut value = operands[0] as i16;
-//     for i in 1..operands.len() {
-//         value = i16::overflowing_rem(value, operands[i] as i16).0;
-//     }
+    let mut value = operands[0] as i16;
+    for i in 1..operands.len() {
+        value = i16::overflowing_rem(value, operands[i] as i16).0;
+    }
 
-//     store_result(context, instruction, value as u16);
-//     Ok(instruction.next_address())
-// }
+    store_result(state, instruction, value as u16)?;
+    Ok(instruction.next_address())
+}
 
 // pub fn call_2s(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;

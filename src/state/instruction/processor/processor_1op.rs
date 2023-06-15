@@ -1,32 +1,22 @@
 use super::*;
-use crate::error::*;
-use crate::state::memory::Memory;
 use crate::state::object;
-use crate::state::object::*;
 use crate::state::object::property;
-use crate::state::object::property::*;
-use crate::state::State;
 use crate::state::text;
+use crate::state::State;
 
 pub fn jz(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
     branch(state, instruction, operands[0] == 0)
 }
 
-pub fn get_sibling(
-    state: &mut State,
-    instruction: &Instruction,
-) -> Result<usize, RuntimeError> {
+pub fn get_sibling(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
     let sibling = object::sibling(state, operands[0] as usize)?;
     store_result(state, instruction, sibling as u16)?;
     branch(state, instruction, sibling != 0)
 }
 
-pub fn get_child(
-    state: &mut State,
-    instruction: &Instruction,
-) -> Result<usize, RuntimeError> {
+pub fn get_child(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
     let child = object::child(state, operands[0] as usize)?;
     store_result(state, instruction, child as u16)?;
@@ -40,15 +30,12 @@ pub fn get_parent(state: &mut State, instruction: &Instruction) -> Result<usize,
     Ok(instruction.next_address())
 }
 
-// pub fn get_prop_len(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let len = property::property_length(context, operands[0] as usize)?;
-//     store_result(context, instruction, len as u16)?;
-//     Ok(instruction.next_address())
-// }
+pub fn get_prop_len(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let len = property::property_length(state, operands[0] as usize)?;
+    store_result(state, instruction, len as u16)?;
+    Ok(instruction.next_address())
+}
 
 pub fn inc(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;

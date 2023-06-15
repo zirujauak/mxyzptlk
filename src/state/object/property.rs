@@ -16,7 +16,7 @@ fn property_table_address(state: &State, object: usize) -> Result<usize, Runtime
     Ok(result)
 }
 
-fn property_address(state: &State, object: usize, property: u8) -> Result<usize, RuntimeError> {
+fn address(state: &State, object: usize, property: u8) -> Result<usize, RuntimeError> {
     let property_table_address = property_table_address(state, object)?;
     let header_size = state.read_byte(property_table_address)? as usize;
     let mut property_address = property_table_address + 1 + (header_size * 2);
@@ -69,7 +69,7 @@ fn property_address(state: &State, object: usize, property: u8) -> Result<usize,
     Ok(0)
 }
 
-fn property_size(state: &State, property_address: usize) -> Result<usize, RuntimeError> {
+fn size(state: &State, property_address: usize) -> Result<usize, RuntimeError> {
     let size_byte = state.read_byte(property_address)?;
     match header::field_byte(state.memory(), HeaderField::Version)? {
         3 => Ok((size_byte as usize / 32) + 1),
@@ -88,7 +88,7 @@ fn property_size(state: &State, property_address: usize) -> Result<usize, Runtim
     }
 }
 
-fn property_data_address(state: &State, property_address: usize) -> Result<usize, RuntimeError> {
+fn data_address(state: &State, property_address: usize) -> Result<usize, RuntimeError> {
     match header::field_byte(state.memory(), HeaderField::Version)? {
         3 => Ok(property_address + 1),
         _ => {
@@ -98,6 +98,41 @@ fn property_data_address(state: &State, property_address: usize) -> Result<usize
             } else {
                 Ok(property_address + 1)
             }
+        }
+    }
+}
+
+pub fn property_data_address(
+    state: &State,
+    object: usize,
+    property: u8,
+) -> Result<usize, RuntimeError> {
+    let property_address = address(state, object, property)?;
+    if property_address == 0 {
+        Ok(0)
+    } else {
+        data_address(state, property_address)
+    }
+}
+
+pub fn property_length(
+    state: &State,
+    property_data_address: usize,
+) -> Result<usize, RuntimeError> {
+    if property_data_address == 0 {
+        Ok(0)
+    } else {
+        let size_byte = state.read_byte(property_data_address - 1)?;
+        match header::field_byte(state.memory(), HeaderField::Version)? {
+            1 | 2 | 3 => size(state, property_data_address - 1),
+            4 | 5 | 6 | 7 | 8 => {
+                if size_byte & 0x80 == 0x80 {
+                    size(state, property_data_address - 2)
+                } else {
+                    size(state, property_data_address - 1)
+                }
+            }
+            _ => Ok(0),
         }
     }
 }
@@ -120,12 +155,12 @@ fn default_property(state: &State, property: u8) -> Result<u16, RuntimeError> {
 }
 
 pub fn property(state: &State, object: usize, property: u8) -> Result<u16, RuntimeError> {
-    let property_address = property_address(state, object, property)?;
+    let property_address = address(state, object, property)?;
     if property_address == 0 {
         default_property(state, property)
     } else {
-        let property_size = property_size(state, property_address)?;
-        let property_data_address = property_data_address(state, property_address)?;
+        let property_size = size(state, property_address)?;
+        let property_data_address = data_address(state, property_address)?;
         match property_size {
             1 => Ok(state.read_byte(property_data_address)? as u16),
             2 => state.read_word(property_data_address),
@@ -146,11 +181,11 @@ pub fn set_property(
     property: u8,
     value: u16,
 ) -> Result<(), RuntimeError> {
-    let property_address = property_address(state, object, property)?;
+    let property_address = address(state, object, property)?;
     if property_address == 0 {
         todo!("Property does not exist");
     } else {
-        let property_size = property_size(state, property_address)?;
+        let property_size = size(state, property_address)?;
         let property_data = match header::field_byte(state.memory(), HeaderField::Version)? {
             3 => property_address + 1,
             _ => {

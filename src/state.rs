@@ -18,10 +18,6 @@ use rng::chacha_rng::*;
 use rng::RNG;
 use screen::buffer::CellStyle;
 use screen::*;
-use std::thread;
-use std::time;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
 
 pub struct State {
     version: u8,
@@ -200,10 +196,14 @@ impl State {
 
     pub fn set_variable_indirect(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
         if variable == 0 {
-            self.frame_stack.current_frame_mut()?.pop();
+            self.frame_stack.current_frame_mut()?.pop()?;
         }
         self.frame_stack
             .set_variable(&mut self.memory, variable as usize, value)
+    }
+
+    pub fn push(&mut self, value: u16) -> Result<(), RuntimeError> {
+        Ok(self.frame_stack.current_frame_mut()?.push(value))
     }
 
     // Routines

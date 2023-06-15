@@ -1,5 +1,4 @@
 use super::*;
-use crate::error::*;
 use crate::state::State;
 use crate::state::text;
 
@@ -16,7 +15,7 @@ fn literal_text(state: &State, address: usize) -> Result<Vec<u16>, RuntimeError>
     let mut done = false;
 
     while !done {
-        let w = state.read_word(address + (text.len() * 2))?;
+        let w = state.memory().read_word(address + (text.len() * 2))?;
         done = w & 0x8000 == 0x8000;
         text.push(w);
     }
@@ -31,15 +30,15 @@ pub fn print(state: &mut State, instruction: &Instruction) -> Result<usize, Runt
     Ok(instruction.next_address() + (ztext.len() * 2))
 }
 
-// pub fn print_ret(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let ztext = literal_text(context, instruction.address + 1)?;
-//     let text = text::from_vec(context, &ztext)?;
+pub fn print_ret(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let ztext = literal_text(state, instruction.address + 1)?;
+    let text = text::from_vec(state, &ztext)?;
 
-//     context.print_string(text);
-//     context.interpreter_mut().screen_device_mut().new_line();
+    state.print(&text)?;
+    state.new_line()?;
 
-//     context.return_fn(1)
-// }
+    state.return_routine(1)
+}
 
 // pub fn save(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     todo!()

@@ -145,7 +145,7 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
         state.write_byte(text_buffer + 1 + end, 0)?;
     } else {
         // Store the buffer length
-        state.write_byte(text_buffer + 1, end as u8 - 1)?;
+        state.write_byte(text_buffer + 1, end as u8)?;
         for i in 0..end {
             state.write_byte(
                 text_buffer + 2 + i,
@@ -257,11 +257,11 @@ pub fn random(state: &mut State, instruction: &Instruction) -> Result<usize, Run
     Ok(instruction.next_address())
 }
 
-// pub fn push(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     context.current_frame_mut().push(operands[0]);
-//     Ok(instruction.next_address())
-// }
+pub fn push(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    state.push(operands[0])?;
+    Ok(instruction.next_address())
+}
 
 // pub fn pull(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
