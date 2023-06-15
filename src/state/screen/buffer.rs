@@ -1,5 +1,6 @@
 use super::Color;
 use super::Style;
+use super::Terminal;
 
 #[derive(Clone, Copy)]
 pub struct CellStyle {
@@ -60,16 +61,17 @@ impl Buffer {
         Buffer { rows, columns, buffer }
     }
 
-    pub fn clear(&mut self, colors: (Color, Color), at: (u32,u32)) {
+    pub fn clear(&mut self, terminal: &mut Box<dyn Terminal>, colors: (Color, Color), at: (u32,u32)) {
         self.buffer[at.0 as usize - 1][at.1 as usize - 1] = BufferCell::new(' ' as u16, colors, CellStyle::new());
+        terminal.as_mut().print_at(' ', at.0, at.1, colors);
     }
 
-    pub fn print(&mut self, zchar: u16, colors: (Color, Color), style: &CellStyle, at: (u32, u32)) {
-        println!("Print {:02x} at {},{}", zchar, at.0, at.1);
+    pub fn print(&mut self, terminal: &mut Box<dyn Terminal>, zchar: u16, colors: (Color, Color), style: &CellStyle, at: (u32, u32)) {
         self.buffer[at.0 as usize - 1][at.1 as usize - 1] = BufferCell::new(zchar, colors, style.clone());
+        terminal.as_mut().print_at((zchar as u8) as char, at.0, at.1, colors);
     }
 
-    pub fn scroll(&mut self, top: u32, colors: (Color, Color)) {
+    pub fn scroll(&mut self, terminal: &mut Box<dyn Terminal>, top: u32, colors: (Color, Color)) {
         // Remove the row at the top of the scroll window
         self.buffer.remove(top as usize - 1);
         let mut r = Vec::new();
@@ -77,6 +79,7 @@ impl Buffer {
             r.push(BufferCell::new(' ' as u16, colors, CellStyle::new()))
         }
         self.buffer.push(r);
+        terminal.as_mut().scroll(top);
     }
 
     pub fn flush(&mut self) {

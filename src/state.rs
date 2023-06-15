@@ -42,9 +42,9 @@ impl State {
             ))
         } else {
             let screen = match version {
-                3 => Screen::new_v3(rows, columns, Color::White, Color::Black),
-                4 => Screen::new_v4(rows, columns, Color::White, Color::Black),
-                _ => Screen::new_v5(rows, columns, Color::White, Color::Black),
+                3 => Screen::new_v3(Color::White, Color::Black),
+                4 => Screen::new_v4(Color::White, Color::Black),
+                _ => Screen::new_v5(Color::White, Color::Black),
             };
             let frame_stack =
                 FrameStack::new(header::field_word(&memory, HeaderField::InitialPC)? as usize);
@@ -254,10 +254,15 @@ impl State {
         Ok(())
     }
 
-    pub fn print_char(&mut self, char: u16) -> Result<(),RuntimeError> {
-        self.screen.print_char(char);
-        Ok(())
+    // Input
+    pub fn read_key(&mut self) {
+        self.screen.read_key();
     }
+
+    // pub fn print_char(&mut self, char: u16) -> Result<(),RuntimeError> {
+    //     self.screen.print_char(char);
+    //     Ok(())
+    // }
 
     pub fn print_num(&mut self, n: i16) -> Result<(),RuntimeError> {
         let s = format!("{}", n);

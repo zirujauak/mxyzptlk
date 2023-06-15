@@ -45,7 +45,7 @@ pub fn put_prop(state: &mut State, instruction: &Instruction) -> Result<usize, R
 }
 
 pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    state.flush_screen()?;
+    state.read_key();
     Err(RuntimeError::new(ErrorCode::UnimplementedInstruction, format!("Unimplemented instruction: {}", instruction.opcode())))
 }
 // pub fn read(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
@@ -85,7 +85,7 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
 
 pub fn print_char(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
-    state.print_char(operands[0])?;
+    state.print(&vec![operands[0]])?;
     // context.print_string(format!("{}", (operands[0] as u8) as char));
     Ok(instruction.next_address())
 }
