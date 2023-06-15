@@ -13,12 +13,22 @@ use state::header;
 use state::header::*;
 use state::memory::*;
 use state::State;
+use crate::log::*;
 
 fn main() {
-    //log::init();
     let args: Vec<String> = env::args().collect();
 
     let filename = &args[1];
+    let name: Vec<&str> = filename.split(".").collect();
+    log4rs::init_file("log4rs.yml", Default::default()).unwrap();
+    trace!("Start trace log for '{}'", name);
+    info!(target: "app::frame", "Start frame log for '{}'", name);
+    info!(target: "app::instruction", "Start instruction log for '{}'", name);
+    info!(target: "app::memory", "Start memory log for '{}'", name);
+    info!(target: "app::stack", "Start stack log for '{}'", name);
+    info!(target: "app::variable", "Start variable log for '{}'", name);
+
+    log::init(&name);
     match File::open(filename) {
         Ok(mut f) => {
             let mut buffer = Vec::new();
