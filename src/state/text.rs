@@ -178,12 +178,6 @@ fn search_entry(
     let mut max = entry_count - 1;
     let mut pivot = max / 2;
 
-    trace!(target: "app::trace", "count: {}, size {}", entry_count, entry_size);
-
-    for w in word {
-        trace!(target: "app::trace", "Word: {:04x}", w);
-    }
-
     // Binary search:
     // Set min to first entry, max to last entry
     // Set pivot to halfway point in dictionary
@@ -191,11 +185,9 @@ fn search_entry(
     // If entry is too low, set min to pivot, reset pivot to halfway between min and max, and repeat
     // If min exceeds max, the entry was not found
     'outer: loop {
-        trace!("Min/Pivot/Min: {}/{}/{}", min, pivot, max);
         let addr = address + (pivot * entry_size);
         for i in 0..word.len() {
             let w = state.read_word(addr + (i * 2))?;
-            trace!(target: "app::trace", "Entry word {}: {:04x}", i, w);
             if w > word[i] {
                 if pivot == min {
                     break 'outer;
@@ -273,7 +265,6 @@ pub fn from_dictionary(
         3
     };
 
-    trace!(target: "app::trace", "word: {:?}", word);
     let mut zchars = Vec::new();
     for i in 0..word_count * 3 {
         if let Some(c) = word.get(i) {
@@ -283,7 +274,6 @@ pub fn from_dictionary(
         }
     }
 
-    trace!(target: "app::trace", "zchars: {:?}", zchars);
     let mut words = Vec::new();
     for i in 0..word_count {
         let index = i * 3;

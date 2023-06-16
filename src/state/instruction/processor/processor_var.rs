@@ -126,10 +126,12 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
                     break;
                 } else {
                     if input_buffer.len() < len {
-                        if key == 0x08 && input_buffer.len() > 0 {
-                            input_buffer.pop();
-                            state.backspace()?;
-                        } else {
+                        if key == 0x08 {
+                            if input_buffer.len() > 0 {
+                                input_buffer.pop();
+                                state.backspace()?;
+                            }
+                        } else if key >= 0x1f && key <= 0x7f {
                             input_buffer.push(key);
                             state.print(&vec![key])?;
                         }
@@ -323,30 +325,31 @@ pub fn push(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
     Ok(instruction.next_address())
 }
 
-// pub fn pull(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let value = context.variable(0)?;
+pub fn pull(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let value = state.variable(0)?;
 
-//     if operands[0] == 0 {
-//         context.current_frame_mut().pop()?;
-//     }
+    if operands[0] == 0 {
+        state.frame_stack.current_frame_mut()?.pop()?;
+    }
 
-//     context.set_variable(operands[0] as u8, value)?;
-//     Ok(instruction.next_address())
-// }
+    state.set_variable(operands[0] as u8, value)?;
+    Ok(instruction.next_address())
+}
 
-// pub fn split_window(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn split_window(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    state.split_window(operands[0])?;
 
-// pub fn set_window(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+    Ok(instruction.next_address())
+}
+
+pub fn set_window(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    state.set_window(operands[0])?;
+
+    Ok(instruction.next_address())
+}
 
 // pub fn call_vs2(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
@@ -361,13 +364,11 @@ pub fn push(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
 //     )
 // }
 
-// pub fn erase_window(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn erase_window(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    state.erase_window(operands[0] as i16)?;
+    Ok(instruction.next_address())
+}
 
 // pub fn erase_line(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;

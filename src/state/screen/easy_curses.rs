@@ -102,6 +102,7 @@ impl Terminal for ECTerminal {
     }
 
     fn scroll(&mut self, row: u32) {
+        trace!(target: "app::trace", "Scroll up from row {}", row);
         self.easycurses.move_rc(row as i32 - 1, 0);
         self.easycurses.delete_line();
     }

@@ -53,16 +53,13 @@ pub fn dec(state: &mut State, instruction: &Instruction) -> Result<usize, Runtim
     Ok(instruction.next_address())
 }
 
-// pub fn print_addr(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let text = text::as_text(context, operands[0] as usize)?;
+pub fn print_addr(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let text = text::as_text(state, operands[0] as usize)?;
 
-//     context.print_string(text);
-//     Ok(instruction.next_address())
-// }
+    state.print(&text)?;
+    Ok(instruction.next_address())
+}
 
 // pub fn call_1s(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
@@ -71,36 +68,39 @@ pub fn dec(state: &mut State, instruction: &Instruction) -> Result<usize, Runtim
 //     call_fn(context, address, instruction.next_address(), &vec![], instruction.store())
 // }
 
-// pub fn remove_obj(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let object = operands[0] as usize;
-//     if object > 0 {
-//         let parent = object::parent(context, object)?;
-//         if parent != 0 {
-//             let parent_child = object::child(context, parent)?;
-//             if parent_child == object {
-//                 let sibling = object::sibling(context, object)?;
-//                 object::set_child(context, parent, sibling)?;
-//             } else {
-//                 let mut sibling = parent_child;
-//                 while sibling != 0 && object::sibling(context, sibling)? != object {
-//                     sibling = object::sibling(context, sibling)?;
-//                 }
+pub fn remove_obj(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let object = operands[0] as usize;
+    if object > 0 {
+        let parent = object::parent(state, object)?;
+        if parent != 0 {
+            let parent_child = object::child(state, parent)?;
+            if parent_child == object {
+                let sibling = object::sibling(state, object)?;
+                object::set_child(state, parent, sibling)?;
+            } else {
+                let mut sibling = parent_child;
+                while sibling != 0 && object::sibling(state, sibling)? != object {
+                    sibling = object::sibling(state, sibling)?;
+                }
 
-//                 if sibling == 0 {
-//                     panic!("Inconsistent object tree");
-//                 }
+                if sibling == 0 {
+                    return Err(RuntimeError::new(
+                        ErrorCode::ObjectTreeState,
+                        "Unable to find previous sibling of removed object".to_string(),
+                    ));
+                }
 
-//                 object::set_sibling(context, sibling, object::sibling(context, object)?)?;
-//             }
+                object::set_sibling(state, sibling, object::sibling(state, object)?)?;
+            }
 
-//             object::set_parent(context, object, 0)?;
-//             object::set_sibling(context, object, 0)?;
-//         }
-//     }
+            object::set_parent(state, object, 0)?;
+            object::set_sibling(state, object, 0)?;
+        }
+    }
 
-//     Ok(instruction.next_address())
-// }
+    Ok(instruction.next_address())
+}
 
 pub fn print_obj(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;

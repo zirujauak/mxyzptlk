@@ -52,10 +52,10 @@ pub fn print_ret(state: &mut State, instruction: &Instruction) -> Result<usize, 
 //     todo!()
 // }
 
-// pub fn ret_popped(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let value = context.current_frame_mut().pop()?;
-//     context.return_fn(value)
-// }
+pub fn ret_popped(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let value = state.frame_stack.current_frame_mut()?.pop()?;
+    state.return_routine(value)
+}
 
 // pub fn pop(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     context.current_frame_mut().pop()?;
@@ -78,12 +78,13 @@ pub fn new_line(state: &mut State, instruction: &Instruction) -> Result<usize, R
     Ok(instruction.next_address())
 }
 
-// pub fn show_status(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     todo!()
-// }
+pub fn show_status(
+    state: &mut State,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    state.status_line()?;
+    Ok(instruction.next_address())
+}
 
 // pub fn verify(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let expected = header::checksum(context.memory_map());

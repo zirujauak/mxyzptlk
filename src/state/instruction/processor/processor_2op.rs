@@ -50,34 +50,34 @@ pub fn inc_chk(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
     branch(state, instruction, new_val.0 > operands[1] as i16)
 }
 
-// pub fn jin(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     branch(
-//         context,
-//         instruction,
-//         object::parent(context, operands[0] as usize)? == (operands[1] as usize),
-//     )
-// }
+pub fn jin(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    branch(
+        state,
+        instruction,
+        object::parent(state, operands[0] as usize)? == (operands[1] as usize),
+    )
+}
 
-// pub fn test(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     branch(
-//         context,
-//         instruction,
-//         operands[0] & operands[1] == operands[1],
-//     )
-// }
+pub fn test(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    branch(
+        state,
+        instruction,
+        operands[0] & operands[1] == operands[1],
+    )
+}
 
-// pub fn or(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let mut result = operands[0];
-//     for i in 1..operands.len() {
-//         result = result | operands[i]
-//     }
+pub fn or(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let mut result = operands[0];
+    for i in 1..operands.len() {
+        result = result | operands[i]
+    }
 
-//     store_result(context, instruction, result)?;
-//     Ok(instruction.next_address())
-// }
+    store_result(state, instruction, result)?;
+    Ok(instruction.next_address())
+}
 
 pub fn and(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
@@ -204,21 +204,21 @@ pub fn get_prop_addr(state: &mut State, instruction: &Instruction) -> Result<usi
     Ok(instruction.next_address())
 }
 
-// pub fn get_next_prop(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn get_next_prop(
+    state: &mut State,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     if operands[0] == 0 {
-//         store_result(context, instruction, 0)?;
-//     } else {
-//         let value = property::next_property(context, operands[0] as usize, operands[1] as u8)?;
-//         store_result(context, instruction, value as u16)?;
-//     }
+    if operands[0] == 0 {
+        store_result(state, instruction, 0)?;
+    } else {
+        let value = property::next_property(state, operands[0] as usize, operands[1] as u8)?;
+        store_result(state, instruction, value as u16)?;
+    }
 
-//     Ok(instruction.next_address())
-// }
+    Ok(instruction.next_address())
+}
 
 pub fn add(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;

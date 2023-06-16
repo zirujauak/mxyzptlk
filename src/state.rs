@@ -64,7 +64,7 @@ impl State {
         if self.version < 4 {
             header::clear_flag1(&mut self.memory, Flags1v3::StatusLineNotAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v3::ScreenSplitAvailable as u8)?;
-            header::set_flag1(&mut self.memory, Flags1v3::VariablePitchDefault as u8)?;
+            header::clear_flag1(&mut self.memory, Flags1v3::VariablePitchDefault as u8)?;
         }
 
         // Set V4+ Flags 1
@@ -257,6 +257,18 @@ impl State {
         self.screen.print(text);
 
         Ok(())
+    }
+
+    pub fn split_window(&mut self, lines: u16) -> Result<(), RuntimeError> {
+        Ok(self.screen.split_window(lines as u32))
+    }
+
+    pub fn set_window(&mut self, window: u16) -> Result<(), RuntimeError> {
+        self.screen.select_window(window as u8)
+    }
+
+    pub fn erase_window(&mut self, window: i16) -> Result<(), RuntimeError> {
+        self.screen.erase_window(window as i8)
     }
 
     pub fn status_line(&mut self) -> Result<(), RuntimeError> {

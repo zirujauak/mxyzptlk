@@ -37,7 +37,8 @@ fn main() {
                 Ok(_) => {
                     let memory = Memory::new(&buffer);
                     let mut state = State::new(memory, 24, 80).expect("Error creating state");
-
+                    state.initialize();
+                    
                     if let Err(r) = state.run() {
                         let error:Vec<_> = format!("\r{}\rPress any key to exit", r).as_bytes().iter().map(|x| *x as u16).collect();
                         state.print(&error);

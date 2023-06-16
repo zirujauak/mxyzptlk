@@ -140,9 +140,8 @@ impl Screen {
     }
 
     pub fn move_cursor(&mut self, row: u32, column: u32) {
-        if self.selected_window == 0 {
-            self.cursor_0 = (row, column)
-        } else {
+        // Cursor can only be set in the upper window
+        if self.selected_window == 1 {
             self.cursor_1 = Some((row, column))
         }
     }
@@ -178,18 +177,32 @@ impl Screen {
                     }
                 }
             }
+
+            trace!(target: "app::trace", "Split window: 0 {}-, 1 {}-{}", self.window_0_top, self.window_1_top.unwrap(), self.window_1_bottom.unwrap());
         }
     }
 
-    pub fn select_window(&mut self, window: u8) {
+    pub fn select_window(&mut self, window: u8) -> Result<(), RuntimeError> {
         if window == 0 {
             self.selected_window = 0;
+            Ok(())
         } else if let Some(_) = self.cursor_1 {
+            let top = match self.status_line {
+                true => 2,
+                false => 1,
+            };
             self.selected_window = 1;
-        } // Else error
+            self.cursor_1 = Some((top, 1));
+            Ok(())
+        } else {
+            Err(RuntimeError::new(
+                ErrorCode::InvalidWindow,
+                format!("Invalid window {}", window),
+            ))
+        }
     }
 
-    pub fn erase_window(&mut self, window: i8) {
+    pub fn erase_window(&mut self, window: i8) -> Result<(),RuntimeError> {
         match window {
             0 => {
                 for i in self.window_0_top..self.rows {
@@ -203,6 +216,7 @@ impl Screen {
                 } else {
                     (self.window_0_top, 1)
                 };
+                Ok(())
             }
             1 => {
                 if let Some(start) = self.window_1_top {
@@ -216,6 +230,7 @@ impl Screen {
                         self.cursor_1 = Some((start, 1))
                     }
                 }
+                Ok(())
             }
             -1 => {
                 self.window_1_top = None;
@@ -234,6 +249,7 @@ impl Screen {
                     (self.window_0_top, 1)
                 };
                 self.selected_window = 0;
+                Ok(())
             }
             -2 => {
                 for i in 1..self.rows {
@@ -250,8 +266,9 @@ impl Screen {
                         (self.window_0_top, 1)
                     };
                 }
+                Ok(())
             }
-            _ => (), // This is an error
+            _ => Err(RuntimeError::new(ErrorCode::InvalidWindow, format!("ERASE_WINDOW invalid window {}", window))), // This is an error
         }
     }
 
@@ -393,7 +410,14 @@ impl Screen {
 
 pub trait Terminal {
     fn size(&self) -> (u32, u32);
-    fn print_at(&mut self, c: char, row: u32, cursor: u32, colors: (Color, Color), style: &CellStyle);
+    fn print_at(
+        &mut self,
+        c: char,
+        row: u32,
+        cursor: u32,
+        colors: (Color, Color),
+        style: &CellStyle,
+    );
     fn flush(&mut self);
     fn read_key(&mut self, timeout: u128) -> Option<u16>;
     fn scroll(&mut self, row: u32);

@@ -52,6 +52,7 @@ impl Memory {
 
     pub fn write_byte(&mut self, address: usize, value: u8) -> Result<(), RuntimeError> {
         if address < self.buffer.len() {
+            info!(target: "app::memory", "Write {:#02x} to ${:04x}", value, address);
             self.buffer[address] = value;
             Ok(())
         } else {
@@ -68,6 +69,7 @@ impl Memory {
 
     pub fn write_word(&mut self, address: usize, value: u16) -> Result<(), RuntimeError> {
         if address < self.buffer.len() - 2 {
+            info!(target: "app::memory", "Write {:#04x} to ${:04x}", value, address);
             let (hb, lb) = byte_values(value);
             self.buffer[address] = hb;
             self.buffer[address + 1] = lb;
