@@ -17,7 +17,14 @@ appenders:
     append: false
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
-      
+
+  input:
+    kind: file
+    path: "input.log"
+    append: false
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+
   memory:
     kind: file
     path: "memory.log"
@@ -63,6 +70,12 @@ loggers:
     level: info
     appenders:
       - frame
+    additive: false
+
+  app::input:
+    level: info
+    appenders:
+      - input
     additive: false
 
   app::instruction:
