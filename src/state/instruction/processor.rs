@@ -11,8 +11,8 @@ use crate::state::State;
 mod processor_0op;
 mod processor_1op;
 mod processor_2op;
+mod processor_ext;
 mod processor_var;
-// mod processor_ext;
 
 fn operand_value(state: &mut State, operand: &Operand) -> Result<u16, RuntimeError> {
     match operand.operand_type() {
@@ -132,40 +132,40 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
     info!(target: "app::instruction", "{}", instruction);
     let version = header::field_byte(state.memory(), HeaderField::Version)?;
     match instruction.opcode().form() {
-        OpcodeForm::Ext => Err(RuntimeError::new(
-            ErrorCode::UnimplementedInstruction,
-            format!("Extended instructions not implemented"),
-        )),
-        //         0x00 => processor_ext::save(context, instruction),
-        //         0x01 => processor_ext::restore(context, instruction),
-        //         0x02 => processor_ext::log_shift(context, instruction),
-        //         0x03 => processor_ext::art_shift(context, instruction),
-        //         0x04 => processor_ext::set_font(context, instruction),
-        //         0x05 => processor_ext::draw_picture(context, instruction),
-        //         0x06 => processor_ext::picture_data(context, instruction),
-        //         0x07 => processor_ext::erase_picture(context, instruction),
-        //         0x08 => processor_ext::set_margins(context, instruction),
-        //         0x09 => processor_ext::save_undo(context, instruction),
-        //         0x0a => processor_ext::restore_undo(context, instruction),
-        //         0x0b => processor_ext::print_unicode(context, instruction),
-        //         0x0c => processor_ext::check_unicode(context, instruction),
-        //         0x0d => processor_ext::set_true_colour(context, instruction),
-        //         0x10 => processor_ext::move_window(context, instruction),
-        //         0x11 => processor_ext::window_size(context, instruction),
-        //         0x12 => processor_ext::window_style(context, instruction),
-        //         0x13 => processor_ext::get_wind_prop(context, instruction),
-        //         0x14 => processor_ext::scroll_window(context, instruction),
-        //         0x15 => processor_ext::pop_stack(context, instruction),
-        //         0x16 => processor_ext::read_mouse(context, instruction),
-        //         0x17 => processor_ext::mouse_window(context, instruction),
-        //         0x18 => processor_ext::push_stack(context, instruction),
-        //         0x19 => processor_ext::put_wind_prop(context, instruction),
-        //         0x1a => processor_ext::print_form(context, instruction),
-        //         0x1b => processor_ext::make_menu(context, instruction),
-        //         0x1c => processor_ext::picture_table(context, instruction),
-        //         0x1d => processor_ext::buffer_screen(context, instruction),
-        //         _ => todo!()
-        //     },
+        OpcodeForm::Ext => match instruction.opcode().instruction() {
+            //         0x00 => processor_ext::save(context, instruction),
+            //         0x01 => processor_ext::restore(context, instruction),
+            //         0x02 => processor_ext::log_shift(context, instruction),
+            //         0x03 => processor_ext::art_shift(context, instruction),
+            //         0x04 => processor_ext::set_font(context, instruction),
+            //         0x05 => processor_ext::draw_picture(context, instruction),
+            //         0x06 => processor_ext::picture_data(context, instruction),
+            //         0x07 => processor_ext::erase_picture(context, instruction),
+            //         0x08 => processor_ext::set_margins(context, instruction),
+            0x09 => processor_ext::save_undo(state, instruction),
+            //         0x0a => processor_ext::restore_undo(context, instruction),
+            //         0x0b => processor_ext::print_unicode(context, instruction),
+            //         0x0c => processor_ext::check_unicode(context, instruction),
+            //         0x0d => processor_ext::set_true_colour(context, instruction),
+            //         0x10 => processor_ext::move_window(context, instruction),
+            //         0x11 => processor_ext::window_size(context, instruction),
+            //         0x12 => processor_ext::window_style(context, instruction),
+            //         0x13 => processor_ext::get_wind_prop(context, instruction),
+            //         0x14 => processor_ext::scroll_window(context, instruction),
+            //         0x15 => processor_ext::pop_stack(context, instruction),
+            //         0x16 => processor_ext::read_mouse(context, instruction),
+            //         0x17 => processor_ext::mouse_window(context, instruction),
+            //         0x18 => processor_ext::push_stack(context, instruction),
+            //         0x19 => processor_ext::put_wind_prop(context, instruction),
+            //         0x1a => processor_ext::print_form(context, instruction),
+            //         0x1b => processor_ext::make_menu(context, instruction),
+            //         0x1c => processor_ext::picture_table(context, instruction),
+            //         0x1d => processor_ext::buffer_screen(context, instruction),
+            _ => Err(RuntimeError::new(
+                ErrorCode::UnimplementedInstruction,
+                format!("Unimplemented EXT instruction: {}", instruction.opcode()),
+            )),
+        },
         _ => match instruction.opcode().operand_count() {
             OperandCount::_0OP => match instruction.opcode().instruction() {
                 0x0 => processor_0op::rtrue(state, instruction),
@@ -272,13 +272,13 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x0f => processor_var::set_cursor(state, instruction),
                 0x11 => processor_var::set_text_style(state, instruction),
                 0x12 => processor_var::buffer_mode(state, instruction),
-                //             0x13 => processor_var::output_stream(context, instruction),
+                0x13 => processor_var::output_stream(state, instruction),
                 //             0x14 => processor_var::input_stream(context, instruction),
                 //             0x15 => processor_var::sound_effect(context, instruction),
-                //             0x16 => processor_var::read_char(context, instruction),
+                0x16 => processor_var::read_char(state, instruction),
                 //             0x17 => processor_var::scan_table(context, instruction),
                 //             0x18 => processor_var::not(context, instruction),
-                //             0x19 => processor_var::call_vn(context, instruction),
+                0x19 => processor_var::call_vn(state, instruction),
                 //             0x1a => processor_var::call_vn2(context, instruction),
                 //             0x1b => processor_var::tokenise(context, instruction),
                 //             0x1c => processor_var::encode_text(context, instruction),

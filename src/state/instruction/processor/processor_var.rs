@@ -399,13 +399,21 @@ pub fn buffer_mode(
     Ok(instruction.next_address())
 }
 
-// pub fn output_stream(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn output_stream(
+    state: &mut State,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let stream = operands[0] as i16;
+    let table = if stream == 3 {
+        Some(operands[1] as usize)
+    } else {
+        None
+    };
+
+    state.output_stream(stream, table)?;
+    Ok(instruction.next_address())
+}
 
 // pub fn input_stream(
 //     context: &mut Context,
@@ -423,10 +431,31 @@ pub fn buffer_mode(
 //     todo!()
 // }
 
-// pub fn read_char(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn read_char(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    if operands[0] != 1 {
+        return Err(RuntimeError::new(ErrorCode::Instruction, format!("READ_CHAR argument 1 must be 1, was {}", operands[0])));
+    }
+
+    let timeout = if operands.len() > 1 {
+        operands[1]
+    } else {
+        0
+    };
+    let routine = if operands.len() > 2 {
+        operands[2]
+    } else {
+        0
+    };
+
+    let key = match state.read_key(timeout)? {
+        Some(key) => key,
+        None => 0
+    };
+    store_result(state, instruction, key)?;
+    
+    Ok(instruction.next_address())
+}
 
 // pub fn scan_table(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
@@ -473,19 +502,13 @@ pub fn buffer_mode(
 //     Ok(instruction.next_address())
 // }
 
-// pub fn call_vn(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let address = packed_routine_address(context, operands[0]);
-//     let arguments = &operands[1..].to_vec();
+pub fn call_vn(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let address = packed_routine_address(state.memory(), operands[0])?;
+    let arguments = &operands[1..].to_vec();
 
-//     call_fn(
-//         context,
-//         address,
-//         instruction.next_address(),
-//         arguments,
-//         None,
-//     )
-// }
+    state.call_routine(address, arguments, instruction.store, instruction.next_address())
+}
 
 // pub fn call_vn2(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;

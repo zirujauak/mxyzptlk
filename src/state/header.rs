@@ -125,6 +125,6 @@ pub fn clear_flag1(memory: &mut Memory, flag: u8) -> Result<(), RuntimeError> {
 
 pub fn clear_flag2(memory: &mut Memory, flag: Flags2) -> Result<(), RuntimeError> {
     let mut flags = field_word(memory, HeaderField::Flags2)?;
-    flags = flags | !(flag as u16);
+    flags = flags & !(flag as u16);
     memory.write_word(HeaderField::Flags2 as usize, flags)
 }

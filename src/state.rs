@@ -26,6 +26,9 @@ pub struct State {
     screen: Screen,
     frame_stack: FrameStack,
     rng: Box<dyn RNG>,
+    output_streams: u8,
+    stream_3_table: usize,
+    stream_3_buffer: Vec<u8>,
 }
 
 impl State {
@@ -55,6 +58,9 @@ impl State {
                 screen,
                 frame_stack,
                 rng: Box::new(rng),
+                output_streams: 0x1,
+                stream_3_table: 0,
+                stream_3_buffer: Vec::new(),
             })
         }
     }
@@ -110,6 +116,7 @@ impl State {
             header::set_flag1(&mut self.memory, Flags1v4::ItalicAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::FixedSpaceAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::TimedInputAvailable as u8)?;
+            header::clear_flag2(&mut self.memory, Flags2::RequestUndo)?;
         }
 
         Ok(())
@@ -253,8 +260,34 @@ impl State {
     }
 
     // Screen
+    pub fn output_stream(&mut self, stream: i16, table: Option<usize>) -> Result<(), RuntimeError> {
+        if stream > 0 {
+            let mask = (stream as u8) & 0xF;
+            self.output_streams = self.output_streams | mask;
+            if stream == 3 {
+                self.stream_3_table = table.unwrap();
+                self.stream_3_buffer.clear();
+            }
+        } else if stream < 0 {
+            let mask = !((stream as u8) & 0xF);
+            self.output_streams = self.output_streams & mask;
+            if stream == -3 {
+                let len = self.stream_3_buffer.len() as u8;
+                self.write_byte(self.stream_3_table, len)?;
+
+                for i in 0..self.stream_3_buffer.len() {
+                    self.write_byte(self.stream_3_table + i + 1, self.stream_3_buffer[i])?;
+                }
+            }
+        }
+
+        Ok(())
+    }
     pub fn print(&mut self, text: &Vec<u16>) -> Result<(), RuntimeError> {
-        self.screen.print(text);
+        // Only print to the screen if stream 3 is not selected and stream 1 _is_
+        if self.output_streams & 0x5 == 0x1 {
+            self.screen.print(text);
+        }
 
         Ok(())
     }
@@ -319,7 +352,7 @@ impl State {
     pub fn buffer_mode(&mut self, mode: u16) -> Result<(), RuntimeError> {
         Ok(self.screen.buffered(mode != 0))
     }
-    
+
     // Input
     pub fn read_key(&mut self, timeout: u16) -> Result<Option<u16>, RuntimeError> {
         let key = self.screen.read_key(timeout as u128 * 1000);

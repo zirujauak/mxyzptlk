@@ -4,6 +4,7 @@ use std::fmt;
 pub enum ErrorCode {
     FrameUnderflow,
     IllegalAccess,
+    Instruction,
     InvalidAddress,
     InvalidLocalVariable,
     InvalidWindow,
