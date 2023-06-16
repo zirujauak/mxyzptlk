@@ -9,17 +9,15 @@ use std::io::prelude::*;
 pub mod error;
 pub mod state;
 
-use state::header;
-use state::header::*;
+use crate::log::*;
 use state::memory::*;
 use state::State;
-use crate::log::*;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
     let filename = &args[1];
-    let name:Vec<&str> = filename.split(".").collect();
+    let name: Vec<&str> = filename.split(".").collect();
     let name = name[0].to_string();
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
     trace!("Start trace log for '{}'", name);
@@ -28,7 +26,7 @@ fn main() {
     info!(target: "app::memory", "Start memory log for '{}'", name);
     info!(target: "app::stack", "Start stack log for '{}'", name);
     info!(target: "app::variable", "Start variable log for '{}'", name);
-    log_mdc::insert("instruction_count", "0");
+    log_mdc::insert("instruction_count", format!("{:8x}", 0));
 
     match File::open(filename) {
         Ok(mut f) => {
@@ -38,9 +36,13 @@ fn main() {
                     let memory = Memory::new(&buffer);
                     let mut state = State::new(memory, 24, 80).expect("Error creating state");
                     state.initialize();
-                    
+
                     if let Err(r) = state.run() {
-                        let error:Vec<_> = format!("\r{}\rPress any key to exit", r).as_bytes().iter().map(|x| *x as u16).collect();
+                        let error: Vec<_> = format!("\r{}\rPress any key to exit", r)
+                            .as_bytes()
+                            .iter()
+                            .map(|x| *x as u16)
+                            .collect();
                         state.print(&error);
                         state.read_key(0);
                         panic!("{}", r)
