@@ -114,9 +114,9 @@ impl Terminal for ECTerminal {
     }
 
     fn backspace(&mut self, at: (u32, u32)) {
-        self.easycurses.move_rc(at.0 as i32 - 1, at.1 as i32 - 2);
+        self.easycurses.move_rc(at.0 as i32 - 1, at.1 as i32 - 1);
         self.easycurses.delete_char();
-        self.easycurses.move_rc(at.0 as i32 - 1, at.1 as i32 - 3);
+        self.easycurses.move_rc(at.0 as i32 - 1, at.1 as i32 - 1);
     }
 
     fn beep(&mut self) {

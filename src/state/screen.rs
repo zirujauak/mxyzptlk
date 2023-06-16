@@ -410,7 +410,7 @@ impl Screen {
     }
 
     pub fn backspace(&mut self) -> Result<(), RuntimeError> {
-        self.terminal.backspace((self.cursor_0.0, self.cursor_0.1));
+        self.terminal.backspace((self.cursor_0.0, self.cursor_0.1 - 1));
         self.cursor_0 = (self.cursor_0.0, self.cursor_0.1 - 1);
         Ok(())
     }
