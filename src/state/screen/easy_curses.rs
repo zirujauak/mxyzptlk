@@ -71,7 +71,7 @@ impl Terminal for ECTerminal {
         let fg = self.as_color(colors.0);
         let bg = self.as_color(colors.1);
         self.easycurses.set_bold(style.is_style(Style::Bold));
-        self.easycurses.set_underline(style.is_style(Style::Bold));
+        self.easycurses.set_underline(c != ' ' && style.is_style(Style::Bold));
         let colors = if style.is_style(Style::Reverse) {
             colorpair!(bg on fg)
         } else {

@@ -280,35 +280,33 @@ pub fn modulus(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
     Ok(instruction.next_address())
 }
 
-// pub fn call_2s(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn call_2s(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     let address = packed_routine_address(context, operands[0]);
-//     let arguments = vec![operands[1]];
+    let address = packed_routine_address(state.memory(), operands[0])?;
+    let arguments = vec![operands[1]];
 
-//     call_fn(
-//         context,
-//         address,
-//         instruction.next_address(),
-//         &arguments,
-//         instruction.store,
-//     )
-// }
+    state.call_routine(
+        address,
+        &arguments,
+        instruction.store,
+        instruction.next_address(),
+    )
+}
 
-// pub fn call_2n(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn call_2n(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     let address = packed_routine_address(context, operands[0]);
-//     let arguments = vec![operands[1]];
+    let address = packed_routine_address(state.memory(), operands[0])?;
+    let arguments = vec![operands[1]];
 
-//     call_fn(
-//         context,
-//         address,
-//         instruction.next_address(),
-//         &arguments,
-//         None,
-//     )
-// }
+    state.call_routine(
+        address,
+        &arguments,
+        None,
+        instruction.next_address(),
+    )
+}
 
 // pub fn set_colour(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;

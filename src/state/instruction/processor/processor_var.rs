@@ -375,26 +375,29 @@ pub fn erase_window(state: &mut State, instruction: &Instruction) -> Result<usiz
 //     todo!()
 // }
 
-// pub fn set_cursor(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn set_cursor(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    state.set_cursor(operands[0], operands[1])?;
+    Ok(instruction.next_address())
+}
 
-// pub fn set_text_style(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn set_text_style(
+    state: &mut State,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    state.set_text_style(operands[0])?;
+    Ok(instruction.next_address())
+}
 
-// pub fn buffer_mode(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn buffer_mode(
+    state: &mut State,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    state.buffer_mode(operands[0])?;
+    Ok(instruction.next_address())
+}
 
 // pub fn output_stream(
 //     context: &mut Context,

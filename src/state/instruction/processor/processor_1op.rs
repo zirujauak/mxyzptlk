@@ -61,12 +61,17 @@ pub fn print_addr(state: &mut State, instruction: &Instruction) -> Result<usize,
     Ok(instruction.next_address())
 }
 
-// pub fn call_1s(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let address = packed_routine_address(context, operands[0]);
+pub fn call_1s(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let address = packed_routine_address(state.memory(), operands[0])?;
 
-//     call_fn(context, address, instruction.next_address(), &vec![], instruction.store())
-// }
+    state.call_routine(
+        address,
+        &vec![],
+        instruction.store,
+        instruction.next_address(),
+    )
+}
 
 pub fn remove_obj(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
@@ -138,15 +143,15 @@ pub fn print_paddr(state: &mut State, instruction: &Instruction) -> Result<usize
 //     Ok(instruction.next_address())
 // }
 
-// pub fn not(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let value = !operands[0];
-//     store_result(context, instruction, value)?;
-//     Ok(instruction.next_address())
-// }
+pub fn not(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let value = !operands[0];
+    store_result(state, instruction, value)?;
+    Ok(instruction.next_address())
+}
 
-// pub fn call_1n(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let address = packed_routine_address(context, operands[0]);
-//     call_fn(context, address, instruction.next_address(), &vec![], None)
-// }
+pub fn call_1n(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let address = packed_routine_address(state.memory(), operands[0])?;
+    state.call_routine(address, &vec![], None, instruction.next_address())
+}

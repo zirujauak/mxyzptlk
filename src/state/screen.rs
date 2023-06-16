@@ -131,6 +131,10 @@ impl Screen {
         self.columns
     }
 
+    pub fn buffered(&mut self, enabled: bool) {
+        self.buffered = enabled;
+    }
+    
     pub fn cursor(&self) -> (u32, u32) {
         if self.selected_window == 0 {
             self.cursor_0
@@ -405,6 +409,10 @@ impl Screen {
         self.terminal.backspace((self.cursor_0.0, self.cursor_0.1));
         self.cursor_0 = (self.cursor_0.0, self.cursor_0.1 - 1);
         Ok(())
+    }
+
+    pub fn set_style(&mut self, style: u8) -> Result<(), RuntimeError> {
+        Ok(self.current_style.set(style))
     }
 }
 

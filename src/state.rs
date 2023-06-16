@@ -308,6 +308,18 @@ impl State {
         Ok(())
     }
 
+    pub fn set_text_style(&mut self, style: u16) -> Result<(), RuntimeError> {
+        self.screen.set_style(style as u8)
+    }
+
+    pub fn set_cursor(&mut self, row: u16, column: u16) -> Result<(), RuntimeError> {
+        Ok(self.screen.move_cursor(row as u32, column as u32))
+    }
+
+    pub fn buffer_mode(&mut self, mode: u16) -> Result<(), RuntimeError> {
+        Ok(self.screen.buffered(mode != 0))
+    }
+    
     // Input
     pub fn read_key(&mut self, timeout: u16) -> Result<Option<u16>, RuntimeError> {
         let key = self.screen.read_key(timeout as u128 * 1000);

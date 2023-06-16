@@ -15,12 +15,12 @@ impl CellStyle {
     pub fn set(&mut self, style: u8) {
         match style {
             0 => self.mask = 0,
-            _ => self.mask = self.mask | style
+            _ => self.mask = self.mask | (style & 0xf)
         }
     }
 
     pub fn clear(&mut self, style: u8) {
-        let mask = !(style as u8);
+        let mask = !(style & 0xF);
         self.mask = self.mask & mask;
     }
 

@@ -130,6 +130,7 @@ fn packed_string_address(memory: &Memory, address: u16) -> Result<usize, Runtime
 
 pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     info!(target: "app::instruction", "{}", instruction);
+    let version = header::field_byte(state.memory(), HeaderField::Version)?;
     match instruction.opcode().form() {
         OpcodeForm::Ext => Err(RuntimeError::new(
             ErrorCode::UnimplementedInstruction,
@@ -199,18 +200,20 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x5 => processor_1op::inc(state, instruction),
                 0x6 => processor_1op::dec(state, instruction),
                 0x7 => processor_1op::print_addr(state, instruction),
-                //             0x8 => processor_1op::call_1s(context, instruction),
+                0x8 => processor_1op::call_1s(state, instruction),
                 0x9 => processor_1op::remove_obj(state, instruction),
                 0xa => processor_1op::print_obj(state, instruction),
                 0xb => processor_1op::ret(state, instruction),
                 0xc => processor_1op::jump(state, instruction),
                 0xd => processor_1op::print_paddr(state, instruction),
                 //             0xe => processor_1op::load(context, instruction),
-                //             0xf => if context.version() < 5 {
-                //                 processor_1op::not(context, instruction)
-                //             } else {
-                //                 processor_1op::call_1n(context, instruction)
-                //             },
+                0xf => {
+                    if version < 5 {
+                        processor_1op::not(state, instruction)
+                    } else {
+                        processor_1op::call_1n(state, instruction)
+                    }
+                }
                 _ => Err(RuntimeError::new(
                     ErrorCode::UnimplementedInstruction,
                     format!("Unimplemented instruction: {}", instruction.opcode()),
@@ -241,8 +244,8 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x16 => processor_2op::mul(state, instruction),
                 0x17 => processor_2op::div(state, instruction),
                 0x18 => processor_2op::modulus(state, instruction),
-                //             0x19 => processor_2op::call_2s(context, instruction),
-                //             0x1a => processor_2op::call_2n(context, instruction),
+                0x19 => processor_2op::call_2s(state, instruction),
+                0x1a => processor_2op::call_2n(state, instruction),
                 //             0x1b => processor_2op::set_colour(context, instruction),
                 //             0x1c => processor_2op::throw(context, instruction),
                 _ => Err(RuntimeError::new(
@@ -266,9 +269,9 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 //             0x0c => processor_var::call_vs2(context, instruction),
                 0x0d => processor_var::erase_window(state, instruction),
                 //             0x0e => processor_var::erase_line(context, instruction),
-                //             0x0f => processor_var::set_cursor(context, instruction),
-                //             0x11 => processor_var::set_text_style(context, instruction),
-                //             0x12 => processor_var::buffer_mode(context, instruction),
+                0x0f => processor_var::set_cursor(state, instruction),
+                0x11 => processor_var::set_text_style(state, instruction),
+                0x12 => processor_var::buffer_mode(state, instruction),
                 //             0x13 => processor_var::output_stream(context, instruction),
                 //             0x14 => processor_var::input_stream(context, instruction),
                 //             0x15 => processor_var::sound_effect(context, instruction),
