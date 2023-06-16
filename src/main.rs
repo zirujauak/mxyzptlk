@@ -8,7 +8,9 @@ use std::io::prelude::*;
 
 pub mod error;
 pub mod state;
+//pub mod iff;
 
+//use crate::iff::Chunk;
 use crate::log::*;
 use state::memory::*;
 use state::State;
@@ -28,13 +30,19 @@ fn main() {
     info!(target: "app::variable", "Start variable log for '{}'", name);
     log_mdc::insert("instruction_count", format!("{:8x}", 0));
 
+    // let mut f = File::open("lurking-horror.blorb").unwrap();
+    // let mut b = Vec::new();
+    // f.read_to_end(&mut b).unwrap();
+    // let form = Chunk::from_vec(&b);
+    // trace!(target: "app::trace", "{}", form);
+
     match File::open(filename) {
         Ok(mut f) => {
             let mut buffer = Vec::new();
             match f.read_to_end(&mut buffer) {
                 Ok(_) => {
                     let memory = Memory::new(&buffer);
-                    let mut state = State::new(memory, 24, 80).expect("Error creating state");
+                    let mut state = State::new(memory, &name).expect("Error creating state");
                     state.initialize();
 
                     if let Err(r) = state.run() {

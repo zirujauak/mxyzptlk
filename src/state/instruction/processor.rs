@@ -172,8 +172,8 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x1 => processor_0op::rfalse(state, instruction),
                 0x2 => processor_0op::print(state, instruction),
                 0x3 => processor_0op::print_ret(state, instruction),
-                //             0x5 => processor_0op::save(context, instruction),
-                //             0x6 => processor_0op::restore(context, instruction),
+                0x5 => processor_0op::save(state, instruction),
+                0x6 => processor_0op::restore(state, instruction),
                 //             0x7 => processor_0op::restart(context, instruction),
                 0x8 => processor_0op::ret_popped(state, instruction),
                 //             0x9 => if context.version() < 5 {

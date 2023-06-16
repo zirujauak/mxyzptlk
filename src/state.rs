@@ -8,6 +8,9 @@ mod rng;
 mod screen;
 mod text;
 
+use std::fs::File;
+use std::io::Read;
+
 use crate::error::*;
 use frame_stack::*;
 use header::*;
@@ -20,8 +23,10 @@ use screen::buffer::CellStyle;
 use screen::*;
 
 pub struct State {
+    name: String,
     version: u8,
     memory: Memory,
+    dynamic: Vec<u8>,
     static_mark: usize,
     screen: Screen,
     frame_stack: FrameStack,
@@ -32,9 +37,14 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(memory: Memory, rows: u32, columns: u32) -> Result<State, RuntimeError> {
+    pub fn new(memory: Memory, name: &str) -> Result<State, RuntimeError> {
         let version = header::field_byte(&memory, HeaderField::Version)?;
         let static_mark = header::field_word(&memory, HeaderField::StaticMark)? as usize;
+        let mut dynamic = Vec::new();
+        for i in 0..static_mark {
+            dynamic.push(memory.read_byte(i)?);
+        }
+
         let rng = ChaChaRng::new();
 
         if version < 3 || version == 6 || version > 8 {
@@ -52,8 +62,10 @@ impl State {
                 FrameStack::new(header::field_word(&memory, HeaderField::InitialPC)? as usize);
 
             Ok(State {
+                name: name.to_string(),
                 version,
                 memory,
+                dynamic,
                 static_mark: static_mark,
                 screen,
                 frame_stack,
@@ -126,6 +138,9 @@ impl State {
         &self.memory
     }
 
+    pub fn dynamic(&self) -> &Vec<u8> {
+        &self.dynamic
+    }
     pub fn screen(&self) -> &Screen {
         &self.screen
     }
@@ -358,12 +373,24 @@ impl State {
     pub fn beep(&mut self) -> Result<(), RuntimeError> {
         Ok(self.screen.beep())
     }
-    
+
     // Input
     pub fn read_key(&mut self, timeout: u16) -> Result<Option<u16>, RuntimeError> {
         let key = self.screen.read_key(timeout as u128 * 1000);
         info!(target: "app::input", "read_key -> {:?}", key);
         Ok(key)
+    }
+
+    pub fn prompt(&mut self, prompt: &str, suffix: &str) -> Result<Vec<u8>, RuntimeError> {
+        let filename = format!("{}.{}", self.name, suffix);
+        let mut data = Vec::new();
+        match File::open(filename) {
+            Ok(mut file) => match file.read_to_end(&mut data) {
+                Ok(_) => Ok(data),
+                Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e)))
+            },
+            Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e)))
+        }
     }
 
     // pub fn print_char(&mut self, char: u16) -> Result<(),RuntimeError> {
@@ -390,7 +417,7 @@ impl State {
     pub fn flush_screen(&mut self) -> Result<(), RuntimeError> {
         self.screen.flush_buffer()
     }
-    
+
     pub fn backspace(&mut self) -> Result<(), RuntimeError> {
         self.screen.backspace()
     }

@@ -40,13 +40,14 @@ pub fn print_ret(state: &mut State, instruction: &Instruction) -> Result<usize, 
     state.return_routine(1)
 }
 
-// pub fn save(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     todo!()
-// }
+pub fn save(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
 
-// pub fn restore(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     todo!()
-// }
+    todo!()
+}
+
+pub fn restore(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    todo!()
+}
 
 // pub fn restart(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     todo!()
