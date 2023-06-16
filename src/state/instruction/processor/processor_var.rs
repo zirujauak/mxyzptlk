@@ -351,18 +351,13 @@ pub fn set_window(state: &mut State, instruction: &Instruction) -> Result<usize,
     Ok(instruction.next_address())
 }
 
-// pub fn call_vs2(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let address = packed_routine_address(context, operands[0]);
-//     let arguments = operands[1..operands.len()].to_vec();
-//     call_fn(
-//         context,
-//         address,
-//         instruction.next_address(),
-//         &arguments,
-//         instruction.store(),
-//     )
-// }
+pub fn call_vs2(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let address = packed_routine_address(state.memory(), operands[0])?;
+    let arguments = operands[1..operands.len()].to_vec();
+
+    state.call_routine(address, &arguments, instruction.store, instruction.next_address())
+}
 
 pub fn erase_window(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
@@ -423,13 +418,20 @@ pub fn output_stream(
 //     todo!()
 // }
 
-// pub fn sound_effect(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn sound_effect(
+    state: &mut State,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands: Vec<u16> = operand_values(state, instruction)?;
+
+    match operands[0] {
+        1 => state.beep()?,
+        2 => { state.beep(); state.beep()? },
+        _ => trace!(target: "app::trace", "SOUND_EFFECT not fully implemented"),
+    }
+
+    Ok(instruction.next_address())
+}
 
 pub fn read_char(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;

@@ -134,7 +134,7 @@ impl Screen {
     pub fn buffered(&mut self, enabled: bool) {
         self.buffered = enabled;
     }
-    
+
     pub fn cursor(&self) -> (u32, u32) {
         if self.selected_window == 0 {
             self.cursor_0
@@ -146,7 +146,8 @@ impl Screen {
     pub fn move_cursor(&mut self, row: u32, column: u32) {
         // Cursor can only be set in the upper window
         if self.selected_window == 1 {
-            self.cursor_1 = Some((row, column))
+            self.cursor_1 = Some((row, column));
+            self.terminal.move_cursor((row, column));
         }
     }
 
@@ -206,7 +207,7 @@ impl Screen {
         }
     }
 
-    pub fn erase_window(&mut self, window: i8) -> Result<(),RuntimeError> {
+    pub fn erase_window(&mut self, window: i8) -> Result<(), RuntimeError> {
         match window {
             0 => {
                 for i in self.window_0_top..self.rows {
@@ -272,7 +273,10 @@ impl Screen {
                 }
                 Ok(())
             }
-            _ => Err(RuntimeError::new(ErrorCode::InvalidWindow, format!("ERASE_WINDOW invalid window {}", window))), // This is an error
+            _ => Err(RuntimeError::new(
+                ErrorCode::InvalidWindow,
+                format!("ERASE_WINDOW invalid window {}", window),
+            )), // This is an error
         }
     }
 
@@ -414,6 +418,10 @@ impl Screen {
     pub fn set_style(&mut self, style: u8) -> Result<(), RuntimeError> {
         Ok(self.current_style.set(style))
     }
+
+    pub fn beep(&mut self) {
+        self.terminal.beep()
+    }
 }
 
 pub trait Terminal {
@@ -430,4 +438,6 @@ pub trait Terminal {
     fn read_key(&mut self, timeout: u128) -> Option<u16>;
     fn scroll(&mut self, row: u32);
     fn backspace(&mut self, at: (u32, u32));
+    fn beep(&mut self);
+    fn move_cursor(&mut self, at: (u32, u32));
 }

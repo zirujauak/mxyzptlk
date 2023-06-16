@@ -37,13 +37,11 @@ impl ECTerminal {
 
     fn input_to_u16(&self, input: Input) -> u16 {
         match input {
-            Input::Character(c) => {
-                match c as u8 {
-                    0x0a => 0x0d,
-                    0x7f => 0x08,
-                    _ => c as u16,
-                }
-            }
+            Input::Character(c) => match c as u8 {
+                0x0a => 0x0d,
+                0x7f => 0x08,
+                _ => c as u16,
+            },
             Input::KeyUp => 129,
             Input::KeyDown => 130,
             Input::KeyLeft => 131,
@@ -71,7 +69,8 @@ impl Terminal for ECTerminal {
         let fg = self.as_color(colors.0);
         let bg = self.as_color(colors.1);
         self.easycurses.set_bold(style.is_style(Style::Bold));
-        self.easycurses.set_underline(c != ' ' && style.is_style(Style::Bold));
+        self.easycurses
+            .set_underline(c != ' ' && style.is_style(Style::Bold));
         let colors = if style.is_style(Style::Reverse) {
             colorpair!(bg on fg)
         } else {
@@ -86,6 +85,9 @@ impl Terminal for ECTerminal {
     }
 
     fn read_key(&mut self, timeout: u128) -> Option<u16> {
+        self.easycurses
+            .set_cursor_visibility(CursorVisibility::Visible);
+
         self.easycurses.set_input_mode(InputMode::RawCharacter);
         let mode = if timeout > 0 {
             TimeoutMode::WaitUpTo(timeout as i32)
@@ -95,8 +97,12 @@ impl Terminal for ECTerminal {
         self.easycurses.set_input_timeout(mode);
         if let Some(i) = self.easycurses.get_input() {
             trace!(target: "app::trace", "curses input: {:?}", i);
+            self.easycurses
+                .set_cursor_visibility(CursorVisibility::Invisible);
             Some(self.input_to_u16(i))
         } else {
+            self.easycurses
+                .set_cursor_visibility(CursorVisibility::Invisible);
             None
         }
     }
@@ -110,5 +116,14 @@ impl Terminal for ECTerminal {
     fn backspace(&mut self, at: (u32, u32)) {
         self.easycurses.move_rc(at.0 as i32 - 1, at.1 as i32 - 2);
         self.easycurses.delete_char();
+        self.easycurses.move_rc(at.0 as i32 - 1, at.1 as i32 - 3);
+    }
+
+    fn beep(&mut self) {
+        self.easycurses.beep()
+    }
+
+    fn move_cursor(&mut self, at: (u32, u32)) {
+        self.easycurses.move_rc(at.0 as i32 - 1, at.1 as i32 - 1);
     }
 }

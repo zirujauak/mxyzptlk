@@ -248,10 +248,12 @@ impl State {
     // RNG
     pub fn random(&mut self, range: u16) -> u16 {
         let v = self.rng.random(range);
+        trace!(target: "app::trace", "Random {} -> {}", range, v);
         v
     }
 
     pub fn seed(&mut self, seed: u16) {
+        trace!(target: "app::trace", "Seed random {}", seed);
         self.rng.seed(seed)
     }
 
@@ -353,6 +355,10 @@ impl State {
         Ok(self.screen.buffered(mode != 0))
     }
 
+    pub fn beep(&mut self) -> Result<(), RuntimeError> {
+        Ok(self.screen.beep())
+    }
+    
     // Input
     pub fn read_key(&mut self, timeout: u16) -> Result<Option<u16>, RuntimeError> {
         let key = self.screen.read_key(timeout as u128 * 1000);
