@@ -1,4 +1,4 @@
-use crate::executor::state::State;
+use crate::state::State;
 
 use super::super::*;
 
@@ -19,28 +19,28 @@ pub struct Stks {
 impl Stks {
     pub fn from_state(state: &State) -> Stks {
         let mut stks = Vec::new();
-        for f in &state.frames {
-            trace!("Frame: {}", f.local_variables.len());
-            let flags = match f.result {
+        for f in state.frame_stack().frames() {
+            trace!("Frame: {}", f.local_variables().len());
+            let flags = match f.result() {
                 Some(_) => 0x00,
                 None => 0x10,
-            } | f.local_variables.len();
+            } | f.local_variables().len();
             let mut arguments = 0;
-            for _ in 0..f.argument_count {
+            for _ in 0..f.argument_count() {
                 arguments = (arguments << 1) + 1;
             }
 
             stks.push(StackFrame {
-                return_address: f.return_address as u32,
+                return_address: f.return_address() as u32,
                 flags: flags as u8,
-                result_variable: match f.result {
-                    Some(v) => v,
+                result_variable: match f.result() {
+                    Some(v) => v.variable(),
                     None => 0,
                 },
                 arguments,
-                stack_size: f.stack.len() as u16,
-                local_variables: f.local_variables.clone(),
-                stack: f.stack.clone(),
+                stack_size: f.stack().len() as u16,
+                local_variables: f.local_variables().clone(),
+                stack: f.stack().clone(),
             });
         }
 

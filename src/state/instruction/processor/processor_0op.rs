@@ -1,4 +1,6 @@
 use super::*;
+use crate::iff::quetzal;
+use crate::iff::quetzal::Quetzal;
 use crate::state::State;
 use crate::state::text;
 
@@ -41,7 +43,7 @@ pub fn print_ret(state: &mut State, instruction: &Instruction) -> Result<usize, 
 }
 
 pub fn save(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-
+    let quetzal = Quetzal::from_state(state);
     todo!()
 }
 

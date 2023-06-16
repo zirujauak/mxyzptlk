@@ -1,4 +1,7 @@
-use crate::executor::{state::State, header};
+use crate::state::{
+    header::{self, HeaderField},
+    State,
+};
 
 use super::super::*;
 
@@ -10,8 +13,15 @@ impl CMem {
     pub fn from_state(state: &State) -> CMem {
         let mut data: Vec<u8> = Vec::new();
         let mut run_length = 0;
-        for i in 0..header::static_memory_base(state) as usize {
-            let b = state.byte_value(i) ^ state.pristine_memory_map[i];
+        let dynamic_len = header::field_word(state.memory(), HeaderField::StaticMark)
+            .expect("Error reading static memory mark from header")
+            as usize;
+        let dynamic = state.dynamic();
+        for i in 0..dynamic_len {
+            let b = state
+                .read_byte(i)
+                .expect("Error reading byte from dynamic memory")
+                ^ dynamic[i];
             if b == 0 {
                 if run_length == 255 {
                     data.push(0);
@@ -35,23 +45,21 @@ impl CMem {
             data.push(run_length - 1);
         }
 
-        CMem {
-            data
-        }
+        CMem { data }
     }
 
     pub fn from_vec(chunk: Vec<u8>) -> CMem {
         CMem {
-            data: chunk.clone()
+            data: chunk.clone(),
         }
     }
 
     pub fn from_chunk(chunk: Chunk) -> CMem {
         CMem {
-            data: chunk.data.clone()
+            data: chunk.data.clone(),
         }
     }
-    
+
     pub fn to_chunk(&self) -> Vec<u8> {
         chunk("CMem", &mut self.data.clone())
     }
@@ -62,6 +70,7 @@ impl CMem {
         let mut iter = self.data.iter();
         let mut done = false;
 
+        let dynamic = state.dynamic();
         while !done {
             let b = iter.next();
             match b {
@@ -70,21 +79,25 @@ impl CMem {
                     if *b == 0 {
                         let l = *iter.next().unwrap() as usize;
                         for j in 0..l + 1 {
-                            data.push(state.pristine_memory_map[i + j]);
+                            data.push(dynamic[i + j]);
                         }
                     } else {
-                        data.push(b ^ state.pristine_memory_map[i])
+                        data.push(b ^ dynamic[i])
                     }
-                },
+                }
                 None => done = true,
             }
         }
 
         // FLAGS2 in the header is preserved from the current play state
-        data[0x10] = state.byte_value(0x10);
-        data[0x11] = state.byte_value(0x11);
+        data[0x10] = state.read_byte(0x10).expect("Error reading from header");
+        data[0x11] = state.read_byte(0x11).expect("Error reading from header");
         trace!("Uncompressed CMem: {} bytes", data.len());
-        trace!("Header base of static: {}", header::static_memory_base(state));
+        trace!(
+            "Header base of static: {}",
+            header::field_word(state.memory(), HeaderField::StaticMark)
+                .expect("Error reading from header")
+        );
         data
     }
 }

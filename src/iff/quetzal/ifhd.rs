@@ -1,4 +1,5 @@
-use crate::executor::{state::State, header};
+use crate::state::{header::{self, HeaderField}, State};
+
 use super::super::*;
 
 pub struct IFhd {
@@ -10,11 +11,20 @@ pub struct IFhd {
 
 impl IFhd {
     pub fn from_state(state: &State, address: usize) -> IFhd {
+        let release_number = header::field_word(state.memory(), HeaderField::Release)
+            .expect("Error reading from header");
+        let mut serial_number = Vec::new();
+        for i in 0..6 {
+            serial_number.push(state.read_byte(HeaderField::Serial as usize + i).expect("Error reading from header"));
+        }
+        let checksum = header::field_word(state.memory(), HeaderField::Checksum).expect("Error reading from header");
+        let pc = address as u32 & 0xFFFFFF;
+
         IFhd {
-            release_number: header::release_number(state),
-            serial_number: header::serial_number(state),
-            checksum: header::checksum(state),
-            pc: address as u32 & 0xFFFFFF,
+            release_number,
+            serial_number,
+            checksum,
+            pc,
         }
     }
 
@@ -28,7 +38,7 @@ impl IFhd {
             release_number,
             serial_number,
             checksum,
-            pc
+            pc,
         }
     }
 

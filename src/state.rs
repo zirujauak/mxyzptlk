@@ -138,6 +138,10 @@ impl State {
         &self.memory
     }
 
+    pub fn frame_stack(&self) -> &FrameStack {
+        &self.frame_stack
+    }
+    
     pub fn dynamic(&self) -> &Vec<u8> {
         &self.dynamic
     }

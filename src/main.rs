@@ -8,7 +8,7 @@ use std::io::prelude::*;
 
 pub mod error;
 pub mod state;
-//pub mod iff;
+pub mod iff;
 
 //use crate::iff::Chunk;
 use crate::log::*;
