@@ -8,10 +8,13 @@ mod rng;
 mod screen;
 mod text;
 
+use std::fs;
 use std::fs::File;
 use std::io::Read;
+use std::io::Write;
 
 use crate::error::*;
+use crate::iff::quetzal::Quetzal;
 use frame_stack::*;
 use header::*;
 use instruction::*;
@@ -21,6 +24,13 @@ use rng::chacha_rng::*;
 use rng::RNG;
 use screen::buffer::CellStyle;
 use screen::*;
+
+use self::frame_stack::frame::Frame;
+
+pub struct Stream3 {
+    table: usize,
+    buffer: Vec<u16>,
+}
 
 pub struct State {
     name: String,
@@ -32,8 +42,7 @@ pub struct State {
     frame_stack: FrameStack,
     rng: Box<dyn RNG>,
     output_streams: u8,
-    stream_3_table: usize,
-    stream_3_buffer: Vec<u8>,
+    stream_3: Vec<Stream3>,
 }
 
 impl State {
@@ -71,8 +80,7 @@ impl State {
                 frame_stack,
                 rng: Box::new(rng),
                 output_streams: 0x1,
-                stream_3_table: 0,
-                stream_3_buffer: Vec::new(),
+                stream_3: Vec::new(),
             })
         }
     }
@@ -131,6 +139,8 @@ impl State {
             header::clear_flag2(&mut self.memory, Flags2::RequestUndo)?;
         }
 
+        self.screen.reset();
+        
         Ok(())
     }
 
@@ -141,7 +151,7 @@ impl State {
     pub fn frame_stack(&self) -> &FrameStack {
         &self.frame_stack
     }
-    
+
     pub fn dynamic(&self) -> &Vec<u8> {
         &self.dynamic
     }
@@ -267,12 +277,10 @@ impl State {
     // RNG
     pub fn random(&mut self, range: u16) -> u16 {
         let v = self.rng.random(range);
-        trace!(target: "app::trace", "Random {} -> {}", range, v);
         v
     }
 
     pub fn seed(&mut self, seed: u16) {
-        trace!(target: "app::trace", "Seed random {}", seed);
         self.rng.seed(seed)
     }
 
@@ -283,33 +291,42 @@ impl State {
     // Screen
     pub fn output_stream(&mut self, stream: i16, table: Option<usize>) -> Result<(), RuntimeError> {
         if stream > 0 {
-            let mask = (stream as u8) & 0xF;
+            let mask = (1 << stream - 1) & 0xF;
             self.output_streams = self.output_streams | mask;
             if stream == 3 {
-                self.stream_3_table = table.unwrap();
-                self.stream_3_buffer.clear();
+                self.stream_3.push(Stream3 { table: table.unwrap(), buffer: Vec::new() });
+            }
+        } else if stream == -3 {
+            let stream3 = self.stream_3.pop().unwrap();
+            let len = stream3.buffer.len();
+            self.write_word(stream3.table, len as u16)?;
+            for i in 0..len {
+                self.write_byte(stream3.table + 2 + i, stream3.buffer[i] as u8)?;
+            }
+
+            if self.stream_3.is_empty() {
+                self.output_streams = self.output_streams & 0xb;
             }
         } else if stream < 0 {
-            let mask = !((stream as u8) & 0xF);
+            let mask = !(1 << (stream.abs() - 1 & 0xF));
             self.output_streams = self.output_streams & mask;
-            if stream == -3 {
-                let len = self.stream_3_buffer.len() as u8;
-                self.write_byte(self.stream_3_table, len)?;
-
-                for i in 0..self.stream_3_buffer.len() {
-                    self.write_byte(self.stream_3_table + i + 1, self.stream_3_buffer[i])?;
-                }
-            }
         }
 
         Ok(())
     }
+
     pub fn print(&mut self, text: &Vec<u16>) -> Result<(), RuntimeError> {
-        // Only print to the screen if stream 3 is not selected and stream 1 _is_
+        // Only print to the screen if stream 3 is not selected and stream 1
         if self.output_streams & 0x5 == 0x1 {
             self.screen.print(text);
         }
 
+        if self.output_streams & 0x4 == 0x4 {
+            let stream3 = self.stream_3.last_mut().unwrap();
+            for c in text {
+                stream3.buffer.push(*c  );
+            };
+        }
         Ok(())
     }
 
@@ -359,6 +376,7 @@ impl State {
         style.set(Style::Reverse as u8);
 
         self.screen.print_at(&status_line, (1, 1), &style);
+        self.screen.reset_cursor();
         Ok(())
     }
 
@@ -385,16 +403,99 @@ impl State {
         Ok(key)
     }
 
-    pub fn prompt(&mut self, prompt: &str, suffix: &str) -> Result<Vec<u8>, RuntimeError> {
+    // Save/restore
+    pub fn prompt_and_write(
+        &mut self,
+        prompt: &str,
+        suffix: &str,
+        data: &Vec<u8>,
+    ) -> Result<(), RuntimeError> {
+        let filename = format!("{}.{}", self.name, suffix);
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(filename)
+            .unwrap();
+
+        match file.write_all(data) {
+            Ok(_) => (),
+            Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+        };
+        match file.flush() {
+            Ok(_) => Ok(()),
+            Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+        }
+    }
+
+    pub fn prompt_and_read(&mut self, prompt: &str, suffix: &str) -> Result<Vec<u8>, RuntimeError> {
         let filename = format!("{}.{}", self.name, suffix);
         let mut data = Vec::new();
         match File::open(filename) {
             Ok(mut file) => match file.read_to_end(&mut data) {
                 Ok(_) => Ok(data),
-                Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e)))
+                Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
             },
-            Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e)))
+            Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
         }
+    }
+
+    pub fn restore(&mut self, quetzal: Quetzal) -> Result<usize, RuntimeError> {
+        let mut fs = FrameStack::new(0);
+        for stackframe in quetzal.stks.stks {
+            let result = if stackframe.flags & 0x10 == 0x10 {
+                Some(StoreResult::new(0, stackframe.result_variable))
+            } else {
+                None
+            };
+            let f = Frame::new(
+                0,
+                0,
+                &stackframe.local_variables,
+                stackframe.flags & 0xF,
+                &stackframe.stack,
+                result,
+                stackframe.return_address as usize,
+            );
+            fs.frames_mut().push(f);
+        }
+
+        self.frame_stack = fs;
+
+        let dynamic = if let Some(cmem) = quetzal.cmem {
+            cmem.to_vec(&self)
+        } else if let Some(umem) = quetzal.umem {
+            umem.data
+        } else {
+            return Err(RuntimeError::new(
+                ErrorCode::System,
+                "No CMEM or UMEM chunk".to_string(),
+            ));
+        };
+        for i in 0..dynamic.len() {
+            if i != 0x10 && i != 0x11 {
+                self.memory.write_byte(i, dynamic[i])?;
+            }
+        }
+
+        // Reset stream 3 
+        self.stream_3 = Vec::new();
+
+        Ok(quetzal.ifhd.pc as usize)
+    }
+
+    pub fn restart(&mut self) -> Result<usize, RuntimeError> {
+        let f1 = self.read_byte(0x10)? & 0x3;
+        for i in 0..self.dynamic.len() {
+            let b = self.dynamic[i];
+            self.write_byte(i, b)?;
+        }
+        self.write_byte(0x10, self.read_byte(0x10)? | f1)?;
+        self.initialize()?;
+        self.frame_stack =
+            FrameStack::new(header::field_word(&self.memory(), HeaderField::InitialPC)? as usize);
+
+        Ok(self.frame_stack.pc()?)
     }
 
     // pub fn print_char(&mut self, char: u16) -> Result<(),RuntimeError> {
@@ -434,6 +535,9 @@ impl State {
             let pc = self.frame_stack.pc()?;
             let instruction = decoder::decode_instruction(&self.memory, pc)?;
             let pc = processor::dispatch(self, &instruction)?;
+            if pc == 0 {
+                return Ok(())
+            }
             self.set_pc(pc)?;
             n = n + 1;
         }

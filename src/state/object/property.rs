@@ -188,19 +188,11 @@ pub fn next_property(state: &State, object: usize, property: u8) -> Result<u8, R
         }
     } else {
         let prop_data_addr = property_data_address(state, object, property)?;
-        trace!(
-            "Object {} property {} data addr: ${:04x}",
-            object,
-            property,
-            prop_data_addr
-        );
         if prop_data_addr == 0 {
             Ok(0)
         } else {
             let prop_len = size(state, prop_data_addr)?;
-            trace!("Property length: {}", prop_len);
             let next_prop = state.read_byte(prop_data_addr + prop_len)?;
-            trace!("Next prop byte: {:02x}", next_prop);
             if version < 4 {
                 Ok(next_prop & 0x1f)
             } else {
@@ -218,7 +210,7 @@ pub fn set_property(
 ) -> Result<(), RuntimeError> {
     let property_address = address(state, object, property)?;
     if property_address == 0 {
-        todo!("Property does not exist");
+        Err(RuntimeError::new(ErrorCode::ObjectTreeState, "Can't get properyt address for property 0".to_string()))
     } else {
         let property_size = size(state, property_address)?;
         let property_data = match header::field_byte(state.memory(), HeaderField::Version)? {

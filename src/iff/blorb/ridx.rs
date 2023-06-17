@@ -12,8 +12,6 @@ impl Index {
         let number = vec_to_u32(&v, offset + 4, 4);
         let start = vec_to_u32(&v, offset + 8, 4);
 
-        trace!("Resource Index: {} #{} @ {:#08x}", usage, number, start);
-
         Index {
             usage,
             number,
@@ -34,8 +32,6 @@ impl RIdx {
             let index = Index::from_vec(&chunk.data, 4 + (12 * i));
             entries.push(index);
         }   
-
-        trace!("RIdx: {} entries", n);
 
         RIdx {
             entries

@@ -426,7 +426,7 @@ pub fn sound_effect(
 
     match operands[0] {
         1 => state.beep()?,
-        2 => { state.beep(); state.beep()? },
+        2 => { state.beep()?; state.beep()? },
         _ => trace!(target: "app::trace", "SOUND_EFFECT not fully implemented"),
     }
 
@@ -459,44 +459,44 @@ pub fn read_char(state: &mut State, instruction: &Instruction) -> Result<usize, 
     Ok(instruction.next_address())
 }
 
-// pub fn scan_table(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn scan_table(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     let scan = if operands.len() == 4 && operands[3] & 0x80 == 0 {
-//         1
-//     } else {
-//         2
-//     };
+    let scan = if operands.len() == 4 && operands[3] & 0x80 == 0 {
+        1
+    } else {
+        2
+    };
 
-//     let entry_size = if operands.len() == 4 {
-//         operands[3] & 0x3f
-//     } else {
-//         2
-//     } as usize;
+    let entry_size = if operands.len() == 4 {
+        operands[3] & 0x3f
+    } else {
+        2
+    } as usize;
 
-//     let len = operands[2] as usize;
-//     let mut condition = false;
-//     for i in 0..len {
-//         let address = operands[1] as usize + (i * entry_size);
-//         let value = if scan == 2 {
-//             context.read_word(address)?
-//         } else {
-//             context.read_byte(address)? as u16
-//         };
+    let len = operands[2] as usize;
+    let mut condition = false;
+    for i in 0..len {
+        let address = operands[1] as usize + (i * entry_size);
+        let value = if scan == 2 {
+            state.read_word(address)?
+        } else {
+            state.read_byte(address)? as u16
+        };
 
-//         if value == operands[0] {
-//             store_result(context, instruction, address as u16);
-//             condition = true;
-//             break;
-//         }
-//     }
+        if value == operands[0] {
+            store_result(state, instruction, address as u16)?;
+            condition = true;
+            break;
+        }
+    }
 
-//     if condition == false {
-//         store_result(context, instruction, 0);
-//     }
+    if condition == false {
+        store_result(state, instruction, 0)?;
+    }
 
-//     branch(context, instruction, condition)
-// }
+    branch(state, instruction, condition)
+}
 
 // pub fn not(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;

@@ -92,14 +92,12 @@ impl Chunk {
                 f.write_all(&id_as_vec(&fr)).unwrap();
                 f.write_all(&u32_to_vec(length, 4)).unwrap();
                 let d = &vec[offset + 8..offset + 8 + (length as usize)];
-                trace!("d: {} bytes", d.len());
                 f.write_all(d).unwrap();
                 f.flush().unwrap();
             }
             None => (),
         }
 
-        trace!("IFF Chunk: {:?}/{} {:#05x}", form, id, length);
         let data = vec[offset + 8..offset + 8 + length as usize].to_vec();
 
         Chunk {
@@ -153,16 +151,16 @@ pub struct IFF {
 }
 
 impl IFF {
-    pub fn from_vec(v: Vec<u8>) -> IFF {
-        let form = vec_to_id(&v, 0);
-        let length = vec_to_u32(&v, 4, 4);
-        let sub_form = vec_to_id(&v, 8);
+    pub fn from_vec(v: &Vec<u8>) -> IFF {
+        let form = vec_to_id(v, 0);
+        let length = vec_to_u32(v, 4, 4);
+        let sub_form = vec_to_id(v, 8);
         let mut chunks = Vec::new();
 
         let mut offset = 12;
         let len = v.len();
         while offset < len - 1 {
-            let chunk = Chunk::from_vec(&v, offset);
+            let chunk = Chunk::from_vec(v, offset);
             let l = chunk.data.len();
             chunks.push(chunk);
             offset = offset + 8 + l;

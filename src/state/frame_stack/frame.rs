@@ -4,6 +4,7 @@ use crate::state::header::*;
 use crate::state::instruction::StoreResult;
 use crate::state::memory::*;
 
+#[derive(Debug)]
 pub struct Frame {
     address: usize,
     pc: usize,

@@ -1,14 +1,13 @@
 use super::*;
-use crate::iff::quetzal;
 use crate::iff::quetzal::Quetzal;
-use crate::state::State;
 use crate::state::text;
+use crate::state::State;
 
-pub fn rtrue(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+pub fn rtrue(state: &mut State, _instruction: &Instruction) -> Result<usize, RuntimeError> {
     state.return_routine(1)
 }
 
-pub fn rfalse(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+pub fn rfalse(state: &mut State, _instruction: &Instruction) -> Result<usize, RuntimeError> {
     state.return_routine(0)
 }
 
@@ -43,19 +42,49 @@ pub fn print_ret(state: &mut State, instruction: &Instruction) -> Result<usize, 
 }
 
 pub fn save(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let quetzal = Quetzal::from_state(state);
-    todo!()
+    let version = header::field_byte(state.memory(), HeaderField::Version)?;
+    let quetzal = Quetzal::from_state(
+        state,
+        if version == 3 {
+            instruction.branch().unwrap().address
+        } else {
+            instruction.store().unwrap().address
+        },
+    );
+    state.prompt_and_write("Save to: ", "ifzs", &quetzal.to_vec())?;
+
+    if version == 3 {
+        branch(state, instruction, true)
+    } else {
+        store_result(state, instruction, 1)?;
+        Ok(instruction.next_address())
+    }
 }
 
 pub fn restore(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    todo!()
+    let data = state.prompt_and_read("Restore from: ", "ifzs")?;
+    let quetzal = Quetzal::from_vec(&data).unwrap();
+    match state.restore(quetzal) {
+        Ok(address) => {
+            let i = decoder::decode_instruction(state.memory(), address - 1)?;
+            if header::field_byte(state.memory(), HeaderField::Version)? == 3 {
+                // V3 is a branch
+                branch(state, &i, true)
+            } else {
+                // V4 is a store
+                store_result(state, instruction, 2)?;
+                Ok(i.next_address())
+            }
+        }
+        Err(_) => branch(state, instruction, false),
+    }
 }
 
-// pub fn restart(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     todo!()
-// }
+pub fn restart(state: &mut State, _instruction: &Instruction) -> Result<usize, RuntimeError> {
+    state.restart()
+}
 
-pub fn ret_popped(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+pub fn ret_popped(state: &mut State, _instruction: &Instruction) -> Result<usize, RuntimeError> {
     let value = state.frame_stack.current_frame_mut()?.pop()?;
     state.return_routine(value)
 }
@@ -69,11 +98,9 @@ pub fn ret_popped(state: &mut State, instruction: &Instruction) -> Result<usize,
 //     todo!()
 // }
 
-// pub fn quit(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     pancurses::reset_shell_mode();
-//     pancurses::curs_set(1);
-//     process::exit(0);
-// }
+pub fn quit(state: &mut State, _instruction: &Instruction) -> Result<usize, RuntimeError> {
+    Ok(0)
+}
 
 pub fn new_line(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     state.new_line()?;
@@ -81,10 +108,7 @@ pub fn new_line(state: &mut State, instruction: &Instruction) -> Result<usize, R
     Ok(instruction.next_address())
 }
 
-pub fn show_status(
-    state: &mut State,
-    instruction: &Instruction,
-) -> Result<usize, RuntimeError> {
+pub fn show_status(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     state.status_line()?;
     Ok(instruction.next_address())
 }

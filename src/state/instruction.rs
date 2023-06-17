@@ -52,7 +52,7 @@ impl Operand {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct StoreResult {
     address: usize,
     variable: u8,

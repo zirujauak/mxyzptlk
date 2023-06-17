@@ -50,9 +50,9 @@ pub struct Buffer {
 impl Buffer {
     pub fn new(rows: u32, columns: u32, colors: (Color, Color)) -> Buffer{
         let mut buffer: Vec<Vec<BufferCell>> = Vec::new();
-        for i in 0..rows {
+        for _ in 0..rows {
             let mut r = Vec::new();
-            for j in 0..columns {
+            for _ in 0..columns {
                 r.push(BufferCell::new(' ' as u16, colors, CellStyle::new()));
             }
             buffer.push(r);

@@ -19,7 +19,7 @@ pub struct Blorb {
 
 impl Blorb {
     pub fn from_vec(data: Vec<u8>) -> Option<Blorb> {
-        let iff = IFF::from_vec(data);
+        let iff = IFF::from_vec(&data);
 
         if iff.form != "FORM" || iff.sub_form != "IFRS" {
             error!(
@@ -44,8 +44,6 @@ impl Blorb {
             }
         }
 
-        trace!("Blorb: {} resources, {} sounds, {} loops", ridx.as_ref().unwrap().entries.len(), snds.len(), sloop.as_ref().unwrap().entries.len());
-
         Some(Blorb {
             ridx: ridx.unwrap(),
             ifhd,
@@ -65,11 +63,10 @@ pub fn rebuild_blorb(name: String) {
     let mut sample_index = 0;
     match input {
         Ok(mut f) => {
-            trace!("Rebuilding blorb {}.blorb -> {}-new.blorb", name, name);
             let mut buffer = Vec::new();
             match f.read_to_end(&mut buffer) {
                 Ok(_) => {
-                    let iff = IFF::from_vec(buffer);
+                    let iff = IFF::from_vec(&buffer);
 
                     let mut new_iff = Vec::new();
 
@@ -95,7 +92,6 @@ pub fn rebuild_blorb(name: String) {
                             "AIFF" => {
                                 let mut aiff = Vec::new();
                                 let sample_file = format!("sample-{}.ogg", sample_iter.next().unwrap());
-                                trace!("Loading {}", sample_file);
                                 File::open(sample_file)
                                     .unwrap()
                                     .read_to_end(&mut aiff)

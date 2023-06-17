@@ -174,14 +174,14 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x3 => processor_0op::print_ret(state, instruction),
                 0x5 => processor_0op::save(state, instruction),
                 0x6 => processor_0op::restore(state, instruction),
-                //             0x7 => processor_0op::restart(context, instruction),
+                0x7 => processor_0op::restart(state, instruction),
                 0x8 => processor_0op::ret_popped(state, instruction),
                 //             0x9 => if context.version() < 5 {
                 //                 processor_0op::pop(context, instruction)
                 //             } else {
                 //                 processor_0op::catch(context, instruction)
                 //             },
-                //             0xa => processor_0op::quit(context, instruction),
+                0xa => processor_0op::quit(state, instruction),
                 0xb => processor_0op::new_line(state, instruction),
                 0xc => processor_0op::show_status(state, instruction),
                 //             0xd => processor_0op::verify(context, instruction),
@@ -276,7 +276,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 //             0x14 => processor_var::input_stream(context, instruction),
                 0x15 => processor_var::sound_effect(state, instruction),
                 0x16 => processor_var::read_char(state, instruction),
-                //             0x17 => processor_var::scan_table(context, instruction),
+                0x17 => processor_var::scan_table(state, instruction),
                 //             0x18 => processor_var::not(context, instruction),
                 0x19 => processor_var::call_vn(state, instruction),
                 //             0x1a => processor_var::call_vn2(context, instruction),
@@ -290,16 +290,6 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                     format!("Unimplemented instruction: {}", instruction.opcode()),
                 )),
             },
-            _ => Err(RuntimeError::new(
-                ErrorCode::UnimplementedInstruction,
-                format!("Unimplemented instruction: {}", instruction.opcode()),
-            )),
         },
-        //         }
-        //     }
-        _ => Err(RuntimeError::new(
-            ErrorCode::UnimplementedInstruction,
-            format!("Unimplemented instruction: {}", instruction.opcode()),
-        )),
     }
 }

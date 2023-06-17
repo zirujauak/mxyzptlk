@@ -1,4 +1,4 @@
-mod frame;
+pub mod frame;
 
 use crate::error::*;
 use crate::state::header;
@@ -24,6 +24,10 @@ impl FrameStack {
         &self.frames
     }
 
+    pub fn frames_mut(&mut self) -> &mut Vec<Frame> {
+        &mut self.frames
+    }
+    
     pub fn pop_frame(&mut self) -> Result<Frame, RuntimeError> {
         if let Some(f) = self.frames.pop() {
             Ok(f)

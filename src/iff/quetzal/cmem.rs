@@ -65,7 +65,6 @@ impl CMem {
     }
 
     pub fn to_vec(&self, state: &State) -> Vec<u8> {
-        trace!("CMem.to_vec(..)");
         let mut data = Vec::new();
         let mut iter = self.data.iter();
         let mut done = false;
@@ -92,12 +91,6 @@ impl CMem {
         // FLAGS2 in the header is preserved from the current play state
         data[0x10] = state.read_byte(0x10).expect("Error reading from header");
         data[0x11] = state.read_byte(0x11).expect("Error reading from header");
-        trace!("Uncompressed CMem: {} bytes", data.len());
-        trace!(
-            "Header base of static: {}",
-            header::field_word(state.memory(), HeaderField::StaticMark)
-                .expect("Error reading from header")
-        );
         data
     }
 }

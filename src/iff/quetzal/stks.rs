@@ -20,7 +20,6 @@ impl Stks {
     pub fn from_state(state: &State) -> Stks {
         let mut stks = Vec::new();
         for f in state.frame_stack().frames() {
-            trace!("Frame: {}", f.local_variables().len());
             let flags = match f.result() {
                 Some(_) => 0x00,
                 None => 0x10,
@@ -51,20 +50,13 @@ impl Stks {
         let mut position = 0;
         let mut stks = Vec::new();
         while chunk.len() - position > 1 {
-            trace!("Reading frame from {} [{}]", position, chunk.len());
             let return_address = vec_as_usize(chunk[position..position + 3].to_vec(), 3) as u32;
             let flags = chunk[position + 3];
             let result_variable = chunk[position + 4];
             let arguments = chunk[position + 5];
 
-            trace!("Return address: {:#06x}", return_address);
-            trace!("Flags: {:#08b}", flags);
-            trace!("Result variable: {}", result_variable);
-            trace!("Arguments: {:#08b}", arguments);
-
             position = position + 6;
             let stack_size = vec_as_usize(chunk[position..position + 2].to_vec(), 2) as u16;
-            trace!("Stack size: {}", stack_size);
             position = position + 2;
 
             let mut local_variables = Vec::new();
@@ -72,16 +64,13 @@ impl Stks {
                 let offset = position + (i * 2);
                 local_variables.push(vec_as_usize(chunk[offset..offset + 2].to_vec(), 2) as u16);
             }
-            trace!("Local variable count: {}", local_variables.len());
             position = position + (local_variables.len() * 2);
 
-            trace!("Stack data @ {}", position);
             let mut stack = Vec::new();
             for i in 0..stack_size as usize {
                 let offset = position + (i * 2);
                 stack.push(vec_as_usize(chunk[offset..offset + 2].to_vec(), 2) as u16)
             }
-            trace!("Stack count: {}", stack.len());
             position = position + (stack_size as usize * 2);
 
             stks.push(StackFrame {
@@ -136,8 +125,6 @@ impl Stks {
                 stack_size,
                 stack,
             });
-
-            trace!("Stack frame {}: R: {:#05x}, F: {:#08b}, Rv: {:#02x}, A: {:#08b}, Lv: {}, St: {}", stks.len(), return_address, flags, result_variable, arguments, lv, st);
         }
         Stks { stks }
     }

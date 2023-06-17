@@ -25,8 +25,8 @@ impl Quetzal {
         Quetzal { ifhd, umem: None, cmem: Some(cmem), stks }
     }
 
-    pub fn from_vec(data: Vec<u8>) -> Option<Quetzal> {
-        let iff = IFF::from_vec(data);
+    pub fn from_vec(data: &Vec<u8>) -> Option<Quetzal> {
+        let iff = IFF::from_vec(&data);
 
         if iff.form != "FORM" || iff.sub_form != "IFZS" {
             error!("Save file form and/or sub-form are incorrect: {}/{}", iff.form, iff.sub_form);

@@ -96,7 +96,6 @@ impl Terminal for ECTerminal {
         };
         self.easycurses.set_input_timeout(mode);
         if let Some(i) = self.easycurses.get_input() {
-            trace!(target: "app::trace", "curses input: {:?}", i);
             self.easycurses
                 .set_cursor_visibility(CursorVisibility::Invisible);
             Some(self.input_to_u16(i))
@@ -108,7 +107,6 @@ impl Terminal for ECTerminal {
     }
 
     fn scroll(&mut self, row: u32) {
-        trace!(target: "app::trace", "Scroll up from row {}", row);
         self.easycurses.move_rc(row as i32 - 1, 0);
         self.easycurses.delete_line();
     }
@@ -125,5 +123,9 @@ impl Terminal for ECTerminal {
 
     fn move_cursor(&mut self, at: (u32, u32)) {
         self.easycurses.move_rc(at.0 as i32 - 1, at.1 as i32 - 1);
+    }
+
+    fn reset(&mut self) {
+        self.easycurses.clear();
     }
 }

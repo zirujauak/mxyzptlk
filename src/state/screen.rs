@@ -182,8 +182,6 @@ impl Screen {
                     }
                 }
             }
-
-            trace!(target: "app::trace", "Split window: 0 {}-, 1 {}-{}", self.window_0_top, self.window_1_top.unwrap(), self.window_1_bottom.unwrap());
         }
     }
 
@@ -406,6 +404,11 @@ impl Screen {
     }
 
     pub fn read_key(&mut self, timeout: u128) -> Option<u16> {
+        if self.selected_window == 0 {
+            self.terminal.move_cursor(self.cursor_0);
+        } else {
+            self.terminal.move_cursor(self.cursor_1.unwrap());
+        }
         self.terminal.read_key(timeout)
     }
 
@@ -421,6 +424,18 @@ impl Screen {
 
     pub fn beep(&mut self) {
         self.terminal.beep()
+    }
+
+    pub fn reset_cursor(&mut self) {
+        if self.selected_window == 0 {
+            self.terminal.move_cursor(self.cursor_0);
+        } else {
+            self.terminal.move_cursor(self.cursor_1.unwrap());
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.terminal.reset();
     }
 }
 
@@ -440,4 +455,5 @@ pub trait Terminal {
     fn backspace(&mut self, at: (u32, u32));
     fn beep(&mut self);
     fn move_cursor(&mut self, at: (u32, u32));
+    fn reset(&mut self);
 }

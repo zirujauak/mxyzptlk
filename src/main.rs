@@ -5,6 +5,7 @@ extern crate log;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
+use std::panic;
 
 pub mod error;
 pub mod state;
@@ -35,6 +36,11 @@ fn main() {
     // f.read_to_end(&mut b).unwrap();
     // let form = Chunk::from_vec(&b);
     // trace!(target: "app::trace", "{}", form);
+    let prev = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        trace!(target: "app::trace", "{}", &info);
+        prev(info);
+    }));
 
     match File::open(filename) {
         Ok(mut f) => {
@@ -55,6 +61,9 @@ fn main() {
                         state.read_key(0);
                         panic!("{}", r)
                     }
+
+                    state.print(&"Press any key to exit".as_bytes().iter().map(|x| *x as u16).collect());
+                    state.read_key(0);
                     // let name: Vec<&str> = filename.split(".").collect();
                     // let mut e = Executor::from_vec(name[0].to_string(), buffer);
                     // // blorb::rebuild_blorb(name[0].to_string());

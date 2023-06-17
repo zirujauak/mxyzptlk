@@ -2,7 +2,6 @@ use crate::error::*;
 use crate::state::header;
 use crate::state::header::*;
 use crate::state::instruction::*;
-use crate::state::memory;
 use crate::state::memory::*;
 
 fn operand_type(type_byte: u8, operand_index: u8) -> Option<OperandType> {
@@ -92,17 +91,6 @@ fn operands(
     Ok((address, operands))
 }
 
-fn form(opcode: u8) -> OpcodeForm {
-    match opcode {
-        0xBE => OpcodeForm::Ext,
-        _ => match (opcode >> 6) & 3 {
-            3 => OpcodeForm::Var,
-            2 => OpcodeForm::Short,
-            _ => OpcodeForm::Long,
-        },
-    }
-}
-
 fn result_variable(
     memory: &Memory,
     opcode: &Opcode,
@@ -135,7 +123,7 @@ fn result_variable(
         }
         // Version 4
         0xb5 | 0xb6 => {
-            if version == 3 {
+            if version == 4 {
                 return Ok((
                     address + 1,
                     Some(StoreResult::new(address, memory.read_byte(address)?)),
@@ -145,7 +133,7 @@ fn result_variable(
             }
         }
         // Version > 4
-        0xb9 | 0xe4 | 0xf8 => {
+        0xb9 | 0xe4 => {
             if version > 4 {
                 return Ok((
                     address + 1,
@@ -171,7 +159,6 @@ fn branch_condition(
     memory: &Memory,
     address: usize,
 ) -> Result<(usize, Option<Branch>), RuntimeError> {
-    let version = header::field_byte(memory, HeaderField::Version)?;
     let b = memory.read_byte(address)?;
     let condition = b & 0x80 == 0x80;
     match b & 0x40 {

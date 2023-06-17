@@ -10,8 +10,6 @@ impl Entry {
         let number = vec_to_u32(&v, offset, 4);
         let repeats = vec_to_u32(&v, offset + 4, 4);
 
-        trace!("Loop Entry: Sound #{} repeat {}", number, repeats);
-
         Entry {
             number,
             repeats,
@@ -31,8 +29,6 @@ impl Loop {
             entries.push(index);
         }   
 
-        trace!("Loop: {} entries", entries.len());
-        
         Loop {
             entries
         }

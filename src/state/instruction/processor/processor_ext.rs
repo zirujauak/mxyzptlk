@@ -78,7 +78,7 @@ use super::*;
 // }
 
 pub fn save_undo(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
+    //let operands = operand_values(state, instruction)?;
     store_result(state, instruction, 0xFFFF)?;
     Ok(instruction.next_address())
 }
