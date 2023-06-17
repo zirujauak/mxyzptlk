@@ -23,7 +23,7 @@ fn main() {
     let name: Vec<&str> = filename.split(".").collect();
     let name = name[0].to_string();
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
-    trace!("Start trace log for '{}'", name);
+    trace!(target: "app::trace", "Start trace log for '{}'", name);
     info!(target: "app::frame", "Start frame log for '{}'", name);
     info!(target: "app::instruction", "Start instruction log for '{}'", name);
     info!(target: "app::memory", "Start memory log for '{}'", name);

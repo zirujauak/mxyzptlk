@@ -98,12 +98,13 @@ fn result_variable(
     address: usize,
 ) -> Result<(usize, Option<StoreResult>), RuntimeError> {
     match opcode.form() {
-        OpcodeForm::Ext => {
-            match opcode.opcode() {
-                0x00| 0x01 | 0x09 | 0x0a => Ok((address + 1, Some(StoreResult::new(address, memory.read_byte(address)?)))),
-                _ => Ok((address, None)),
-            }
-        }
+        OpcodeForm::Ext => match opcode.opcode() {
+            0x00 | 0x01 | 0x02 | 0x03 | 0x09 | 0x0a => Ok((
+                address + 1,
+                Some(StoreResult::new(address, memory.read_byte(address)?)),
+            )),
+            _ => Ok((address, None)),
+        },
         _ => match opcode.opcode() {
             // Always store, regardless of version
             0x08 | 0x28 | 0x48 | 0x68 | 0xc8 | 0x09 | 0x29 | 0x49 | 0x69 | 0xc9 | 0x0F | 0x2F

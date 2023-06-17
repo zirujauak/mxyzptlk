@@ -161,6 +161,25 @@ impl State {
         &self.screen
     }
 
+    pub fn checksum(&self) -> Result<u16, RuntimeError> {
+        let mut checksum = 0 as u16;
+        let size = header::field_word(self.memory(), HeaderField::FileLength)? as usize
+            * match header::field_byte(self.memory(), HeaderField::Version)? {
+                1 | 2 | 3 => 2,
+                4 | 5 => 4,
+                6 | 7 | 8 => 8,
+                _ => 0,
+            };
+        for i in 0x40..self.dynamic().len() {
+            checksum = u16::overflowing_add(checksum, self.dynamic[i] as u16).0;
+        }
+
+        for i in self.dynamic.len()..size {
+            checksum = u16::overflowing_add(checksum, self.memory().read_byte(i)? as u16).0;
+        }
+        Ok(checksum)
+    }
+
     // MMU
     pub fn read_byte(&self, address: usize) -> Result<u8, RuntimeError> {
         if address < 0x10000 {

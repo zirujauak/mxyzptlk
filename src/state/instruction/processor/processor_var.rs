@@ -512,19 +512,13 @@ pub fn call_vn(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
     state.call_routine(address, arguments, instruction.store, instruction.next_address())
 }
 
-// pub fn call_vn2(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let address = packed_routine_address(context, operands[0]);
-//     let arguments = &operands[1..].to_vec();
+pub fn call_vn2(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let address = packed_routine_address(state.memory(), operands[0])?;
+    let arguments = &operands[1..].to_vec();
 
-//     call_fn(
-//         context,
-//         address,
-//         instruction.next_address(),
-//         arguments,
-//         None,
-//     )
-// }
+    state.call_routine(address, arguments, None, instruction.next_address())
+}
 
 // pub fn tokenise(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     todo!()

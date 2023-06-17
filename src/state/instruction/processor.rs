@@ -184,7 +184,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0xa => processor_0op::quit(state, instruction),
                 0xb => processor_0op::new_line(state, instruction),
                 0xc => processor_0op::show_status(state, instruction),
-                //             0xd => processor_0op::verify(context, instruction),
+                0xd => processor_0op::verify(state, instruction),
                 0xf => processor_0op::piracy(state, instruction),
                 _ => Err(RuntimeError::new(
                     ErrorCode::UnimplementedInstruction,
@@ -279,7 +279,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x17 => processor_var::scan_table(state, instruction),
                 0x18 => processor_var::not(state, instruction),
                 0x19 => processor_var::call_vn(state, instruction),
-                //             0x1a => processor_var::call_vn2(context, instruction),
+                0x1a => processor_var::call_vn2(state, instruction),
                 //             0x1b => processor_var::tokenise(context, instruction),
                 //             0x1c => processor_var::encode_text(context, instruction),
                 //             0x1d => processor_var::copy_table(context, instruction),

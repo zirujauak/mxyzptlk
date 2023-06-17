@@ -115,7 +115,7 @@ pub fn show_status(state: &mut State, instruction: &Instruction) -> Result<usize
 
 pub fn verify(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let expected = header::field_word(state.memory(), HeaderField::Checksum)?;
-    let checksum = state.checksum();
+    let checksum = state.checksum()?;
 
     branch(state, instruction, expected == checksum)
 }
