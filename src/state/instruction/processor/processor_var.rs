@@ -498,11 +498,11 @@ pub fn scan_table(state: &mut State, instruction: &Instruction) -> Result<usize,
     branch(state, instruction, condition)
 }
 
-// pub fn not(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     store_result(context, instruction, !operands[0])?;
-//     Ok(instruction.next_address())
-// }
+pub fn not(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    store_result(state, instruction, !operands[0])?;
+    Ok(instruction.next_address())
+}
 
 pub fn call_vn(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;

@@ -38,47 +38,47 @@ pub fn restore(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
     }
 }
 
-// pub fn log_shift(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let value = operands[0];
-//     let places = operands[1] as i16;
-//     let new_value = if places < 0 && places > -16 {
-//         u16::overflowing_shr(value, places.abs() as u32).0
-//     } else if places > 0 && places < 16 {
-//         u16::overflowing_shl(value, places as u32).0
-//     } else if places == 0 {
-//         value
-//     } else {
-//         todo!()
-//     };
+pub fn log_shift(
+    state: &mut State,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let value = operands[0];
+    let places = operands[1] as i16;
+    let new_value = if places < 0 && places > -16 {
+        u16::overflowing_shr(value, places.abs() as u32).0
+    } else if places > 0 && places < 16 {
+        u16::overflowing_shl(value, places as u32).0
+    } else if places == 0 {
+        value
+    } else {
+        todo!()
+    };
 
-//     store_result(context, instruction, new_value)?;
-//     Ok(instruction.next_address())
-// }
+    store_result(state, instruction, new_value)?;
+    Ok(instruction.next_address())
+}
 
-// pub fn art_shift(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let value = operands[0] as i16;
-//     let places = operands[1] as i16;
-//     let new_value = if places < 0 && places > -16 {
-//         i16::overflowing_shr(value, places.abs() as u32).0
-//     } else if places > 0 && places < 16 {
-//         i16::overflowing_shl(value, places as u32).0
-//     } else if places == 0 {
-//         value
-//     } else {
-//         todo!()
-//     };
+pub fn art_shift(
+    state: &mut State,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let value = operands[0] as i16;
+    let places = operands[1] as i16;
+    let new_value = if places < 0 && places > -16 {
+        i16::overflowing_shr(value, places.abs() as u32).0
+    } else if places > 0 && places < 16 {
+        i16::overflowing_shl(value, places as u32).0
+    } else if places == 0 {
+        value
+    } else {
+        todo!()
+    };
 
-//     store_result(context, instruction, new_value as u16)?;
-//     Ok(instruction.next_address())
-// }
+    store_result(state, instruction, new_value as u16)?;
+    Ok(instruction.next_address())
+}
 
 // pub fn set_font(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;

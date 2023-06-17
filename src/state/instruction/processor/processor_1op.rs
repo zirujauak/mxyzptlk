@@ -136,12 +136,12 @@ pub fn print_paddr(state: &mut State, instruction: &Instruction) -> Result<usize
     Ok(instruction.next_address())
 }
 
-// pub fn load(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     let value = context.peek_variable(operands[0] as u8)?;
-//     store_result(context, instruction, value)?;
-//     Ok(instruction.next_address())
-// }
+pub fn load(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let value = state.peek_variable(operands[0] as u8)?;
+    store_result(state, instruction, value)?;
+    Ok(instruction.next_address())
+}
 
 pub fn not(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;

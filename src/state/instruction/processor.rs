@@ -135,9 +135,9 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
         OpcodeForm::Ext => match instruction.opcode().instruction() {
             0x00 => processor_ext::save(state, instruction),
             0x01 => processor_ext::restore(state, instruction),
-            //         0x02 => processor_ext::log_shift(context, instruction),
-            //         0x03 => processor_ext::art_shift(context, instruction),
-            //         0x04 => processor_ext::set_font(context, instruction),
+            0x02 => processor_ext::log_shift(state, instruction),
+            0x03 => processor_ext::art_shift(state, instruction),
+            // 0x04 => processor_ext::set_font(context, instruction),
             //         0x05 => processor_ext::draw_picture(context, instruction),
             //         0x06 => processor_ext::picture_data(context, instruction),
             //         0x07 => processor_ext::erase_picture(context, instruction),
@@ -185,7 +185,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0xb => processor_0op::new_line(state, instruction),
                 0xc => processor_0op::show_status(state, instruction),
                 //             0xd => processor_0op::verify(context, instruction),
-                //             0xf => processor_0op::piracy(context, instruction),
+                0xf => processor_0op::piracy(state, instruction),
                 _ => Err(RuntimeError::new(
                     ErrorCode::UnimplementedInstruction,
                     format!("Unimplemented instruction: {}", instruction.opcode()),
@@ -206,7 +206,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0xb => processor_1op::ret(state, instruction),
                 0xc => processor_1op::jump(state, instruction),
                 0xd => processor_1op::print_paddr(state, instruction),
-                //             0xe => processor_1op::load(context, instruction),
+                0xe => processor_1op::load(state, instruction),
                 0xf => {
                     if version < 5 {
                         processor_1op::not(state, instruction)
@@ -277,7 +277,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x15 => processor_var::sound_effect(state, instruction),
                 0x16 => processor_var::read_char(state, instruction),
                 0x17 => processor_var::scan_table(state, instruction),
-                //             0x18 => processor_var::not(context, instruction),
+                0x18 => processor_var::not(state, instruction),
                 0x19 => processor_var::call_vn(state, instruction),
                 //             0x1a => processor_var::call_vn2(context, instruction),
                 //             0x1b => processor_var::tokenise(context, instruction),

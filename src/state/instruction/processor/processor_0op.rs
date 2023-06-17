@@ -113,13 +113,13 @@ pub fn show_status(state: &mut State, instruction: &Instruction) -> Result<usize
     Ok(instruction.next_address())
 }
 
-// pub fn verify(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let expected = header::checksum(context.memory_map());
-//     let checksum = context.checksum();
+pub fn verify(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let expected = header::field_word(state.memory(), HeaderField::Checksum)?;
+    let checksum = state.checksum();
 
-//     branch(context, instruction, expected == checksum)
-// }
+    branch(state, instruction, expected == checksum)
+}
 
-// pub fn piracy(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     branch(context, instruction, true)
-// }
+pub fn piracy(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    branch(state, instruction, true)
+}
