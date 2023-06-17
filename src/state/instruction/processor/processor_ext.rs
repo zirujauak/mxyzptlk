@@ -78,15 +78,32 @@ use super::*;
 // }
 
 pub fn save_undo(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    //let operands = operand_values(state, instruction)?;
-    store_result(state, instruction, 0xFFFF)?;
+    state.save_undo(instruction)?;
+    store_result(state, instruction, 1)?;
     Ok(instruction.next_address())
 }
 
-// pub fn restore_undo(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn restore_undo(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    match state.restore_undo() {
+        Ok(pc) => {
+            trace!(target: "app::trace", "state.restore_undo() -> ${:04x}", pc);
+            if pc == 0 {
+                store_result(state, instruction, 0)?;
+                Ok(instruction.next_address())
+            } else {
+                let i = decoder::decode_instruction(state.memory(), pc - 3)?;
+                trace!(target: "app::target", "{}", i);
+                store_result(state, &i, 2)?;
+                Ok(i.next_address())
+            }
+        }
+        Err(e) => {
+            trace!(target: "app::trace", "{}", e);
+            store_result(state, instruction, 0)?;
+            Ok(instruction.next_address())
+        }
+    }
+}
 
 // pub fn print_unicode(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;

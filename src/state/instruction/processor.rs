@@ -143,7 +143,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
             //         0x07 => processor_ext::erase_picture(context, instruction),
             //         0x08 => processor_ext::set_margins(context, instruction),
             0x09 => processor_ext::save_undo(state, instruction),
-            //         0x0a => processor_ext::restore_undo(context, instruction),
+            0x0a => processor_ext::restore_undo(state, instruction),
             //         0x0b => processor_ext::print_unicode(context, instruction),
             //         0x0c => processor_ext::check_unicode(context, instruction),
             //         0x0d => processor_ext::set_true_colour(context, instruction),
@@ -284,7 +284,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 //             0x1c => processor_var::encode_text(context, instruction),
                 //             0x1d => processor_var::copy_table(context, instruction),
                 //             0x1e => processor_var::print_table(context, instruction),
-                //             0x1f => processor_var::check_arg_count(context, instruction),
+                0x1f => processor_var::check_arg_count(state, instruction),
                 _ => Err(RuntimeError::new(
                     ErrorCode::UnimplementedInstruction,
                     format!("Unimplemented instruction: {}", instruction.opcode()),

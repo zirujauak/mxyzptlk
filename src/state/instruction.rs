@@ -78,6 +78,10 @@ impl StoreResult {
         }
     }
 
+    pub fn address(&self) -> usize {
+        self.address
+    }
+    
     pub fn variable(&self) -> u8 {
         self.variable
     }
@@ -381,7 +385,7 @@ impl Instruction {
         &self.operands
     }
 
-    fn store(&self) -> Option<&StoreResult> {
+    pub fn store(&self) -> Option<&StoreResult> {
         self.store.as_ref()
     }
 

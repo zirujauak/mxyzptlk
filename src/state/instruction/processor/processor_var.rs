@@ -570,15 +570,15 @@ pub fn call_vn(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
 //     todo!()
 // }
 
-// pub fn check_arg_count(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn check_arg_count(
+    state: &mut State,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     branch(
-//         context,
-//         instruction,
-//         context.current_frame().argument_count() >= operands[0] as u8,
-//     )
-// }
+    branch(
+        state,
+        instruction,
+        state.frame_stack().current_frame()?.argument_count() >= operands[0] as u8,
+    )
+}

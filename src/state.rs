@@ -43,6 +43,7 @@ pub struct State {
     rng: Box<dyn RNG>,
     output_streams: u8,
     stream_3: Vec<Stream3>,
+    undo_stack: Vec<Quetzal>,
 }
 
 impl State {
@@ -81,6 +82,7 @@ impl State {
                 rng: Box::new(rng),
                 output_streams: 0x1,
                 stream_3: Vec::new(),
+                undo_stack: Vec::new(),
             })
         }
     }
@@ -136,7 +138,7 @@ impl State {
             header::set_flag1(&mut self.memory, Flags1v4::ItalicAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::FixedSpaceAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::TimedInputAvailable as u8)?;
-            header::clear_flag2(&mut self.memory, Flags2::RequestUndo)?;
+            // header::clear_flag2(&mut self.memory, Flags2::RequestUndo)?;
         }
 
         self.screen.reset();
@@ -484,6 +486,20 @@ impl State {
         Ok(quetzal.ifhd.pc as usize)
     }
 
+    pub fn save_undo(&mut self, instruction: &Instruction) -> Result<(), RuntimeError> {
+        let q = Quetzal::from_state(&self, instruction.store().unwrap().address());
+        self.undo_stack.push(q);
+        self.undo_stack.truncate(10);
+        Ok(())
+    }
+    
+    pub fn restore_undo(&mut self) -> Result<usize, RuntimeError> {
+        if let Some(q) = self.undo_stack.pop() {
+            self.restore(q)
+        } else {
+            Ok(0)
+        }
+    }
     pub fn restart(&mut self) -> Result<usize, RuntimeError> {
         let f1 = self.read_byte(0x10)? & 0x3;
         for i in 0..self.dynamic.len() {

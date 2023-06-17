@@ -97,53 +97,61 @@ fn result_variable(
     version: u8,
     address: usize,
 ) -> Result<(usize, Option<StoreResult>), RuntimeError> {
-    match opcode.opcode() {
-        // Always store, regardless of version
-        0x08 | 0x28 | 0x48 | 0x68 | 0xc8 | 0x09 | 0x29 | 0x49 | 0x69 | 0xc9 | 0x0F | 0x2F
-        | 0x4F | 0x6F | 0xcf | 0x10 | 0x30 | 0x50 | 0x70 | 0xd0 | 0x11 | 0x31 | 0x51 | 0x71
-        | 0xd1 | 0x12 | 0x32 | 0x52 | 0x72 | 0xd2 | 0x13 | 0x33 | 0x53 | 0x73 | 0xd3 | 0x14
-        | 0x34 | 0x54 | 0x74 | 0xd4 | 0x15 | 0x35 | 0x55 | 0x75 | 0xd5 | 0x16 | 0x36 | 0x56
-        | 0x76 | 0xd6 | 0x17 | 0x37 | 0x57 | 0x77 | 0xd7 | 0x18 | 0x38 | 0x58 | 0x78 | 0xd8
-        | 0x19 | 0x39 | 0x59 | 0x79 | 0xd9 | 0x81 | 0x91 | 0xa1 | 0x82 | 0x92 | 0xa2 | 0x83
-        | 0x93 | 0xa3 | 0x84 | 0x94 | 0xa4 | 0x88 | 0x98 | 0xa8 | 0x8e | 0x9e | 0xae | 0xe0
-        | 0xe7 | 0xeC | 0xf6 | 0xf7 | 0xf8 => Ok((
-            address + 1,
-            Some(StoreResult::new(address, memory.read_byte(address)?)),
-        )),
-        // Version < 5
-        0xbf => {
-            if version < 5 {
-                return Ok((
-                    address + 1,
-                    Some(StoreResult::new(address, memory.read_byte(address)?)),
-                ));
-            } else {
-                return Ok((address, None));
+    match opcode.form() {
+        OpcodeForm::Ext => {
+            match opcode.opcode() {
+                0x09 | 0x0a => Ok((address + 1, Some(StoreResult::new(address, memory.read_byte(address)?)))),
+                _ => Ok((address, None)),
             }
         }
-        // Version 4
-        0xb5 | 0xb6 => {
-            if version == 4 {
-                return Ok((
-                    address + 1,
-                    Some(StoreResult::new(address, memory.read_byte(address)?)),
-                ));
-            } else {
-                return Ok((address, None));
+        _ => match opcode.opcode() {
+            // Always store, regardless of version
+            0x08 | 0x28 | 0x48 | 0x68 | 0xc8 | 0x09 | 0x29 | 0x49 | 0x69 | 0xc9 | 0x0F | 0x2F
+            | 0x4F | 0x6F | 0xcf | 0x10 | 0x30 | 0x50 | 0x70 | 0xd0 | 0x11 | 0x31 | 0x51 | 0x71
+            | 0xd1 | 0x12 | 0x32 | 0x52 | 0x72 | 0xd2 | 0x13 | 0x33 | 0x53 | 0x73 | 0xd3 | 0x14
+            | 0x34 | 0x54 | 0x74 | 0xd4 | 0x15 | 0x35 | 0x55 | 0x75 | 0xd5 | 0x16 | 0x36 | 0x56
+            | 0x76 | 0xd6 | 0x17 | 0x37 | 0x57 | 0x77 | 0xd7 | 0x18 | 0x38 | 0x58 | 0x78 | 0xd8
+            | 0x19 | 0x39 | 0x59 | 0x79 | 0xd9 | 0x81 | 0x91 | 0xa1 | 0x82 | 0x92 | 0xa2 | 0x83
+            | 0x93 | 0xa3 | 0x84 | 0x94 | 0xa4 | 0x88 | 0x98 | 0xa8 | 0x8e | 0x9e | 0xae | 0xe0
+            | 0xe7 | 0xeC | 0xf6 | 0xf7 | 0xf8 => Ok((
+                address + 1,
+                Some(StoreResult::new(address, memory.read_byte(address)?)),
+            )),
+            // Version < 5
+            0xbf => {
+                if version < 5 {
+                    return Ok((
+                        address + 1,
+                        Some(StoreResult::new(address, memory.read_byte(address)?)),
+                    ));
+                } else {
+                    return Ok((address, None));
+                }
             }
-        }
-        // Version > 4
-        0xb9 | 0xe4 => {
-            if version > 4 {
-                return Ok((
-                    address + 1,
-                    Some(StoreResult::new(address, memory.read_byte(address)?)),
-                ));
-            } else {
-                return Ok((address, None));
+            // Version 4
+            0xb5 | 0xb6 => {
+                if version == 4 {
+                    return Ok((
+                        address + 1,
+                        Some(StoreResult::new(address, memory.read_byte(address)?)),
+                    ));
+                } else {
+                    return Ok((address, None));
+                }
             }
-        }
-        _ => Ok((address, None)),
+            // Version > 4
+            0xb9 | 0xe4 => {
+                if version > 4 {
+                    return Ok((
+                        address + 1,
+                        Some(StoreResult::new(address, memory.read_byte(address)?)),
+                    ));
+                } else {
+                    return Ok((address, None));
+                }
+            }
+            _ => Ok((address, None)),
+        },
     }
 }
 
