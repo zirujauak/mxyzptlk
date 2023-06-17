@@ -133,8 +133,8 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
     let version = header::field_byte(state.memory(), HeaderField::Version)?;
     match instruction.opcode().form() {
         OpcodeForm::Ext => match instruction.opcode().instruction() {
-            //         0x00 => processor_ext::save(context, instruction),
-            //         0x01 => processor_ext::restore(context, instruction),
+            0x00 => processor_ext::save(state, instruction),
+            0x01 => processor_ext::restore(state, instruction),
             //         0x02 => processor_ext::log_shift(context, instruction),
             //         0x03 => processor_ext::art_shift(context, instruction),
             //         0x04 => processor_ext::set_font(context, instruction),

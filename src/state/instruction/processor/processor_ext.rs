@@ -1,14 +1,42 @@
+use crate::iff::quetzal::Quetzal;
+
 use super::*;
 
-// pub fn save(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn save(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    if operands.len() > 0 {
+        Err(RuntimeError::new(
+            ErrorCode::UnimplementedInstruction,
+            "SAVE table not implemented".to_string(),
+        ))
+    } else {
+        let quetzal = Quetzal::from_state(state, instruction.store().unwrap().address);
+        state.prompt_and_write("Save to: ", "ifzs", &quetzal.to_vec())?;
+        store_result(state, instruction, 1)?;
+        Ok(instruction.next_address())
+    }
+}
 
-// pub fn restore(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn restore(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    if operands.len() > 0 {
+        Err(RuntimeError::new(
+            ErrorCode::UnimplementedInstruction,
+            "SAVE table not implemented".to_string(),
+        ))
+    } else {
+        let data = state.prompt_and_read("Restore from: ", "ifzs")?;
+        let quetzal = Quetzal::from_vec(&data).unwrap();
+        match state.restore(quetzal) {
+            Ok(address) => {
+                let i = decoder::decode_instruction(state.memory(), address - 3)?;
+                store_result(state, instruction, 2)?;
+                Ok(i.next_address())
+            }
+            Err(_) => branch(state, instruction, false),
+        }
+    }
+}
 
 // pub fn log_shift(
 //     context: &mut Context,

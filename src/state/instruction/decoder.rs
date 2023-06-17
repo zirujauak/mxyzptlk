@@ -100,7 +100,7 @@ fn result_variable(
     match opcode.form() {
         OpcodeForm::Ext => {
             match opcode.opcode() {
-                0x09 | 0x0a => Ok((address + 1, Some(StoreResult::new(address, memory.read_byte(address)?)))),
+                0x00| 0x01 | 0x09 | 0x0a => Ok((address + 1, Some(StoreResult::new(address, memory.read_byte(address)?)))),
                 _ => Ok((address, None)),
             }
         }
