@@ -464,7 +464,7 @@ impl State {
     pub fn restore(&mut self, quetzal: Quetzal) -> Result<usize, RuntimeError> {
         let mut fs = FrameStack::new(0);
         for stackframe in quetzal.stks.stks {
-            let result = if stackframe.flags & 0x10 == 0x10 {
+            let result = if stackframe.flags & 0x10 == 0x00 {
                 Some(StoreResult::new(0, stackframe.result_variable))
             } else {
                 None
