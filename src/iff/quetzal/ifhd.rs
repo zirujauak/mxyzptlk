@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::state::{header::{self, HeaderField}, State};
 
 use super::super::*;
@@ -9,8 +11,24 @@ pub struct IFhd {
     pub pc: u32,
 }
 
+impl fmt::Display for IFhd {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "IFhd:")?;
+        writeln!(f, "\tRelease: {:04x}", self.release_number)?;
+        write!(f, "\tSerial: ")?;
+        for i in 0..6 {
+            write!(f, "{}", self.serial_number[i as usize] as char)?;
+        }
+        writeln!(f, "")?;
+        writeln!(f, "\tChecksum: {:04x}", self.checksum)?;
+        write!(f, "\tPC: ${:06x}", self.pc)
+    }
+}
+
 impl IFhd {
     pub fn from_state(state: &State, address: usize) -> IFhd {
+        info!(target: "app::quetzal", "Building IFhd chunk from state");
+
         let release_number = header::field_word(state.memory(), HeaderField::Release)
             .expect("Error reading from header");
         let mut serial_number = Vec::new();

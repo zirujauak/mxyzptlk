@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::state::{
     header::{self, HeaderField},
     State,
@@ -7,6 +9,12 @@ use super::super::*;
 
 pub struct CMem {
     pub data: Vec<u8>,
+}
+
+impl fmt::Display for CMem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CMem:\n\tSize: {}", self.data.len())
+    }
 }
 
 impl CMem {

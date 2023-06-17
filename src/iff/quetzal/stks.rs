@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::state::State;
 
 use super::super::*;
@@ -12,8 +14,37 @@ pub struct StackFrame {
     pub stack: Vec<u16>,
 }
 
+impl fmt::Display for StackFrame {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Stks:")?;
+        writeln!(f, "\tReturn address: ${:06x}", self.return_address)?;
+        writeln!(f, "\tFlags: {:02x}", self.flags)?;
+        writeln!(f, "\tResult Variable: {:?}", self.result_variable)?;
+        writeln!(f, "\tArguments: {}", self.arguments)?;
+        write!(f, "\tLocal Variables:")?;
+        for i in 0..self.local_variables.len() {
+            write!(f, " {:04x}", self.local_variables[i])?;
+        }
+        writeln!(f, "")?;
+        write!(f, "\tStack:")?;
+        for i in 0..self.stack.len() {
+            write!(f, " {:04x}", self.stack[i])?;
+        }
+        write!(f, "")
+    }
+}
+
 pub struct Stks {
     pub stks: Vec<StackFrame>,
+}
+
+impl fmt::Display for Stks {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for frame in &self.stks {
+            writeln!(f, "{}", frame)?;
+        }
+        write!(f, "")
+    }
 }
 
 impl Stks {
@@ -113,8 +144,8 @@ impl Stks {
             }
             position = position + (stack_size as usize * 2);
 
-            let lv = local_variables.len();
-            let st = stack.len();
+            // let lv = local_variables.len();
+            // let st = stack.len();
 
             stks.push(StackFrame {
                 return_address,

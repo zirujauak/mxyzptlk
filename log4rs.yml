@@ -32,6 +32,13 @@ appenders:
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
 
+  quetzal:
+    kind: file
+    path: "quetzal.log"
+    append: false
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+
   stack:
     kind: file
     path: "stack.log"
@@ -88,6 +95,12 @@ loggers:
     level: info
     appenders:
       - memory
+    additive: false
+
+  app::quetzal:
+    level: info
+    appenders:
+      - quetzal
     additive: false
 
   app::stack:

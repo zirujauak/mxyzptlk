@@ -18,10 +18,13 @@ pub struct Quetzal {
 
 impl Quetzal {
     pub fn from_state(state: &State, instruction_address: usize) -> Quetzal {
+        info!(target: "app::quetzal", "Building quetzal from state");
         let ifhd = IFhd::from_state(state, instruction_address);
+        info!(target: "app::quetzal", "{}", ifhd);
         let cmem = CMem::from_state(state);
+        info!(target: "app::quetzal", "{}", cmem);
         let stks = Stks::from_state(state);
-
+        info!(target: "app::quetzal", "{}", stks);
         Quetzal { ifhd, umem: None, cmem: Some(cmem), stks }
     }
 
