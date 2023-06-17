@@ -105,14 +105,16 @@ impl FrameStack {
         return_address: usize,
     ) -> Result<(), RuntimeError> {
         let frame = Frame::call_routine(memory, address, arguments, result, return_address)?;
+        info!(target: "app::frame", "Call to ${:06x} => {:?}", address, result);
         self.frames.push(frame);
         Ok(())
     }
 
-    pub fn return_routine(&mut self, memory: &mut Memory, result: u16) -> Result<Option<StoreResult>, RuntimeError> {
+    pub fn return_routine(&mut self, _memory: &mut Memory, _result: u16) -> Result<Option<StoreResult>, RuntimeError> {
         let f = self.pop_frame()?;
-        let mut n = self.current_frame_mut()?;
+        let n = self.current_frame_mut()?;
         n.set_pc(f.return_address());
+        info!(target: "app::frame", "Return to ${:06x} -> {:?}", f.return_address(), f.result());
         if let Some(r) = f.result() {
             Ok(Some(r.clone()))
         } else {
