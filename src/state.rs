@@ -142,7 +142,7 @@ impl State {
         }
 
         self.screen.reset();
-        
+
         Ok(())
     }
 
@@ -315,7 +315,10 @@ impl State {
             let mask = (1 << stream - 1) & 0xF;
             self.output_streams = self.output_streams | mask;
             if stream == 3 {
-                self.stream_3.push(Stream3 { table: table.unwrap(), buffer: Vec::new() });
+                self.stream_3.push(Stream3 {
+                    table: table.unwrap(),
+                    buffer: Vec::new(),
+                });
             }
         } else if stream == -3 {
             let stream3 = self.stream_3.pop().unwrap();
@@ -345,8 +348,8 @@ impl State {
         if self.output_streams & 0x4 == 0x4 {
             let stream3 = self.stream_3.last_mut().unwrap();
             for c in text {
-                stream3.buffer.push(*c  );
-            };
+                stream3.buffer.push(*c);
+            }
         }
         Ok(())
     }
@@ -424,6 +427,42 @@ impl State {
         Ok(key)
     }
 
+    pub fn read_line(
+        &mut self,
+        text: &Vec<u16>,
+        len: usize,
+        terminators: &Vec<u16>,
+        timeout: u16,
+    ) -> Result<Vec<u16>, RuntimeError> {
+        let mut input_buffer = text.clone();
+
+        // TODO: Set a timeout
+        loop {
+            match self.read_key(timeout)? {
+                Some(key) => {
+                    if terminators.contains(&key) {
+                        input_buffer.push(key);
+                        self.print(&vec![key])?;
+                        break;
+                    } else {
+                        if key == 0x08 {
+                            if input_buffer.len() > 0 {
+                                input_buffer.pop();
+                                self.backspace()?;
+                            }
+                        } else if input_buffer.len() < len && key >= 0x1f && key <= 0x7f {
+                            input_buffer.push(key);
+                            self.print(&vec![key])?;
+                        }
+                    }
+                }
+                None => break,
+            }
+        }
+
+        Ok(input_buffer)
+    }
+
     // Save/restore
     pub fn prompt_and_write(
         &mut self,
@@ -431,12 +470,21 @@ impl State {
         suffix: &str,
         data: &Vec<u8>,
     ) -> Result<(), RuntimeError> {
-        let filename = format!("{}.{}", self.name, suffix);
+        self.print(&prompt.chars().map(|c| c as u16).collect())?;
+        let n = format!("{}.{}", self.name, suffix)
+            .chars()
+            .map(|c| c as u16)
+            .collect();
+        self.print(&n)?;
+
+        let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
+        let filename = String::from_utf16(&f).unwrap();
+        trace!(target: "app::trace", "Save '{}'", filename.trim());
         let mut file = fs::OpenOptions::new()
             .create(true)
             .truncate(true)
             .write(true)
-            .open(filename)
+            .open(filename.trim())
             .unwrap();
 
         match file.write_all(data) {
@@ -450,9 +498,18 @@ impl State {
     }
 
     pub fn prompt_and_read(&mut self, prompt: &str, suffix: &str) -> Result<Vec<u8>, RuntimeError> {
-        let filename = format!("{}.{}", self.name, suffix);
+        self.print(&prompt.chars().map(|c| c as u16).collect())?;
+        let n = format!("{}.{}", self.name, suffix)
+            .chars()
+            .map(|c| c as u16)
+            .collect();
+        self.print(&n)?;
+
+        let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
+        let filename = String::from_utf16(&f).unwrap();
+        trace!(target: "app::trace", "Restore '{}'", filename.trim());
         let mut data = Vec::new();
-        match File::open(filename) {
+        match File::open(filename.trim()) {
             Ok(mut file) => match file.read_to_end(&mut data) {
                 Ok(_) => Ok(data),
                 Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
@@ -499,7 +556,7 @@ impl State {
             }
         }
 
-        // Reset stream 3 
+        // Reset stream 3
         self.stream_3 = Vec::new();
 
         Ok(quetzal.ifhd.pc as usize)
@@ -511,7 +568,7 @@ impl State {
         self.undo_stack.truncate(10);
         Ok(())
     }
-    
+
     pub fn restore_undo(&mut self) -> Result<usize, RuntimeError> {
         if let Some(q) = self.undo_stack.pop() {
             self.restore(q)
@@ -571,7 +628,7 @@ impl State {
             let instruction = decoder::decode_instruction(&self.memory, pc)?;
             let pc = processor::dispatch(self, &instruction)?;
             if pc == 0 {
-                return Ok(())
+                return Ok(());
             }
             self.set_pc(pc)?;
             n = n + 1;

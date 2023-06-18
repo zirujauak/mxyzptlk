@@ -101,7 +101,7 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
     let timeout = if operands.len() > 2 { operands[2] } else { 0 };
     let routine = if operands.len() > 2 { operands[3] } else { 0 };
 
-    let mut input_buffer = Vec::new();
+    let mut existing_input = Vec::new();
 
     if version < 4 {
         // V3 show status line before input
@@ -110,37 +110,38 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
         // text buffer may contain existing input
         let existing_len = state.read_byte(text_buffer + 1)? as usize;
         for i in 0..existing_len {
-            input_buffer.push(state.read_byte(text_buffer + 2 + i)? as u16);
+            existing_input.push(state.read_byte(text_buffer + 2 + i)? as u16);
         }
     }
 
-    info!(target: "app::input", "READ initial input: {:?}", input_buffer);
+    info!(target: "app::input", "READ initial input: {:?}", existing_input);
 
     let terminators = terminators(state)?;
-    loop {
-        match state.read_key(timeout)? {
-            Some(key) => {
-                if terminators.contains(&key) {
-                    input_buffer.push(key);
-                    state.print(&vec![key])?;
-                    break;
-                } else {
-                    if input_buffer.len() < len {
-                        if key == 0x08 {
-                            if input_buffer.len() > 0 {
-                                input_buffer.pop();
-                                state.backspace()?;
-                            }
-                        } else if key >= 0x1f && key <= 0x7f {
-                            input_buffer.push(key);
-                            state.print(&vec![key])?;
-                        }
-                    }
-                }
-            }
-            None => break,
-        }
-    }
+    let input_buffer = state.read_line(&existing_input, len, &terminators, timeout)?;
+    // loop {
+    //     match state.read_key(timeout)? {
+    //         Some(key) => {
+    //             if terminators.contains(&key) {
+    //                 input_buffer.push(key);
+    //                 state.print(&vec![key])?;
+    //                 break;
+    //             } else {
+    //                 if input_buffer.len() < len {
+    //                     if key == 0x08 {
+    //                         if input_buffer.len() > 0 {
+    //                             input_buffer.pop();
+    //                             state.backspace()?;
+    //                         }
+    //                     } else if key >= 0x1f && key <= 0x7f {
+    //                         input_buffer.push(key);
+    //                         state.print(&vec![key])?;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         None => break,
+    //     }
+    // }
 
     let terminator = if let Some(c) = input_buffer.last() {
         if terminators.contains(c) {
