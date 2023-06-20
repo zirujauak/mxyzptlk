@@ -1,6 +1,9 @@
 pub mod buffer;
 mod easy_curses;
 
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
+
 use crate::error::*;
 use buffer::Buffer;
 use buffer::CellStyle;
@@ -430,12 +433,32 @@ impl Screen {
     }
 
     pub fn read_key(&mut self, timeout: u128) -> Option<u16> {
+        let end = if timeout > 0 {
+            SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Error getting system time")
+            .as_millis()
+            + timeout
+        } else {
+            u128::MAX
+        };
+
         if self.selected_window == 0 {
             self.terminal.move_cursor(self.cursor_0);
         } else {
             self.terminal.move_cursor(self.cursor_1.unwrap());
         }
-        self.terminal.read_key(timeout)
+
+        loop {
+            let now =  SystemTime::now().duration_since(UNIX_EPOCH).expect("Error getting system time").as_millis();
+            if now > end {
+                return None;
+            }
+
+            if let Some(k) = self.terminal.read_key(end - now) {
+                return Some(k);
+            }
+        }
     }
 
     pub fn backspace(&mut self) -> Result<(), RuntimeError> {

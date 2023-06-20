@@ -45,22 +45,22 @@ pub enum Flags1v3 {
 
 pub enum Flags1v4 {
     // V4+ flags
-    ColoursAvailable = 0x01,    // bit 0
-    BoldfaceAvailable = 0x04,   // bit 2
-    ItalicAvailable = 0x08,     // bit 3
-    FixedSpaceAvailable = 0x10, // bit 4
-    //SoundEffectsAvailable = 0x20,   // bit 5
-    TimedInputAvailable = 0x80, // bit 7
+    ColoursAvailable = 0x01,       // bit 0
+    BoldfaceAvailable = 0x04,      // bit 2
+    ItalicAvailable = 0x08,        // bit 3
+    FixedSpaceAvailable = 0x10,    // bit 4
+    SoundEffectsAvailable = 0x20,  // bit 5
+    TimedInputAvailable = 0x80,    // bit 7
 }
 
 pub enum Flags2 {
-    Transcripting = 0x0001,       // bit 0
-    ForceFixedPitch = 0x0002,     // bit 1
-    RequestPictures = 0x0008,     // bit 3
-    RequestUndo = 0x0010,         // bit 4
-    RequestMouse = 0x0020,        // bit 5
-    RequestColours = 0x0040,      // bit 6
-    RequestSoundEffects = 0x0080, // bit 7
+    Transcripting = 0x0001,        // bit 0
+    ForceFixedPitch = 0x0002,      // bit 1
+    RequestPictures = 0x0008,      // bit 3
+    RequestUndo = 0x0010,          // bit 4
+    RequestMouse = 0x0020,         // bit 5
+    RequestColours = 0x0040,       // bit 6
+    RequestSoundEffects = 0x0080,  // bit 7
 }
 
 pub fn field_byte(memory: &Memory, field: HeaderField) -> Result<u8, RuntimeError> {

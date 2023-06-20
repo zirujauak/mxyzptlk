@@ -117,6 +117,8 @@ impl State {
                 HeaderField::ScreenColumns,
                 self.screen.columns() as u8,
             )?;
+
+            header::set_flag1(&mut self.memory, Flags1v4::SoundEffectsAvailable as u8)?;
         }
 
         // Set V5+ Flags 1
@@ -138,7 +140,8 @@ impl State {
             header::set_flag1(&mut self.memory, Flags1v4::ItalicAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::FixedSpaceAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::TimedInputAvailable as u8)?;
-            // header::clear_flag2(&mut self.memory, Flags2::RequestUndo)?;
+            header::clear_flag2(&mut self.memory, Flags2::RequestMouse)?;
+
         }
 
         self.screen.reset();
