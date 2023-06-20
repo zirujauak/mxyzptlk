@@ -13,6 +13,7 @@ fn property_table_address(state: &State, object: usize) -> Result<usize, Runtime
     };
 
     let result = state.read_word(object_address + offset)? as usize;
+    info!(target: "app::object", "Property table for {} @ ${:04x}", object, result);
     Ok(result)
 }
 
@@ -23,45 +24,43 @@ fn address(state: &State, object: usize, property: u8) -> Result<usize, RuntimeE
     let mut size_byte = state.read_byte(property_address)?;
     let version = header::field_byte(state.memory(), HeaderField::Version)?;
     while size_byte != 0 {
-        match version {
-            3 => {
-                let prop_num = size_byte & 0x1F;
-                let prop_size = (size_byte as usize / 32) + 1;
-                if prop_num == property {
-                    return Ok(property_address);
-                } else if prop_num < property {
-                    return Ok(0);
-                } else {
-                    property_address = property_address + 1 + prop_size;
-                    size_byte = state.read_byte(property_address)?;
-                }
+        if version == 3 {
+            let prop_num = size_byte & 0x1F;
+            let prop_size = (size_byte as usize / 32) + 1;
+            if prop_num == property {
+                return Ok(property_address);
+            } else if prop_num < property {
+                return Ok(0);
+            } else {
+                property_address = property_address + 1 + prop_size;
+                size_byte = state.read_byte(property_address)?;
             }
-            _ => {
-                let prop_num = size_byte & 0x3F;
-                let mut prop_data = 1;
-                let prop_size = if size_byte & 0x80 == 0x80 {
-                    prop_data = 2;
-                    let size = state.read_byte(property_address + 1)?;
-                    if size & 0x3f == 0 {
-                        64
-                    } else {
-                        size as usize & 0x3f
-                    }
+        } else {
+            let prop_num = size_byte & 0x3F;
+            let mut prop_data = 1;
+            let prop_size = if size_byte & 0x80 == 0x80 {
+                prop_data = 2;
+                let size = state.read_byte(property_address + 1)?;
+                if size & 0x3f == 0 {
+                    64
                 } else {
-                    if size_byte & 0x40 == 0x40 {
-                        2
-                    } else {
-                        1
-                    }
-                };
-                if prop_num == property {
-                    return Ok(property_address);
-                } else if prop_num < property {
-                    return Ok(0);
-                } else {
-                    property_address = property_address + prop_data + prop_size;
-                    size_byte = state.read_byte(property_address)?;
+                    size as usize & 0x3f
                 }
+            } else {
+                if size_byte & 0x40 == 0x40 {
+                    2
+                } else {
+                    1
+                }
+            };
+            info!(target: "app::object", "Property {} @ ${:04x} {} from ${:04x}", prop_num, property_address, prop_size, property_address + prop_data);
+            if prop_num == property {
+                return Ok(property_address);
+            } else if prop_num < property {
+                return Ok(0);
+            } else {
+                property_address = property_address + prop_data + prop_size;
+                size_byte = state.read_byte(property_address)?;
             }
         }
     }
@@ -71,11 +70,12 @@ fn address(state: &State, object: usize, property: u8) -> Result<usize, RuntimeE
 
 fn size(state: &State, property_address: usize) -> Result<usize, RuntimeError> {
     let size_byte = state.read_byte(property_address)?;
+    info!(target: "app::object", "Size byte: {:02x}", size_byte);
     match header::field_byte(state.memory(), HeaderField::Version)? {
         3 => Ok((size_byte as usize / 32) + 1),
         _ => match size_byte & 0xc0 {
             0x40 => Ok(2),
-            0x20 => Ok(1),
+            0x00 => Ok(1),
             _ => {
                 let size = state.read_byte(property_address + 1)? as usize & 0x3F;
                 if size == 0 {
@@ -115,10 +115,7 @@ pub fn property_data_address(
     }
 }
 
-pub fn property_length(
-    state: &State,
-    property_data_address: usize,
-) -> Result<usize, RuntimeError> {
+pub fn property_length(state: &State, property_data_address: usize) -> Result<usize, RuntimeError> {
     if property_data_address == 0 {
         Ok(0)
     } else {
@@ -177,6 +174,7 @@ pub fn property(state: &State, object: usize, property: u8) -> Result<u16, Runti
 
 pub fn next_property(state: &State, object: usize, property: u8) -> Result<u8, RuntimeError> {
     let version = header::field_byte(state.memory(), HeaderField::Version)?;
+    info!(target: "app::object", "next_property {} -> {}", object, property);
     if property == 0 {
         let prop_table = property_table_address(state, object)?;
         let header_size = state.read_byte(prop_table)? as usize;
@@ -187,12 +185,14 @@ pub fn next_property(state: &State, object: usize, property: u8) -> Result<u8, R
             Ok(p1 & 0x3f)
         }
     } else {
-        let prop_data_addr = property_data_address(state, object, property)?;
-        if prop_data_addr == 0 {
+        let prop_addr = address(state, object, property)?;
+        info!(target: "app::object", "property {} @ ${:04x}", property, prop_addr);
+        if prop_addr == 0 {
             Ok(0)
         } else {
-            let prop_len = size(state, prop_data_addr)?;
-            let next_prop = state.read_byte(prop_data_addr + prop_len)?;
+            let prop_len = size(state, prop_addr)?;
+            let next_prop =
+                state.read_byte(property_data_address(state, object, property)? + prop_len)?;
             if version < 4 {
                 Ok(next_prop & 0x1f)
             } else {
@@ -210,7 +210,10 @@ pub fn set_property(
 ) -> Result<(), RuntimeError> {
     let property_address = address(state, object, property)?;
     if property_address == 0 {
-        Err(RuntimeError::new(ErrorCode::ObjectTreeState, "Can't get properyt address for property 0".to_string()))
+        Err(RuntimeError::new(
+            ErrorCode::ObjectTreeState,
+            "Can't get properyt address for property 0".to_string(),
+        ))
     } else {
         let property_size = size(state, property_address)?;
         let property_data = match header::field_byte(state.memory(), HeaderField::Version)? {
