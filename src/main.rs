@@ -27,6 +27,7 @@ fn main() {
     info!(target: "app::input", "Start input log for '{}'", name);
     info!(target: "app::instruction", "Start instruction log for '{}'", name);
     info!(target: "app::memory", "Start memory log for '{}'", name);
+    info!(target: "app::object", "Start object log for '{}'", name);
     info!(target: "app::quetzal", "Start quetzal log for '{}'", name);
     info!(target: "app::stack", "Start stack log for '{}'", name);
     info!(target: "app::trace", "Start trace log for '{}'", name);
