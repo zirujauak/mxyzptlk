@@ -12,6 +12,8 @@ use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use crate::error::*;
 use crate::iff::quetzal::Quetzal;
@@ -44,6 +46,8 @@ pub struct State {
     output_streams: u8,
     stream_3: Vec<Stream3>,
     undo_stack: Vec<Quetzal>,
+    input_interrupt: Option<u16>,
+    input_interrupt_print: bool,
 }
 
 impl State {
@@ -83,6 +87,8 @@ impl State {
                 output_streams: 0x1,
                 stream_3: Vec::new(),
                 undo_stack: Vec::new(),
+                input_interrupt: None,
+                input_interrupt_print: false,
             })
         }
     }
@@ -141,7 +147,6 @@ impl State {
             header::set_flag1(&mut self.memory, Flags1v4::FixedSpaceAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::TimedInputAvailable as u8)?;
             header::clear_flag2(&mut self.memory, Flags2::RequestMouse)?;
-
         }
 
         self.screen.reset();
@@ -162,6 +167,12 @@ impl State {
     }
     pub fn screen(&self) -> &Screen {
         &self.screen
+    }
+
+    pub fn input_interrupt(&mut self) -> Option<u16> {
+        let v = self.input_interrupt;
+        self.input_interrupt = None;
+        v
     }
 
     pub fn checksum(&self) -> Result<u16, RuntimeError> {
@@ -284,12 +295,29 @@ impl State {
         self.frame_stack.pc()
     }
 
+    pub fn read_interrupt(
+        &mut self,
+        address: usize,
+        return_address: usize,
+    ) -> Result<usize, RuntimeError> {
+        self.input_interrupt = None;
+        self.input_interrupt_print = false;
+        self.frame_stack
+            .input_interrupt(&mut self.memory, address, return_address)?;
+        self.frame_stack.pc()
+    }
+
     pub fn return_routine(&mut self, value: u16) -> Result<usize, RuntimeError> {
+        if self.frame_stack.current_frame()?.input_interrupt() {
+            self.input_interrupt = Some(value);
+        }
+
         let result = self.frame_stack.return_routine(&mut self.memory, value)?;
         match result {
             Some(r) => self.set_variable(r.variable(), value)?,
             None => (),
         }
+
         self.frame_stack.pc()
     }
 
@@ -346,6 +374,10 @@ impl State {
         // Only print to the screen if stream 3 is not selected and stream 1
         if self.output_streams & 0x5 == 0x1 {
             self.screen.print(text);
+        }
+
+        if self.frame_stack.current_frame()?.input_interrupt() {
+            self.input_interrupt_print = true;
         }
 
         if self.output_streams & 0x4 == 0x4 {
@@ -429,6 +461,7 @@ impl State {
 
     // Input
     pub fn read_key(&mut self, timeout: u16) -> Result<Option<u16>, RuntimeError> {
+        trace!(target: "app::trace.log", "read_key timeout {:?}", timeout);
         let key = self.screen.read_key(timeout as u128 * 1000);
         info!(target: "app::input", "read_key -> {:?}", key);
         Ok(key)
@@ -444,8 +477,27 @@ impl State {
         let mut input_buffer = text.clone();
 
         // TODO: Set a timeout
+        let end = if timeout > 0 {
+            SystemTime::now().duration_since(UNIX_EPOCH).expect("Error getting system time").as_millis() + (timeout as u128 * 1000)
+        } else {
+            0
+        };
+
         loop {
-            match self.read_key(timeout)? {
+            let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Error getting system time").as_millis();
+            if end > 0 && now > end {
+                return Ok(input_buffer);
+            }
+
+            let timeout = if end > 0 {
+                end - now
+            } else {
+                0
+            };
+
+            info!(target: "app::input", "Now: {}, End: {}, Timeout: {}", now, end, timeout);
+
+            match self.screen.read_key(timeout) {
                 Some(key) => {
                     if terminators.contains(&key) {
                         input_buffer.push(key);
@@ -602,16 +654,16 @@ impl State {
     //     Ok(())
     // }
 
-    pub fn print_num(&mut self, n: i16) -> Result<(), RuntimeError> {
-        let s = format!("{}", n);
-        let mut text = Vec::new();
-        for c in s.chars() {
-            text.push(c as u16);
-        }
+    // pub fn print_num(&mut self, n: i16) -> Result<(), RuntimeError> {
+    //     let s = format!("{}", n);
+    //     let mut text = Vec::new();
+    //     for c in s.chars() {
+    //         text.push(c as u16);
+    //     }
 
-        self.screen.print(&text);
-        Ok(())
-    }
+    //     self.screen.print(&text);
+    //     Ok(())
+    // }
 
     pub fn new_line(&mut self) -> Result<(), RuntimeError> {
         self.screen.new_line();

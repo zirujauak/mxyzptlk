@@ -110,6 +110,19 @@ impl FrameStack {
         Ok(())
     }
 
+    pub fn input_interrupt(
+        &mut self,
+        memory: &mut Memory,
+        address: usize,
+        return_address: usize,
+    ) -> Result<(), RuntimeError> {
+        let mut frame = Frame::call_routine(memory, address, &vec![], None, return_address)?;
+        frame.set_input_interrupt(true);
+        info!(target: "app::frame", "Input interrupt ${:06x}", address);
+        self.frames.push(frame);
+        Ok(())
+    }
+
     pub fn return_routine(&mut self, _memory: &mut Memory, _result: u16) -> Result<Option<StoreResult>, RuntimeError> {
         let f = self.pop_frame()?;
         let n = self.current_frame_mut()?;

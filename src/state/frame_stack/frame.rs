@@ -13,9 +13,7 @@ pub struct Frame {
     stack: Vec<u16>,
     result: Option<StoreResult>,
     return_address: usize,
-    read_char_interrupt_result: Option<u16>,
-    read_interrupt_result: Option<u16>,
-    read_input: Option<Vec<char>>,
+    input_interrupt: bool,
 }
 
 impl Frame {
@@ -36,9 +34,7 @@ impl Frame {
             stack: stack.clone(),
             result: result.clone(),
             return_address,
-            read_char_interrupt_result: None,
-            read_interrupt_result: None,
-            read_input: None,
+            input_interrupt: false
         }
     }
 
@@ -68,6 +64,14 @@ impl Frame {
 
     pub fn stack(&self) -> &Vec<u16> {
         &self.stack
+    }
+
+    pub fn input_interrupt(&self) -> bool {
+        self.input_interrupt
+    }
+
+    pub fn set_input_interrupt(&mut self, v: bool) {
+        self.input_interrupt = v;
     }
 
     pub fn pop(&mut self) -> Result<u16,RuntimeError> {

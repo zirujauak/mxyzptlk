@@ -83,6 +83,15 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
     let operands = operand_values(state, instruction)?;
 
     let text_buffer = operands[0] as usize;
+
+    if let Some(v) = state.input_interrupt() {
+        if v == 1 {
+            state.write_byte(text_buffer + 1, 0)?;
+            store_result(state, &instruction, 0)?;
+            return Ok(instruction.next_address());
+        }
+    }
+
     let parse = if operands.len() > 1 {
         operands[1] as usize
     } else {
@@ -99,25 +108,32 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
     } as usize;
 
     let timeout = if operands.len() > 2 { operands[2] } else { 0 };
-    let routine = if operands.len() > 2 { operands[3] } else { 0 };
+    let routine = if timeout > 0 && operands.len() > 2 {
+        packed_routine_address(state.memory(), operands[3])?
+    } else {
+        0
+    };
 
     let mut existing_input = Vec::new();
 
     if version < 4 {
         // V3 show status line before input
         state.status_line()?;
-    } else if version > 4 {
-        // text buffer may contain existing input
-        let existing_len = state.read_byte(text_buffer + 1)? as usize;
-        for i in 0..existing_len {
-            existing_input.push(state.read_byte(text_buffer + 2 + i)? as u16);
-        }
+    }
+
+    // text buffer may contain existing input
+    let existing_len = state.read_byte(text_buffer + 1)? as usize;
+    for i in 0..existing_len {
+        existing_input.push(state.read_byte(text_buffer + 2 + i)? as u16);
+    }
+    if state.input_interrupt_print {
+        state.print(&existing_input)?;
     }
 
     info!(target: "app::input", "READ initial input: {:?}", existing_input);
 
     let terminators = terminators(state)?;
-    let input_buffer = state.read_line(&existing_input, len, &terminators, timeout)?;
+    let input_buffer = state.read_line(&existing_input, len, &terminators, timeout / 10)?;
     // loop {
     //     match state.read_key(timeout)? {
     //         Some(key) => {
@@ -158,7 +174,11 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
 
     // TODO: If terminator is None, then input timed out, so do the needful
     if let None = terminator {
-        todo!("Implement input timeout");
+        state.write_byte(text_buffer + 1, input_buffer.len() as u8)?;
+        for i in 0..input_buffer.len() {
+            state.write_byte(text_buffer + 2 + i, input_buffer[i] as u8)?;
+        }
+        return state.read_interrupt(routine, instruction.address());
     }
 
     let end = input_buffer.len()
@@ -296,8 +316,12 @@ pub fn print_char(state: &mut State, instruction: &Instruction) -> Result<usize,
 
 pub fn print_num(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
-    state.print_num(operands[0] as i16)?;
-    // context.print_string(format!("{}", operands[0] as i16));
+    let s = format!("{}", operands[0] as i16);
+    let mut text = Vec::new();
+    for c in s.chars() {
+        text.push(c as u16);
+    }
+    state.print(&text)?;
     Ok(instruction.next_address())
 }
 
@@ -357,7 +381,12 @@ pub fn call_vs2(state: &mut State, instruction: &Instruction) -> Result<usize, R
     let address = packed_routine_address(state.memory(), operands[0])?;
     let arguments = operands[1..operands.len()].to_vec();
 
-    state.call_routine(address, &arguments, instruction.store, instruction.next_address())
+    state.call_routine(
+        address,
+        &arguments,
+        instruction.store,
+        instruction.next_address(),
+    )
 }
 
 pub fn erase_window(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
@@ -377,28 +406,19 @@ pub fn set_cursor(state: &mut State, instruction: &Instruction) -> Result<usize,
     Ok(instruction.next_address())
 }
 
-pub fn set_text_style(
-    state: &mut State,
-    instruction: &Instruction,
-) -> Result<usize, RuntimeError> {
+pub fn set_text_style(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
     state.set_text_style(operands[0])?;
     Ok(instruction.next_address())
 }
 
-pub fn buffer_mode(
-    state: &mut State,
-    instruction: &Instruction,
-) -> Result<usize, RuntimeError> {
+pub fn buffer_mode(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
     state.buffer_mode(operands[0])?;
     Ok(instruction.next_address())
 }
 
-pub fn output_stream(
-    state: &mut State,
-    instruction: &Instruction,
-) -> Result<usize, RuntimeError> {
+pub fn output_stream(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
     let stream = operands[0] as i16;
     let table = if stream == 3 {
@@ -419,15 +439,15 @@ pub fn output_stream(
 //     todo!()
 // }
 
-pub fn sound_effect(
-    state: &mut State,
-    instruction: &Instruction,
-) -> Result<usize, RuntimeError> {
+pub fn sound_effect(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands: Vec<u16> = operand_values(state, instruction)?;
 
     match operands[0] {
         1 => state.beep()?,
-        2 => { state.beep()?; state.beep()? },
+        2 => {
+            state.beep()?;
+            state.beep()?
+        }
         _ => trace!(target: "app::trace", "SOUND_EFFECT not fully implemented"),
     }
 
@@ -437,26 +457,41 @@ pub fn sound_effect(
 pub fn read_char(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
     if operands[0] != 1 {
-        return Err(RuntimeError::new(ErrorCode::Instruction, format!("READ_CHAR argument 1 must be 1, was {}", operands[0])));
+        return Err(RuntimeError::new(
+            ErrorCode::Instruction,
+            format!("READ_CHAR argument 1 must be 1, was {}", operands[0]),
+        ));
     }
 
-    let timeout = if operands.len() > 1 {
-        operands[1]
-    } else {
-        0
-    };
-    let routine = if operands.len() > 2 {
-        operands[2]
+    if let Some(interrupt) = state.input_interrupt() {
+        if interrupt == 1 {
+            store_result(state, instruction, 0)?;
+            return Ok(instruction.next_address());
+        }
+    }
+
+    let timeout = if operands.len() > 1 { operands[1] } else { 0 };
+    let routine = if timeout > 0 && operands.len() > 2 {
+        packed_routine_address(state.memory(), operands[2])?
     } else {
         0
     };
 
-    let key = match state.read_key(timeout)? {
+    let key = match state.read_key(timeout / 10)? {
         Some(key) => key,
-        None => 0
+        None => {
+            if routine > 0 {
+                return state.read_interrupt(routine, instruction.address());
+            } else {
+                return Err(RuntimeError::new(
+                    ErrorCode::System,
+                    "read_key returned None without a timeout".to_string(),
+                ));
+            }
+        }
     };
     store_result(state, instruction, key)?;
-    
+
     Ok(instruction.next_address())
 }
 
@@ -510,7 +545,12 @@ pub fn call_vn(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
     let address = packed_routine_address(state.memory(), operands[0])?;
     let arguments = &operands[1..].to_vec();
 
-    state.call_routine(address, arguments, instruction.store, instruction.next_address())
+    state.call_routine(
+        address,
+        arguments,
+        instruction.store,
+        instruction.next_address(),
+    )
 }
 
 pub fn call_vn2(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
