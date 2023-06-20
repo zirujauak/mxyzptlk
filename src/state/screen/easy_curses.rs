@@ -49,6 +49,15 @@ impl ECTerminal {
             _ => 0,
         }
     }
+
+    fn map_output(&self, zchar: u16) -> char {
+        match zchar {
+            0x9b => '\u{e4}',
+            0x9c => '\u{f6}',
+            _ => (zchar as u8) as char
+        }
+    }
+
 }
 
 impl Terminal for ECTerminal {
@@ -59,25 +68,27 @@ impl Terminal for ECTerminal {
 
     fn print_at(
         &mut self,
-        c: char,
+        zchar: u16,
         row: u32,
         column: u32,
         colors: (screen::Color, screen::Color),
         style: &CellStyle,
     ) {
+        let c = self.map_output(zchar);
+        trace!(target: "app::trace", "Output {:04x} -> {}", zchar, c);
         self.easycurses.move_rc(row as i32 - 1, column as i32 - 1);
         let fg = self.as_color(colors.0);
         let bg = self.as_color(colors.1);
         self.easycurses.set_bold(style.is_style(Style::Bold));
         self.easycurses
-            .set_underline(c != ' ' && style.is_style(Style::Bold));
+            .set_underline(zchar != 0x20 && style.is_style(Style::Italic));
         let colors = if style.is_style(Style::Reverse) {
             colorpair!(bg on fg)
         } else {
             colorpair!(fg on bg)
         };
         self.easycurses.set_color_pair(colors);
-        self.easycurses.print_char(c);
+        self.easycurses.print_char(self.map_output(zchar));
     }
 
     fn flush(&mut self) {

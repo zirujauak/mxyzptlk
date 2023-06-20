@@ -420,6 +420,10 @@ impl State {
         Ok(self.screen.beep())
     }
 
+    pub fn set_colors(&mut self, foreground: u16, background: u16) -> Result<(), RuntimeError> {
+        self.screen.set_colors(foreground, background)
+    }
+
     // Input
     pub fn read_key(&mut self, timeout: u16) -> Result<Option<u16>, RuntimeError> {
         let key = self.screen.read_key(timeout as u128 * 1000);

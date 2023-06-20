@@ -151,8 +151,34 @@ impl Screen {
         }
     }
 
-    pub fn set_colors(&mut self, foreground: Color, background: Color) {
-        self.current_colors = (foreground, background);
+    fn map_color(&self, color: u8, current: Color, default: Color) -> Result<Color, RuntimeError> {
+        match color {
+            0 => Ok(current),
+            1 => Ok(default),
+            2 => Ok(Color::Black),
+            3 => Ok(Color::Red),
+            4 => Ok(Color::Green),
+            5 => Ok(Color::Yellow),
+            6 => Ok(Color::Blue),
+            7 => Ok(Color::Magenta),
+            8 => Ok(Color::Cyan),
+            9 => Ok(Color::White),
+            _ => Err(RuntimeError::new(
+                ErrorCode::InvalidColor,
+                format!("Invalid color {}", color),
+            )),
+        }
+    }
+    fn map_colors(&self, foreground: u8, background: u8) -> Result<(Color, Color), RuntimeError> {
+        Ok((
+            self.map_color(foreground, self.current_colors.0, self.default_colors.0)?,
+            self.map_color(background, self.current_colors.1, self.default_colors.1)?,
+        ))
+    }
+
+    pub fn set_colors(&mut self, foreground: u16, background: u16) -> Result<(), RuntimeError> {
+        self.current_colors = self.map_colors(foreground as u8, background as u8)?;
+        Ok(())
     }
 
     pub fn split_window(&mut self, lines: u32) {
@@ -413,7 +439,8 @@ impl Screen {
     }
 
     pub fn backspace(&mut self) -> Result<(), RuntimeError> {
-        self.terminal.backspace((self.cursor_0.0, self.cursor_0.1 - 1));
+        self.terminal
+            .backspace((self.cursor_0.0, self.cursor_0.1 - 1));
         self.cursor_0 = (self.cursor_0.0, self.cursor_0.1 - 1);
         Ok(())
     }
@@ -443,7 +470,7 @@ pub trait Terminal {
     fn size(&self) -> (u32, u32);
     fn print_at(
         &mut self,
-        c: char,
+        zchar: u16,
         row: u32,
         cursor: u32,
         colors: (Color, Color),

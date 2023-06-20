@@ -246,7 +246,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x18 => processor_2op::modulus(state, instruction),
                 0x19 => processor_2op::call_2s(state, instruction),
                 0x1a => processor_2op::call_2n(state, instruction),
-                //             0x1b => processor_2op::set_colour(context, instruction),
+                0x1b => processor_2op::set_colour(state, instruction),
                 //             0x1c => processor_2op::throw(context, instruction),
                 _ => Err(RuntimeError::new(
                     ErrorCode::UnimplementedInstruction,

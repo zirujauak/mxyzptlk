@@ -6,6 +6,7 @@ pub enum ErrorCode {
     IllegalAccess,
     Instruction,
     InvalidAddress,
+    InvalidColor,
     InvalidLocalVariable,
     InvalidWindow,
     ObjectTreeState,

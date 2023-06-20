@@ -308,10 +308,11 @@ pub fn call_2n(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
     )
 }
 
-// pub fn set_colour(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn set_colour(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    state.set_colors(operands[0], operands[1])?;
+    Ok(instruction.next_address())
+}
 
 // pub fn throw(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
