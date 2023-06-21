@@ -82,10 +82,12 @@ pub fn art_shift(
     Ok(instruction.next_address())
 }
 
-// pub fn set_font(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn set_font(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let result = state.set_font(operands[0])?;
+    store_result(state, instruction, result)?;
+    Ok(instruction.next_address())
+}
 
 // pub fn draw_picture(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
 //     let operands = operand_values(context, instruction)?;
