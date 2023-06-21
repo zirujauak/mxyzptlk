@@ -176,11 +176,13 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x6 => processor_0op::restore(state, instruction),
                 0x7 => processor_0op::restart(state, instruction),
                 0x8 => processor_0op::ret_popped(state, instruction),
-                //             0x9 => if context.version() < 5 {
-                //                 processor_0op::pop(context, instruction)
-                //             } else {
-                //                 processor_0op::catch(context, instruction)
-                //             },
+                0x9 => {
+                    if version < 5 {
+                        processor_0op::pop(state, instruction)
+                    } else {
+                        processor_0op::catch(state, instruction)
+                    }
+                }
                 0xa => processor_0op::quit(state, instruction),
                 0xb => processor_0op::new_line(state, instruction),
                 0xc => processor_0op::show_status(state, instruction),
@@ -247,7 +249,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x19 => processor_2op::call_2s(state, instruction),
                 0x1a => processor_2op::call_2n(state, instruction),
                 0x1b => processor_2op::set_colour(state, instruction),
-                //             0x1c => processor_2op::throw(context, instruction),
+                0x1c => processor_2op::throw(state, instruction),
                 _ => Err(RuntimeError::new(
                     ErrorCode::UnimplementedInstruction,
                     format!("Unimplemented instruction: {}", instruction.opcode()),
@@ -282,8 +284,8 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x1a => processor_var::call_vn2(state, instruction),
                 //             0x1b => processor_var::tokenise(context, instruction),
                 //             0x1c => processor_var::encode_text(context, instruction),
-                //             0x1d => processor_var::copy_table(context, instruction),
-                //             0x1e => processor_var::print_table(context, instruction),
+                0x1d => processor_var::copy_table(state, instruction),
+                0x1e => processor_var::print_table(state, instruction),
                 0x1f => processor_var::check_arg_count(state, instruction),
                 _ => Err(RuntimeError::new(
                     ErrorCode::UnimplementedInstruction,

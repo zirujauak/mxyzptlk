@@ -574,38 +574,59 @@ pub fn call_vn2(state: &mut State, instruction: &Instruction) -> Result<usize, R
 //     todo!()
 // }
 
-// pub fn copy_table(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn copy_table(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     let src = operands[0] as usize;
-//     let dst = operands[1] as usize;
-//     let len = operands[2] as i16;
+    let src = operands[0] as usize;
+    let dst = operands[1] as usize;
+    let len = operands[2] as i16;
 
-//     if dst == 0 {
-//         for i in 0..len as usize {
-//             context.write_byte(src + i, 0)?;
-//         }
-//     } else {
-//         if len > 0 && dst > src && dst < src + len as usize {
-//             for i in (0..len as usize).rev() {
-//                 context.write_byte(dst + i, context.read_byte(src + i)?)?;
-//             }
-//         } else {
-//             for i in 0..len.abs() as usize {
-//                 context.write_byte(dst + i, context.read_byte(src + i)?)?;
-//             }
-//         }
-//     }
+    if dst == 0 {
+        for i in 0..len as usize {
+            state.write_byte(src + i, 0)?;
+        }
+    } else {
+        if len > 0 && dst > src && dst < src + len as usize {
+            for i in (0..len as usize).rev() {
+                state.write_byte(dst + i, state.read_byte(src + i)?)?;
+            }
+        } else {
+            for i in 0..len.abs() as usize {
+                state.write_byte(dst + i, state.read_byte(src + i)?)?;
+            }
+        }
+    }
 
-//     Ok(instruction.next_address())
-// }
+    Ok(instruction.next_address())
+}
 
-// pub fn print_table(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     todo!()
-// }
+pub fn print_table(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let table = operands[0] as usize;
+    let width = operands[1] as usize;
+    let height = if operands.len() > 2 { operands[2] } else { 1 } as usize;
+    let skip = if operands.len() > 3 { operands[3] } else { 0 } as usize;
+
+    let left = state.cursor()?.1;
+    let mut padding = Vec::new();
+    for _ in 1..left {
+        padding.push(0x20 as u16);
+    }
+
+    for i in 0..height {
+        if i > 0 {
+            state.new_line()?;
+            state.print(&padding)?;
+        }
+
+        for j in 0..width {
+            let offset = i * (width + skip);
+            state.print(&vec![state.read_byte(table + offset + j)? as u16])?;
+        }
+    }
+
+    Ok(instruction.next_address())
+}
 
 pub fn check_arg_count(
     state: &mut State,

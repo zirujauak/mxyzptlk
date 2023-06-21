@@ -353,6 +353,11 @@ impl State {
         self.frame_stack.pc()
     }
 
+    pub fn throw(&mut self, depth: u16, result: u16) -> Result<usize, RuntimeError> {
+        self.frame_stack.frames_mut().truncate(depth as usize);
+        self.return_routine(result)
+    }
+
     pub fn set_pc(&mut self, pc: usize) -> Result<(), RuntimeError> {
         self.frame_stack.current_frame_mut()?.set_pc(pc);
         Ok(())
@@ -524,6 +529,11 @@ impl State {
 
     pub fn set_text_style(&mut self, style: u16) -> Result<(), RuntimeError> {
         self.screen.set_style(style as u8)
+    }
+
+    pub fn cursor(&mut self) -> Result<(u16, u16), RuntimeError> {
+        let c = self.screen.cursor();
+        Ok((c.0 as u16, c.1 as u16))
     }
 
     pub fn set_cursor(&mut self, row: u16, column: u16) -> Result<(), RuntimeError> {

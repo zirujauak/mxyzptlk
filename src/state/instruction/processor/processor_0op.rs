@@ -89,14 +89,16 @@ pub fn ret_popped(state: &mut State, _instruction: &Instruction) -> Result<usize
     state.return_routine(value)
 }
 
-// pub fn pop(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     context.current_frame_mut().pop()?;
-//     Ok(instruction.next_address())
-// }
+pub fn pop(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    state.frame_stack.current_frame_mut()?.pop()?;
+    Ok(instruction.next_address())
+}
 
-// pub fn catch(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     todo!()
-// }
+pub fn catch(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let depth = state.frame_stack.frames().len();
+    store_result(state, instruction, depth as u16);
+    Ok(instruction.next_address())
+}
 
 pub fn quit(_state: &mut State, _instruction: &Instruction) -> Result<usize, RuntimeError> {
     Ok(0)

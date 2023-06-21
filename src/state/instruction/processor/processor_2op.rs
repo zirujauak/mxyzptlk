@@ -314,12 +314,11 @@ pub fn set_colour(state: &mut State, instruction: &Instruction) -> Result<usize,
     Ok(instruction.next_address())
 }
 
-// pub fn throw(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
+pub fn throw(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
 
-//     let value = operands[0];
-//     let index = operands[1];
+    let result = operands[0];
+    let depth = operands[1];
 
-//     todo!()
-//     // context.throw(index, value)
-// }
+    state.throw(depth, result)
+}
