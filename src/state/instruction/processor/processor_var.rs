@@ -121,13 +121,15 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
         state.status_line()?;
     }
 
-    // text buffer may contain existing input
-    let existing_len = state.read_byte(text_buffer + 1)? as usize;
-    for i in 0..existing_len {
-        existing_input.push(state.read_byte(text_buffer + 2 + i)? as u16);
-    }
-    if state.input_interrupt_print {
-        state.print(&existing_input)?;
+    if version > 4 {
+        // text buffer may contain existing input
+        let existing_len = state.read_byte(text_buffer + 1)? as usize;
+        for i in 0..existing_len {
+            existing_input.push(state.read_byte(text_buffer + 2 + i)? as u16);
+        }
+        if state.input_interrupt_print {
+            state.print(&existing_input)?;
+        }
     }
 
     info!(target: "app::input", "READ initial input: {:?}", existing_input);

@@ -49,11 +49,11 @@ fn branch(
 ) -> Result<usize, RuntimeError> {
     match instruction.branch() {
         Some(b) => {
-            if condition == b.condition {
+            if condition == b.condition() {
                 match b.branch_address {
                     0 => state.return_routine(0), // return false
                     1 => state.return_routine(1), // return true,
-                    _ => Ok(b.branch_address),
+                    _ => Ok(b.branch_address()),
                 }
             } else {
                 Ok(instruction.next_address())

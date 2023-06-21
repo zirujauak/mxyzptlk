@@ -18,15 +18,15 @@ const ALPHABET_V3: [[char; 26]; 3] = [
     ],
 ];
 
-pub fn valid_input(c: char) -> bool {
-    if c as u8 >= 32 && c as u8 <= 126 {
-        true
-    } else if c as u8 >= 145 && c as u8 <= 254 {
-        true
-    } else {
-        false
-    }
-}
+// pub fn valid_input(c: char) -> bool {
+//     if c as u8 >= 32 && c as u8 <= 126 {
+//         true
+//     } else if c as u8 >= 145 && c as u8 <= 254 {
+//         true
+//     } else {
+//         false
+//     }
+// }
 
 /// Decode an abbreviation to a string
 ///
@@ -159,13 +159,13 @@ fn as_word(z1: u8, z2: u8, z3: u8) -> u16 {
     (((z1 as u16) & 0x1F) << 10) | (((z2 as u16) & 0x1F) << 5) | (z3 as u16) & 0x1F
 }
 
-pub fn from_default_dictionary(state: &State, word: &Vec<char>) -> Result<usize, RuntimeError> {
-    self::from_dictionary(
-        state,
-        header::field_word(state.memory(), HeaderField::Dictionary)? as usize,
-        word,
-    )
-}
+// pub fn from_default_dictionary(state: &State, word: &Vec<char>) -> Result<usize, RuntimeError> {
+//     self::from_dictionary(
+//         state,
+//         header::field_word(state.memory(), HeaderField::Dictionary)? as usize,
+//         word,
+//     )
+// }
 
 fn search_entry(
     state: &State,

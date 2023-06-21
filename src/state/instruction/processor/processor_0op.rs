@@ -98,7 +98,7 @@ pub fn ret_popped(state: &mut State, _instruction: &Instruction) -> Result<usize
 //     todo!()
 // }
 
-pub fn quit(state: &mut State, _instruction: &Instruction) -> Result<usize, RuntimeError> {
+pub fn quit(_state: &mut State, _instruction: &Instruction) -> Result<usize, RuntimeError> {
     Ok(0)
 }
 

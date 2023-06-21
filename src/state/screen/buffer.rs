@@ -76,19 +76,19 @@ impl Buffer {
         // Remove the row at the top of the scroll window
         self.buffer.remove(top as usize - 1);
         let mut r = Vec::new();
-        for i in 0..self.columns {
+        for _ in 0..self.columns {
             r.push(BufferCell::new(' ' as u16, colors, CellStyle::new()))
         }
         self.buffer.push(r);
         terminal.as_mut().scroll(top);
     }
 
-    pub fn flush(&mut self) {
-        for i in 0..self.buffer.len() {
-            for j in 0..self.buffer[i].len() {
-                print!("{}", (self.buffer[i][j].zchar as u8) as char);
-            }
-            println!("");
-        }
-    }
+    // pub fn flush(&mut self) {
+    //     for i in 0..self.buffer.len() {
+    //         for j in 0..self.buffer[i].len() {
+    //             print!("{}", (self.buffer[i][j].zchar as u8) as char);
+    //         }
+    //         println!("");
+    //     }
+    // }
 }

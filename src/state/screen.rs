@@ -46,7 +46,6 @@ pub struct Screen {
     // row, column with 1,1 as origin
     cursor_0: (u32, u32),
     cursor_1: Option<(u32, u32)>,
-    buffered: bool,
     terminal: Box<dyn Terminal>,
 }
 
@@ -71,7 +70,6 @@ impl Screen {
             current_style: CellStyle::new(),
             cursor_0: (rows, 1),
             cursor_1: None,
-            buffered: true,
             terminal,
         }
     }
@@ -96,7 +94,6 @@ impl Screen {
             current_style: CellStyle::new(),
             cursor_0: (rows, 1),
             cursor_1: None,
-            buffered: true,
             terminal,
         }
     }
@@ -121,7 +118,6 @@ impl Screen {
             current_style: CellStyle::new(),
             cursor_0: (1, 1),
             cursor_1: None,
-            buffered: true,
             terminal,
         }
     }
@@ -134,16 +130,16 @@ impl Screen {
         self.columns
     }
 
-    pub fn buffered(&mut self, enabled: bool) {
-        self.buffered = enabled;
-    }
-
     pub fn cursor(&self) -> (u32, u32) {
         if self.selected_window == 0 {
             self.cursor_0
         } else {
             self.cursor_1.unwrap()
         }
+    }
+
+    pub fn selected_window(&self) -> u8 {
+        self.selected_window
     }
 
     pub fn move_cursor(&mut self, row: u32, column: u32) {
@@ -358,17 +354,20 @@ impl Screen {
     }
 
     pub fn print(&mut self, text: &Vec<u16>) {
-        if self.selected_window == 1 || !self.buffered {
-            self.print_word(text);
-        } else {
-            let words = text.split_inclusive(|c| *c == 0x20);
-            for word in words {
-                if self.columns - self.cursor_0.1 < word.len() as u32 {
-                    self.new_line();
-                }
-                self.print_word(&word.to_vec());
-            }
+        for c in text {
+            self.print_char(*c);
         }
+        // if self.selected_window == 1 || !self.buffered {
+        //     self.print_word(text);
+        // } else {
+        //     let words = text.split_inclusive(|c| *c == 0x20);
+        //     for word in words {
+        //         if self.columns - self.cursor_0.1 < word.len() as u32 {
+        //             self.new_line();
+        //         }
+        //         self.print_word(&word.to_vec());
+        //     }
+        // }
 
         self.terminal.flush();
     }
@@ -376,7 +375,7 @@ impl Screen {
     fn print_char(&mut self, zchar: u16) {
         if zchar == 0xd {
             self.new_line();
-        } else {
+        } else if zchar != 0 {
             if self.selected_window == 0 {
                 self.buffer.print(
                     &mut self.terminal,

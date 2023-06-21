@@ -44,10 +44,12 @@ pub struct State {
     frame_stack: FrameStack,
     rng: Box<dyn RNG>,
     output_streams: u8,
+    stream_2: Option<File>,
     stream_3: Vec<Stream3>,
     undo_stack: Vec<Quetzal>,
     input_interrupt: Option<u16>,
     input_interrupt_print: bool,
+    buffered: bool,
 }
 
 impl State {
@@ -85,10 +87,12 @@ impl State {
                 frame_stack,
                 rng: Box::new(rng),
                 output_streams: 0x1,
+                stream_2: None,
                 stream_3: Vec::new(),
                 undo_stack: Vec::new(),
                 input_interrupt: None,
                 input_interrupt_print: false,
+                buffered: true,
             })
         }
     }
@@ -149,6 +153,14 @@ impl State {
             header::clear_flag2(&mut self.memory, Flags2::RequestMouse)?;
         }
 
+        // Interpreter # and version
+        self.write_byte(0x1E, 6)?;
+        self.write_byte(0x1F, 'Z' as u8)?;
+
+        // Z-Machine standard compliance
+        self.write_byte(0x32, 1)?;
+        self.write_byte(0x33, 0)?;
+        
         self.screen.reset();
 
         Ok(())
@@ -165,8 +177,17 @@ impl State {
     pub fn dynamic(&self) -> &Vec<u8> {
         &self.dynamic
     }
+
     pub fn screen(&self) -> &Screen {
         &self.screen
+    }
+
+    pub fn stream_2_mut(&mut self) -> Result<&mut File, RuntimeError> {
+        if let Some(f) = self.stream_2.as_mut() {
+            Ok(f)
+        } else {
+            Err(RuntimeError::new(ErrorCode::System, "Stream 2 not initialized".to_string()))
+        }
     }
 
     pub fn input_interrupt(&mut self) -> Option<u16> {
@@ -233,7 +254,15 @@ impl State {
 
     pub fn write_word(&mut self, address: usize, value: u16) -> Result<(), RuntimeError> {
         if address < self.static_mark - 1 {
-            self.memory.write_word(address, value)
+            if address == 0x10 {
+                if value & 0x0001 == 0x0001 {
+                    self.output_stream(2, None)?;
+                } else {
+                    self.output_stream(-2, None)?;
+                }
+            }
+            self.memory.write_word(address, value)?;
+            Ok(())
         } else {
             Err(RuntimeError::new(
                 ErrorCode::IllegalAccess,
@@ -344,13 +373,20 @@ impl State {
     pub fn output_stream(&mut self, stream: i16, table: Option<usize>) -> Result<(), RuntimeError> {
         if stream > 0 {
             let mask = (1 << stream - 1) & 0xF;
-            self.output_streams = self.output_streams | mask;
-            if stream == 3 {
+            if stream == 2 {
+                if let None = self.stream_2 {
+                    self.stream_2 = Some(self.prompt_and_create("Transcript file: ", "txt")?);
+                }
+                header::set_flag2(&mut self.memory, Flags2::Transcripting)?;
+            } else if stream == 3 {
                 self.stream_3.push(Stream3 {
                     table: table.unwrap(),
                     buffer: Vec::new(),
                 });
             }
+            self.output_streams = self.output_streams | mask;
+        } else if stream == -2 {
+            header::clear_flag2(&mut self.memory, Flags2::Transcripting)?;
         } else if stream == -3 {
             let stream3 = self.stream_3.pop().unwrap();
             let len = stream3.buffer.len();
@@ -370,10 +406,47 @@ impl State {
         Ok(())
     }
 
+    fn transcript(&mut self, text: &Vec<u16>) -> Result<(), RuntimeError> {
+        match self.stream_2.as_mut() {
+            Some(f) => match f.write_all(&text.iter().map(|c| if *c == 0x0d { 0x0a } else {*c as u8}).collect::<Vec<u8>>()) {
+                Ok(_) => (),
+                Err(e) => error!(target: "app::trace", "Error writing transcript: {:?}", e),
+            },
+            None => error!(target: "app::trace", "Stream 2 not initialized"),
+        }
+
+        Ok(())
+    }
     pub fn print(&mut self, text: &Vec<u16>) -> Result<(), RuntimeError> {
         // Only print to the screen if stream 3 is not selected and stream 1
         if self.output_streams & 0x5 == 0x1 {
-            self.screen.print(text);
+            let s2 = self.output_streams & 0x2 == 0x2;
+            if self.screen.selected_window() == 1 || !self.buffered {
+                self.screen.print(text);
+                if self.screen.selected_window() == 0 && s2 {
+                    self.transcript(text)?;
+                }
+            } else {
+                let words = text.split_inclusive(|c| *c == 0x20);
+                for word in words {
+                    if self.screen.columns() - self.screen.cursor().1 < word.len() as u32 {
+                        self.screen.new_line();
+                        if s2 {
+                            self.transcript(&[0x0d as u16].to_vec())?;
+                        }
+                    }
+                    self.screen.print(&word.to_vec());
+                    if s2 {
+                        self.transcript(&word.to_vec())?;
+                    }
+                }
+            }
+
+            if s2 {
+                if let Err(e) = self.stream_2_mut()?.flush() {
+                    error!(target: "app::trace", "Error flushing transcript: {}", e);
+                }
+            }
         }
 
         if self.frame_stack.current_frame()?.input_interrupt() {
@@ -448,7 +521,8 @@ impl State {
     }
 
     pub fn buffer_mode(&mut self, mode: u16) -> Result<(), RuntimeError> {
-        Ok(self.screen.buffered(mode != 0))
+        self.buffered = mode != 0;
+        Ok(())
     }
 
     pub fn beep(&mut self) -> Result<(), RuntimeError> {
@@ -478,22 +552,25 @@ impl State {
 
         // TODO: Set a timeout
         let end = if timeout > 0 {
-            SystemTime::now().duration_since(UNIX_EPOCH).expect("Error getting system time").as_millis() + (timeout as u128 * 1000)
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Error getting system time")
+                .as_millis()
+                + (timeout as u128 * 1000)
         } else {
             0
         };
 
         loop {
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Error getting system time").as_millis();
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Error getting system time")
+                .as_millis();
             if end > 0 && now > end {
                 return Ok(input_buffer);
             }
 
-            let timeout = if end > 0 {
-                end - now
-            } else {
-                0
-            };
+            let timeout = if end > 0 { end - now } else { 0 };
 
             info!(target: "app::input", "Now: {}, End: {}, Timeout: {}", now, end, timeout);
 
@@ -523,12 +600,7 @@ impl State {
     }
 
     // Save/restore
-    pub fn prompt_and_write(
-        &mut self,
-        prompt: &str,
-        suffix: &str,
-        data: &Vec<u8>,
-    ) -> Result<(), RuntimeError> {
+    pub fn prompt_and_create(&mut self, prompt: &str, suffix: &str) -> Result<File, RuntimeError> {
         self.print(&prompt.chars().map(|c| c as u16).collect())?;
         let n = format!("{}.{}", self.name, suffix)
             .chars()
@@ -539,12 +611,39 @@ impl State {
         let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
         let filename = String::from_utf16(&f).unwrap();
         trace!(target: "app::trace", "Save '{}'", filename.trim());
-        let mut file = fs::OpenOptions::new()
+        let file = fs::OpenOptions::new()
             .create(true)
             .truncate(true)
             .write(true)
             .open(filename.trim())
             .unwrap();
+
+        Ok(file)
+    }
+
+    pub fn prompt_and_write(
+        &mut self,
+        prompt: &str,
+        suffix: &str,
+        data: &Vec<u8>,
+    ) -> Result<(), RuntimeError> {
+        let mut file = self.prompt_and_create(prompt, suffix)?;
+        // self.print(&prompt.chars().map(|c| c as u16).collect())?;
+        // let n = format!("{}.{}", self.name, suffix)
+        //     .chars()
+        //     .map(|c| c as u16)
+        //     .collect();
+        // self.print(&n)?;
+
+        // let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
+        // let filename = String::from_utf16(&f).unwrap();
+        // trace!(target: "app::trace", "Save '{}'", filename.trim());
+        // let mut file = fs::OpenOptions::new()
+        //     .create(true)
+        //     .truncate(true)
+        //     .write(true)
+        //     .open(filename.trim())
+        //     .unwrap();
 
         match file.write_all(data) {
             Ok(_) => (),
@@ -666,7 +765,13 @@ impl State {
     // }
 
     pub fn new_line(&mut self) -> Result<(), RuntimeError> {
-        self.screen.new_line();
+        if self.output_streams & 0x5 == 0x1 {
+            self.screen.new_line();
+            if self.output_streams & 0x2 == 0x2 {
+                self.transcript(&vec![0x0a as u16].to_vec())?;
+            }
+        }
+
         Ok(())
     }
 
