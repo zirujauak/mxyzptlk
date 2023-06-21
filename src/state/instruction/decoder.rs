@@ -99,7 +99,7 @@ fn result_variable(
 ) -> Result<(usize, Option<StoreResult>), RuntimeError> {
     match opcode.form() {
         OpcodeForm::Ext => match opcode.opcode() {
-            0x00 | 0x01 | 0x02 | 0x03 | 0x09 | 0x0a => Ok((
+            0x00 | 0x01 | 0x02 | 0x03 | 0x04 | 0x09 | 0x0a => Ok((
                 address + 1,
                 Some(StoreResult::new(address, memory.read_byte(address)?)),
             )),
