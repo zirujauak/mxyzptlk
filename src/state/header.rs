@@ -46,6 +46,7 @@ pub enum Flags1v3 {
 pub enum Flags1v4 {
     // V4+ flags
     ColoursAvailable = 0x01,       // bit 0
+    PicturesAvailable = 0x02,      // bit 1
     BoldfaceAvailable = 0x04,      // bit 2
     ItalicAvailable = 0x08,        // bit 3
     FixedSpaceAvailable = 0x10,    // bit 4
