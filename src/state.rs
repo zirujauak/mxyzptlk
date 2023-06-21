@@ -145,12 +145,14 @@ impl State {
             )?;
             header::set_byte(&mut self.memory, HeaderField::FontWidth, 1)?;
             header::set_byte(&mut self.memory, HeaderField::FontHeight, 1)?;
+            header::set_flag1(&mut self.memory, Flags1v4::PicturesAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::ColoursAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::BoldfaceAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::ItalicAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::FixedSpaceAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::TimedInputAvailable as u8)?;
             header::clear_flag2(&mut self.memory, Flags2::RequestMouse)?;
+            header::clear_flag2(&mut self.memory, Flags2::RequestPictures)?;
         }
 
         // Interpreter # and version
@@ -527,6 +529,10 @@ impl State {
         Ok(())
     }
 
+    pub fn set_font(&mut self, font: u16) -> Result<u16, RuntimeError> {
+        Ok(self.screen.set_font(font as u8) as u16)
+    }
+
     pub fn set_text_style(&mut self, style: u16) -> Result<(), RuntimeError> {
         self.screen.set_style(style as u8)
     }
@@ -598,7 +604,9 @@ impl State {
                 Some(key) => {
                     if terminators.contains(&key) {
                         input_buffer.push(key);
-                        self.print(&vec![key])?;
+                        if key == 0x0d {
+                            self.print(&vec![key])?;
+                        }
                         break;
                     } else {
                         if key == 0x08 {
