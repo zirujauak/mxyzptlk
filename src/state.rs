@@ -160,7 +160,7 @@ impl State {
         // Z-Machine standard compliance
         self.write_byte(0x32, 1)?;
         self.write_byte(0x33, 0)?;
-        
+
         self.screen.reset();
 
         Ok(())
@@ -186,7 +186,10 @@ impl State {
         if let Some(f) = self.stream_2.as_mut() {
             Ok(f)
         } else {
-            Err(RuntimeError::new(ErrorCode::System, "Stream 2 not initialized".to_string()))
+            Err(RuntimeError::new(
+                ErrorCode::System,
+                "Stream 2 not initialized".to_string(),
+            ))
         }
     }
 
@@ -408,7 +411,12 @@ impl State {
 
     fn transcript(&mut self, text: &Vec<u16>) -> Result<(), RuntimeError> {
         match self.stream_2.as_mut() {
-            Some(f) => match f.write_all(&text.iter().map(|c| if *c == 0x0d { 0x0a } else {*c as u8}).collect::<Vec<u8>>()) {
+            Some(f) => match f.write_all(
+                &text
+                    .iter()
+                    .map(|c| if *c == 0x0d { 0x0a } else { *c as u8 })
+                    .collect::<Vec<u8>>(),
+            ) {
                 Ok(_) => (),
                 Err(e) => error!(target: "app::trace", "Error writing transcript: {:?}", e),
             },
@@ -456,7 +464,9 @@ impl State {
         if self.output_streams & 0x4 == 0x4 {
             let stream3 = self.stream_3.last_mut().unwrap();
             for c in text {
-                stream3.buffer.push(*c);
+                if *c != 0 {
+                    stream3.buffer.push(*c);
+                }
             }
         }
         Ok(())

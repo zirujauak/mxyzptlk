@@ -52,7 +52,8 @@ pub fn log_shift(
     } else if places == 0 {
         value
     } else {
-        todo!()
+        error!(target: "app::instruction", "LOG_SHIFT {:04x} {}?!", value, places);
+        0
     };
 
     store_result(state, instruction, new_value)?;
@@ -73,7 +74,8 @@ pub fn art_shift(
     } else if places == 0 {
         value
     } else {
-        todo!()
+        error!(target: "app::instruction", "ART_SHIFT {:04x} {}?!", value, places);
+        0
     };
 
     store_result(state, instruction, new_value as u16)?;
