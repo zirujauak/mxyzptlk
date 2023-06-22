@@ -226,53 +226,33 @@ fn scan_entry(
     entry_size: usize,
     words: &Vec<u16>,
 ) -> Result<usize, RuntimeError> {
-    // Scan the table from the start
-    info!(target: "app::input", "Search dictionary for {:04x} {:04x} {:04x}", words[0], words[1], words[2]);
+    // Scan the unsorted dictionary
     let word_count = words.len();
     'outer: for i in 0..entry_count {
         let entry_address = address + (i * entry_size as usize);
-        info!(target: "app::input", "Check dictionary entry @ {:04x}", entry_address);
         for j in 0..word_count {
             let ew = state.read_word(entry_address + (j * 2))?;
-            info!(target: "app::input", "Word {}: ${:04x} : ${:04x} - {}", j, words[j], ew, ew == words[j]);
-            if ew < words[j] {
-                info!(target: "app::input", "No match");
-                return Ok(0);
-            } else if ew != words[j] {
-                break 'outer;
+            if ew != words[j] {
+                continue 'outer;
             }
         }
 
-        info!(target: "app::input", "Entry matched");
         return Ok(entry_address);
     }
 
-    info!(target: "app::input", "No match");
     Ok(0)
 }
 
 pub fn encode_text(word: &Vec<u16>, words: usize) -> Vec<u16> {
     let mut zchars = Vec::new();
-    // let mut index = 0;
 
+    // Read at most words * 3 characters from word
     let c = usize::min(word.len(), words * 3);
     for i in 0..c {
         zchars.append(&mut find_char(word[i]));
     }
-    // loop {
-    //     if zchars.len() > words * 3 {
-    //         break;
-    //     }
-    //     match word.get(index) {
-    //         Some(c) => {
-    //             let mut z = find_char(*c);
-    //             index = index + 1;
-    //             zchars.append(&mut z);
-    //         },
-    //         None => break
-    //     }
-    // }
 
+    // Truncate or pad characters 
     if zchars.len() > words * 3 {
         zchars.truncate(words * 3);
     } else {
@@ -282,6 +262,8 @@ pub fn encode_text(word: &Vec<u16>, words: usize) -> Vec<u16> {
     }
 
     info!(target: "app::input", "LEXICAL ANALYSIS: zchars: {:?}", zchars);
+
+    // Encode zchar triplets into encoded ZSCII words
     let mut zwords = Vec::new();
     for i in 0..words {
         let index = i * 3;
@@ -312,50 +294,10 @@ pub fn from_dictionary(
 
     info!(target: "app::input", "LEXICAL ANALYSIS: dictionary @ {:04x}, {} separators, {} entries of size {}", dictionary_address, separator_count, entry_count, entry_size);
 
-    // let mut zchars = Vec::new();
-    // let mut index = 0;
-    // loop {
-    //     if zchars.len() > word_count * 3 {
-    //         break;
-    //     }
-    //     match word.get(index) {
-    //         Some(c) => {
-    //             let mut z = find_char(c);
-    //             index = index + 1;
-    //             zchars.append(&mut z);
-    //         },
-    //         None => break
-    //     }
-    // }
-
-    // if zchars.len() > word_count * 3 {
-    //     zchars.truncate(word_count * 3);
-    // } else {
-    //     for i in zchars.len()..word_count * 3 {
-    //         zchars.push(5);
-    //     }
-    // }
     let zchars = word.iter().map(|c| *c as u16).collect::<Vec<u16>>();
     let words = encode_text(&zchars, word_count);
 
-    info!(target: "app::input", "LA: encoded text: {:?}", words);
-    // for i in 0..word_count * 3 {
-    //     if let Some(c) = word.get(i) {
-    //         zchars.append(&mut find_char(c))
-    //     } else {
-    //         zchars.push(5);
-    //     }
-    // }
-
-    // let mut words = Vec::new();
-    // for i in 0..word_count {
-    //     let index = i * 3;
-    //     let mut w = as_word(zchars[index], zchars[index + 1], zchars[index + 2]);
-    //     if i == word_count - 1 {
-    //         w = w | 0x8000;
-    //     }
-    //     words.push(w);
-    // }
+    info!(target: "app::input", "LEXICAL ANALYSIS: encoded text: {:?}", words);
 
     if entry_count > 0 {
         search_entry(
@@ -369,26 +311,10 @@ pub fn from_dictionary(
         scan_entry(
             state,
             dictionary_address + separator_count + 4,
-            i16::abs(entry_count as i16) as usize,
+            (entry_count * -1) as usize,
             entry_size,
             &words,
         )
-        // 'outer: for i in 0..i16::abs(entry_count as i16) as usize {
-        //     let entry_address =
-        //         dictionary_address + separator_count as usize + 4 + (i * entry_size as usize);
-        //     for j in 0..word_count {
-        //         let ew = state.read_word(entry_address)?;
-        //         if ew < words[j] {
-        //             return Ok(0);
-        //         } else if ew != words[j] {
-        //             break 'outer;
-        //         }
-        //     }
-
-        //     return Ok(entry_address);
-        // }
-
-        // return Ok(0);
     }
 }
 
@@ -467,9 +393,9 @@ pub fn parse_text(
     let mut word_count: usize = 0;
     let mut words: usize = 0;
     let mut data = Vec::new();
-    //let offset = if version < 5 { 1 } else { 2 };
 
     if version < 5 {
+        // Buffer is 0 terminated
         let mut i = 1;
         loop {
             let b = state.read_byte(text_buffer + i)?;
@@ -481,12 +407,13 @@ pub fn parse_text(
             }
         }
     } else {
+        // Buffer size is stored in the second byte
         let n = state.read_byte(text_buffer + 1)? as usize;
         for i in 0..n {
             data.push(state.read_byte(text_buffer + 2 + i)?);
         }
     }
-    info!(target: "app::input", "LA: {:?}", data);
+
     let max_words = state.read_byte(parse_buffer)? as usize;
 
     // let data = input_buffer[0..end].to_vec();
@@ -566,6 +493,8 @@ pub fn parse_text(
         )?;
     }
 
+    // If flag is true, then a previous analysis pass has already set the
+    // correct parse buffer size
     if !flag {
         state.write_byte(parse_buffer + 1, words as u8)?;
     }
