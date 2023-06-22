@@ -139,27 +139,27 @@ pub fn separators(state: &State, dictionary_address: usize) -> Result<Vec<char>,
     Ok(sep)
 }
 
-fn find_char(c: &char) -> Vec<u8> {
+fn find_char(zchar: u16) -> Vec<u16> {
+    let c = (zchar as u8) as char;
     for i in 0..26 {
-        if ALPHABET_V3[0][i] == *c {
-            return vec![i as u8 + 6];
+        if ALPHABET_V3[0][i] == c {
+            return vec![i as u16 + 6];
         }
     }
 
     for i in 0..26 {
-        if ALPHABET_V3[2][i] == *c {
-            return vec![5, i as u8 + 6];
+        if ALPHABET_V3[2][i] == c {
+            return vec![5, i as u16 + 6];
         }
     }
 
-    let z1 = (*c as u8 >> 5) & 0x1f;
-    let z2 = *c as u8 & 0x1f;
-    return vec![5, 6, z1, z2];
-//    panic!("Unknown input {}", c)
+    let z1 = (c as u8 >> 5) & 0x1f;
+    let z2 = c as u8 & 0x1f;
+    return vec![5, 6, z1 as u16, z2 as u16];
 }
 
-fn as_word(z1: u8, z2: u8, z3: u8) -> u16 {
-    (((z1 as u16) & 0x1F) << 10) | (((z2 as u16) & 0x1F) << 5) | (z3 as u16) & 0x1F
+fn as_word(z1: u16, z2: u16, z3: u16) -> u16 {
+    ((z1 & 0x1F) << 10) | ((z2 & 0x1F) << 5) | z3 & 0x1F
 }
 
 fn search_entry(
@@ -227,22 +227,72 @@ fn scan_entry(
     words: &Vec<u16>,
 ) -> Result<usize, RuntimeError> {
     // Scan the table from the start
-    let word_count = words.len() / 3;
+    info!(target: "app::input", "Search dictionary for {:04x} {:04x} {:04x}", words[0], words[1], words[2]);
+    let word_count = words.len();
     'outer: for i in 0..entry_count {
         let entry_address = address + (i * entry_size as usize);
+        info!(target: "app::input", "Check dictionary entry @ {:04x}", entry_address);
         for j in 0..word_count {
-            let ew = state.read_word(entry_address)?;
+            let ew = state.read_word(entry_address + (j * 2))?;
+            info!(target: "app::input", "Word {}: ${:04x} : ${:04x} - {}", j, words[j], ew, ew == words[j]);
             if ew < words[j] {
+                info!(target: "app::input", "No match");
                 return Ok(0);
             } else if ew != words[j] {
                 break 'outer;
             }
         }
 
+        info!(target: "app::input", "Entry matched");
         return Ok(entry_address);
     }
 
+    info!(target: "app::input", "No match");
     Ok(0)
+}
+
+pub fn encode_text(word: &Vec<u16>, words: usize) -> Vec<u16> {
+    let mut zchars = Vec::new();
+    // let mut index = 0;
+
+    let c = usize::min(word.len(), words * 3);
+    for i in 0..c {
+        zchars.append(&mut find_char(word[i]));
+    }
+    // loop {
+    //     if zchars.len() > words * 3 {
+    //         break;
+    //     }
+    //     match word.get(index) {
+    //         Some(c) => {
+    //             let mut z = find_char(*c);
+    //             index = index + 1;
+    //             zchars.append(&mut z);
+    //         },
+    //         None => break
+    //     }
+    // }
+
+    if zchars.len() > words * 3 {
+        zchars.truncate(words * 3);
+    } else {
+        for _ in zchars.len()..words * 3 {
+            zchars.push(5);
+        }
+    }
+
+    info!(target: "app::input", "LEXICAL ANALYSIS: zchars: {:?}", zchars);
+    let mut zwords = Vec::new();
+    for i in 0..words {
+        let index = i * 3;
+        let mut w = as_word(zchars[index], zchars[index + 1], zchars[index + 2]);
+        if i == words - 1 {
+            w = w | 0x8000;
+        }
+        zwords.push(w);
+    }
+
+    zwords
 }
 
 pub fn from_dictionary(
@@ -253,38 +303,42 @@ pub fn from_dictionary(
     //let dictionary_address = header::field_word(state.memory(), HeaderField::Dictionary)? as usize;
     let separator_count = state.read_byte(dictionary_address)? as usize;
     let entry_size = state.read_byte(dictionary_address + separator_count + 1)? as usize;
-    let entry_count = state.read_word(dictionary_address + separator_count + 2)? as usize;
+    let entry_count = state.read_word(dictionary_address + separator_count + 2)? as i16;
     let word_count = if state.memory().read_byte(0)? < 4 {
         2
     } else {
         3
     };
 
-    let mut zchars = Vec::new();
-    let mut index = 0;
-    loop {
-        if zchars.len() > word_count * 3 {
-            break;
-        }
-        match word.get(index) {
-            Some(c) => {
-                let mut z = find_char(c);
-                index = index + 1;
-                zchars.append(&mut z);
-            },
-            None => break
-        }
-    }
+    info!(target: "app::input", "LEXICAL ANALYSIS: dictionary @ {:04x}, {} separators, {} entries of size {}", dictionary_address, separator_count, entry_count, entry_size);
 
-    if zchars.len() > word_count * 3 {
-        zchars.truncate(word_count * 3);
-    } else {
-        for i in zchars.len()..word_count * 3 {
-            zchars.push(5);
-        }
-    }
+    // let mut zchars = Vec::new();
+    // let mut index = 0;
+    // loop {
+    //     if zchars.len() > word_count * 3 {
+    //         break;
+    //     }
+    //     match word.get(index) {
+    //         Some(c) => {
+    //             let mut z = find_char(c);
+    //             index = index + 1;
+    //             zchars.append(&mut z);
+    //         },
+    //         None => break
+    //     }
+    // }
 
-    info!(target: "app::input", "LA: encoded text: {:?}", zchars);
+    // if zchars.len() > word_count * 3 {
+    //     zchars.truncate(word_count * 3);
+    // } else {
+    //     for i in zchars.len()..word_count * 3 {
+    //         zchars.push(5);
+    //     }
+    // }
+    let zchars = word.iter().map(|c| *c as u16).collect::<Vec<u16>>();
+    let words = encode_text(&zchars, word_count);
+
+    info!(target: "app::input", "LA: encoded text: {:?}", words);
     // for i in 0..word_count * 3 {
     //     if let Some(c) = word.get(i) {
     //         zchars.append(&mut find_char(c))
@@ -293,21 +347,21 @@ pub fn from_dictionary(
     //     }
     // }
 
-    let mut words = Vec::new();
-    for i in 0..word_count {
-        let index = i * 3;
-        let mut w = as_word(zchars[index], zchars[index + 1], zchars[index + 2]);
-        if i == word_count - 1 {
-            w = w | 0x8000;
-        }
-        words.push(w);
-    }
+    // let mut words = Vec::new();
+    // for i in 0..word_count {
+    //     let index = i * 3;
+    //     let mut w = as_word(zchars[index], zchars[index + 1], zchars[index + 2]);
+    //     if i == word_count - 1 {
+    //         w = w | 0x8000;
+    //     }
+    //     words.push(w);
+    // }
 
     if entry_count > 0 {
         search_entry(
             state,
             dictionary_address + separator_count + 4,
-            entry_count,
+            entry_count as usize,
             entry_size,
             &words,
         )
@@ -318,23 +372,23 @@ pub fn from_dictionary(
             i16::abs(entry_count as i16) as usize,
             entry_size,
             &words,
-        )?;
-        'outer: for i in 0..i16::abs(entry_count as i16) as usize {
-            let entry_address =
-                dictionary_address + separator_count as usize + 4 + (i * entry_size as usize);
-            for j in 0..word_count {
-                let ew = state.read_word(entry_address)?;
-                if ew < words[j] {
-                    return Ok(0);
-                } else if ew != words[j] {
-                    break 'outer;
-                }
-            }
+        )
+        // 'outer: for i in 0..i16::abs(entry_count as i16) as usize {
+        //     let entry_address =
+        //         dictionary_address + separator_count as usize + 4 + (i * entry_size as usize);
+        //     for j in 0..word_count {
+        //         let ew = state.read_word(entry_address)?;
+        //         if ew < words[j] {
+        //             return Ok(0);
+        //         } else if ew != words[j] {
+        //             break 'outer;
+        //         }
+        //     }
 
-            return Ok(entry_address);
-        }
+        //     return Ok(entry_address);
+        // }
 
-        return Ok(0);
+        // return Ok(0);
     }
 }
 
@@ -353,8 +407,8 @@ fn find_word(
     let offset = if version < 5 { 1 } else { 2 };
 
     info!(target: "app::input", "LEXICAL ANALYSIS: {:?} => {:04x}", word, entry);
-    if entry > 0 || !flag {
-        let parse_address = parse_buffer + 2 + (4 * parse_index);
+    let parse_address = parse_buffer + 2 + (4 * parse_index);
+    if !flag {
         store_parsed_entry(
             state,
             &word,
@@ -364,6 +418,21 @@ fn find_word(
         )?;
         info!(target: "app::input", "LEXICAL ANALYSIS: store to parse buffer {:04x}", parse_address);
         Ok((parse_index + 1, word_count + 1))
+    } else if entry > 0 {
+        let e = state.read_word(parse_address)?;
+        if e == 0 {
+            store_parsed_entry(
+                state,
+                &word,
+                word_start + offset,
+                parse_address,
+                entry as u16,
+            )?;
+            info!(target: "app::input", "LEXICAL ANALYSIS: store to parse buffer {:04x}", parse_address);
+            Ok((parse_index + 1, word_count + 1))
+        } else {
+            Ok((parse_index + 1, word_count))
+        }
     } else {
         Ok((parse_index + 1, word_count))
     }
@@ -398,7 +467,7 @@ pub fn parse_text(
     let mut word_count: usize = 0;
     let mut words: usize = 0;
     let mut data = Vec::new();
-    let offset = if version < 5 { 1 } else { 2 };
+    //let offset = if version < 5 { 1 } else { 2 };
 
     if version < 5 {
         let mut i = 1;
@@ -430,20 +499,50 @@ pub fn parse_text(
         if separators.contains(&c) {
             // Store the word
             if word.len() > 0 {
-                (word_count, words) = find_word(state, version, dictionary, parse_buffer, flag, word_count, words, word_start, &word)?;
+                (word_count, words) = find_word(
+                    state,
+                    version,
+                    dictionary,
+                    parse_buffer,
+                    flag,
+                    word_count,
+                    words,
+                    word_start,
+                    &word,
+                )?;
             }
 
             // Store the separator
             if word_count < max_words {
                 let sep = vec![c];
-                (word_count, words) = find_word(state, version, dictionary, parse_buffer, flag, word_count, words, word_start + word.len(), &sep)?;
+                (word_count, words) = find_word(
+                    state,
+                    version,
+                    dictionary,
+                    parse_buffer,
+                    flag,
+                    word_count,
+                    words,
+                    word_start + word.len(),
+                    &sep,
+                )?;
             }
             word.clear();
             word_start = i + 1;
         } else if c == ' ' {
             // Store the word but not the space
             if word.len() > 0 {
-                (word_count, words) = find_word(state, version, dictionary, parse_buffer, flag, word_count, words, word_start, &word)?;
+                (word_count, words) = find_word(
+                    state,
+                    version,
+                    dictionary,
+                    parse_buffer,
+                    flag,
+                    word_count,
+                    words,
+                    word_start,
+                    &word,
+                )?;
             }
             word.clear();
             word_start = i + 1;
@@ -454,14 +553,20 @@ pub fn parse_text(
 
     // End of input, parse anything collected
     if word.len() > 0 && word_count < max_words {
-        (word_count, words) = find_word(state, version, dictionary, parse_buffer, flag, word_count, words, word_start, &word)?;
+        (word_count, words) = find_word(
+            state,
+            version,
+            dictionary,
+            parse_buffer,
+            flag,
+            word_count,
+            words,
+            word_start,
+            &word,
+        )?;
     }
 
-    info!(target: "app::input", "LEXICAL ANALYSIS: parsed {} words", words);
-    if flag {
-        let w = state.read_byte(parse_buffer + 1)?;
-        state.write_byte(parse_buffer + 1, w + words as u8)?;
-    } else {
+    if !flag {
         state.write_byte(parse_buffer + 1, words as u8)?;
     }
 
