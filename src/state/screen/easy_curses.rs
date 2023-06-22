@@ -110,7 +110,7 @@ impl ECTerminal {
                 '\u{152}' => Some(0xdd),
                 '\u{a1}' => Some(0xde),
                 '\u{bf}' => Some(0xdf),
-                _ => None
+                _ => None,
             },
             Input::KeyUp => Some(129),
             Input::KeyDown => Some(130),
@@ -132,81 +132,96 @@ impl ECTerminal {
         }
     }
 
-    fn map_output(&self, zchar: u16) -> char {
-        match zchar {
-            0x9b => '\u{e4}',
-            0x9c => '\u{f6}',
-            0x9d => '\u{fc}',
-            0x9e => '\u{c4}',
-            0x9f => '\u{d6}',
-            0xa0 => '\u{dc}',
-            0xa1 => '\u{df}',
-            0xa2 => '\u{bb}',
-            0xa3 => '\u{ab}',
-            0xa4 => '\u{eb}',
-            0xa5 => '\u{ef}',
-            0xa6 => '\u{ff}',
-            0xa7 => '\u{cb}',
-            0xa8 => '\u{cf}',
-            0xa9 => '\u{e1}',
-            0xaa => '\u{e9}',
-            0xab => '\u{ed}',
-            0xac => '\u{f3}',
-            0xad => '\u{fa}',
-            0xae => '\u{fd}',
-            0xaf => '\u{c1}',
-            0xb0 => '\u{c9}',
-            0xb1 => '\u{cd}',
-            0xb2 => '\u{d3}',
-            0xb3 => '\u{da}',
-            0xb4 => '\u{dd}',
-            0xb5 => '\u{e0}',
-            0xb6 => '\u{e8}',
-            0xb7 => '\u{ec}',
-            0xb8 => '\u{f2}',
-            0xb9 => '\u{f9}',
-            0xba => '\u{c0}',
-            0xbb => '\u{c8}',
-            0xbc => '\u{cc}',
-            0xbd => '\u{d2}',
-            0xbe => '\u{d9}',
-            0xbf => '\u{e2}',
-            0xc0 => '\u{ea}',
-            0xc1 => '\u{ee}',
-            0xc2 => '\u{f4}',
-            0xc3 => '\u{fb}',
-            0xc4 => '\u{c2}',
-            0xc5 => '\u{ca}',
-            0xc6 => '\u{ce}',
-            0xc7 => '\u{d4}',
-            0xc8 => '\u{db}',
-            0xc9 => '\u{e5}',
-            0xca => '\u{c5}',
-            0xcb => '\u{f8}',
-            0xcc => '\u{d8}',
-            0xcd => '\u{e3}',
-            0xce => '\u{f1}',
-            0xcf => '\u{f5}',
-            0xd0 => '\u{c3}',
-            0xd1 => '\u{d1}',
-            0xd2 => '\u{d5}',
-            0xd3 => '\u{e6}',
-            0xd4 => '\u{c6}',
-            0xd5 => '\u{e7}',
-            0xd6 => '\u{c7}',
-            0xd7 => '\u{fe}',
-            0xd8 => '\u{f0}',
-            0xd9 => '\u{de}',
-            0xda => '\u{d0}',
-            0xdb => '\u{a3}',
-            0xdc => '\u{153}',
-            0xdd => '\u{152}',
-            0xde => '\u{a1}',
-            0xdf => '\u{bf}',
-            _ => (zchar as u8) as char
+    fn map_output(&self, zchar: u16, font: u8) -> char {
+        match font {
+            1 | 4 => match zchar {
+                0x9b => '\u{e4}',
+                0x9c => '\u{f6}',
+                0x9d => '\u{fc}',
+                0x9e => '\u{c4}',
+                0x9f => '\u{d6}',
+                0xa0 => '\u{dc}',
+                0xa1 => '\u{df}',
+                0xa2 => '\u{bb}',
+                0xa3 => '\u{ab}',
+                0xa4 => '\u{eb}',
+                0xa5 => '\u{ef}',
+                0xa6 => '\u{ff}',
+                0xa7 => '\u{cb}',
+                0xa8 => '\u{cf}',
+                0xa9 => '\u{e1}',
+                0xaa => '\u{e9}',
+                0xab => '\u{ed}',
+                0xac => '\u{f3}',
+                0xad => '\u{fa}',
+                0xae => '\u{fd}',
+                0xaf => '\u{c1}',
+                0xb0 => '\u{c9}',
+                0xb1 => '\u{cd}',
+                0xb2 => '\u{d3}',
+                0xb3 => '\u{da}',
+                0xb4 => '\u{dd}',
+                0xb5 => '\u{e0}',
+                0xb6 => '\u{e8}',
+                0xb7 => '\u{ec}',
+                0xb8 => '\u{f2}',
+                0xb9 => '\u{f9}',
+                0xba => '\u{c0}',
+                0xbb => '\u{c8}',
+                0xbc => '\u{cc}',
+                0xbd => '\u{d2}',
+                0xbe => '\u{d9}',
+                0xbf => '\u{e2}',
+                0xc0 => '\u{ea}',
+                0xc1 => '\u{ee}',
+                0xc2 => '\u{f4}',
+                0xc3 => '\u{fb}',
+                0xc4 => '\u{c2}',
+                0xc5 => '\u{ca}',
+                0xc6 => '\u{ce}',
+                0xc7 => '\u{d4}',
+                0xc8 => '\u{db}',
+                0xc9 => '\u{e5}',
+                0xca => '\u{c5}',
+                0xcb => '\u{f8}',
+                0xcc => '\u{d8}',
+                0xcd => '\u{e3}',
+                0xce => '\u{f1}',
+                0xcf => '\u{f5}',
+                0xd0 => '\u{c3}',
+                0xd1 => '\u{d1}',
+                0xd2 => '\u{d5}',
+                0xd3 => '\u{e6}',
+                0xd4 => '\u{c6}',
+                0xd5 => '\u{e7}',
+                0xd6 => '\u{c7}',
+                0xd7 => '\u{fe}',
+                0xd8 => '\u{f0}',
+                0xd9 => '\u{de}',
+                0xda => '\u{d0}',
+                0xdb => '\u{a3}',
+                0xdc => '\u{153}',
+                0xdd => '\u{152}',
+                0xde => '\u{a1}',
+                0xdf => '\u{bf}',
+                _ => (zchar as u8) as char,
+            },
+            3 => match zchar {
+                0xb3 => '\u{2502}',
+                0xbf => '\u{2510}',
+                0xc0 => '\u{2514}',
+                0xc4 => '\u{2500}',
+                0xd9 => '\u{2518}',
+                0xda => '\u{250c}',
+
+                _ => {
+                    trace!("Font 3 {:02x}", zchar as u8);
+                    zchar as u8 as char
+                }
+            }
+            _ => '@',
         }
     }
-
 }
 
 impl Terminal for ECTerminal {
@@ -222,8 +237,9 @@ impl Terminal for ECTerminal {
         column: u32,
         colors: (screen::Color, screen::Color),
         style: &CellStyle,
+        font: u8,
     ) {
-        let c = self.map_output(zchar);
+        let c = self.map_output(zchar, font);
         self.easycurses.move_rc(row as i32 - 1, column as i32 - 1);
         let fg = self.as_color(colors.0);
         let bg = self.as_color(colors.1);
@@ -272,7 +288,7 @@ impl Terminal for ECTerminal {
 
     fn backspace(&mut self, at: (u32, u32)) {
         self.easycurses.move_rc(at.0 as i32 - 1, at.1 as i32 - 1);
-        self.easycurses.delete_char();
+        self.easycurses.print_char(' ');
         self.easycurses.move_rc(at.0 as i32 - 1, at.1 as i32 - 1);
     }
 

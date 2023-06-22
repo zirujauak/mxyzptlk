@@ -64,12 +64,12 @@ impl Buffer {
 
     pub fn clear(&mut self, terminal: &mut Box<dyn Terminal>, colors: (Color, Color), at: (u32,u32)) {
         self.buffer[at.0 as usize - 1][at.1 as usize - 1] = BufferCell::new(' ' as u16, colors, CellStyle::new());
-        terminal.as_mut().print_at(0x20, at.0, at.1, colors, &CellStyle::new());
+        terminal.as_mut().print_at(0x20, at.0, at.1, colors, &CellStyle::new(), 1);
     }
 
-    pub fn print(&mut self, terminal: &mut Box<dyn Terminal>, zchar: u16, colors: (Color, Color), style: &CellStyle, at: (u32, u32)) {
+    pub fn print(&mut self, terminal: &mut Box<dyn Terminal>, zchar: u16, colors: (Color, Color), style: &CellStyle, font: u8, at: (u32, u32)) {
         self.buffer[at.0 as usize - 1][at.1 as usize - 1] = BufferCell::new(zchar, colors, style.clone());
-        terminal.as_mut().print_at(zchar, at.0, at.1, colors, style);
+        terminal.as_mut().print_at(zchar, at.0, at.1, colors, style, font);
     }
 
     pub fn scroll(&mut self, terminal: &mut Box<dyn Terminal>, top: u32, colors: (Color, Color)) {

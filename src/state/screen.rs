@@ -43,6 +43,7 @@ pub struct Screen {
     default_colors: (Color, Color),
     current_colors: (Color, Color),
     current_style: CellStyle,
+    font: u8,
     // row, column with 1,1 as origin
     cursor_0: (u32, u32),
     cursor_1: Option<(u32, u32)>,
@@ -68,6 +69,7 @@ impl Screen {
             default_colors: (foreground.clone(), background.clone()),
             current_colors: (foreground.clone(), background.clone()),
             current_style: CellStyle::new(),
+            font: 1,
             cursor_0: (rows, 1),
             cursor_1: None,
             terminal,
@@ -92,6 +94,7 @@ impl Screen {
             default_colors: (foreground.clone(), background.clone()),
             current_colors: (foreground.clone(), background.clone()),
             current_style: CellStyle::new(),
+            font: 1,
             cursor_0: (rows, 1),
             cursor_1: None,
             terminal,
@@ -116,6 +119,7 @@ impl Screen {
             default_colors: (foreground.clone(), background.clone()),
             current_colors: (foreground.clone(), background.clone()),
             current_style: CellStyle::new(),
+            font: 1,
             cursor_0: (1, 1),
             cursor_1: None,
             terminal,
@@ -382,6 +386,7 @@ impl Screen {
                     zchar,
                     self.current_colors,
                     &self.current_style,
+                    self.font,
                     self.cursor_0,
                 );
             } else {
@@ -390,6 +395,7 @@ impl Screen {
                     zchar,
                     self.current_colors,
                     &self.current_style,
+                    self.font,
                     self.cursor_1.unwrap(),
                 );
             }
@@ -404,6 +410,7 @@ impl Screen {
                 text[i],
                 self.current_colors,
                 style,
+                self.font,
                 (at.0, at.1 + i as u32),
             );
         }
@@ -483,6 +490,16 @@ impl Screen {
         }
     }
 
+    pub fn set_font(&mut self, font: u8) -> u8 {
+        if font == 1 || font == 3 || font == 4 {
+            let result = self.font;
+            self.font = font;
+            result
+        } else {
+            0
+        }
+    }
+
     pub fn reset(&mut self) {
         self.terminal.reset();
     }
@@ -497,6 +514,7 @@ pub trait Terminal {
         cursor: u32,
         colors: (Color, Color),
         style: &CellStyle,
+        font: u8
     );
     fn flush(&mut self);
     fn read_key(&mut self, timeout: u128) -> Option<u16>;
