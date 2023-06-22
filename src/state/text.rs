@@ -1,6 +1,7 @@
 use crate::error::*;
 use crate::state::header;
 use crate::state::header::*;
+use crate::state::instruction::processor;
 use crate::state::State;
 
 const ALPHABET_V3: [[char; 26]; 3] = [
@@ -317,4 +318,149 @@ pub fn from_dictionary(
 
         return Ok(0);
     }
+}
+
+fn store_parsed_entry(
+    state: &mut State,
+    word: &Vec<char>,
+    word_start: usize,
+    entry_address: usize,
+    entry: u16,
+) -> Result<(), RuntimeError> {
+    info!(target: "app::input", "READ: dictionary for {:?} => stored to ${:04x}: {:#04x}/{}/{}", word, entry_address, entry, word.len(), word_start);
+    state.write_word(entry_address, entry as u16)?;
+    state.write_byte(entry_address + 2, word.len() as u8)?;
+    state.write_byte(entry_address + 3, word_start as u8)?;
+    Ok(())
+}
+
+pub fn parse_text(
+    state: &mut State,
+    version: u8,
+    text_buffer: usize,
+    parse_buffer: usize,
+    dictionary: usize,
+    flag: bool,
+) -> Result<(), RuntimeError> {
+    info!(target: "app::input", "Lexical analysis: text @ {:04x}, parse @ {:04x}, dictionary @ {:04x}, skip {}", text_buffer, parse_buffer, dictionary, flag);
+    let separators = separators(state, dictionary)?;
+    let mut word = Vec::new();
+    let mut word_start: usize = 0;
+    let mut word_count: usize = 0;
+    let mut words: usize = 0;
+    let mut data = Vec::new();
+    let offset = if version < 5 {
+        1
+    } else {
+        2
+    };
+
+    if version < 5 {
+        let mut i = 1;
+        loop {
+            let b = state.read_byte(text_buffer + i)?;
+            if b == 0 {
+                break;
+            } else {
+                data.push(b);
+                i = i + 1;
+            }
+        }
+    } else {
+        let n = state.read_byte(text_buffer + 1)? as usize;
+        for i in 0..n {
+            data.push(state.read_byte(text_buffer + 2 + i)?);
+        }
+    }
+    info!(target: "app::input", "LA: {:?}", data);
+    let max_words = state.read_byte(parse_buffer)? as usize;
+
+    // let data = input_buffer[0..end].to_vec();
+    for i in 0..data.len() {
+        let c = ((data[i] as u8) as char).to_ascii_lowercase();
+        if word_count > max_words {
+            break;
+        }
+
+        if separators.contains(&c) {
+            // Store the word
+            if word.len() > 0 {
+                let entry = from_dictionary(state, dictionary, &word)?;
+                info!(target: "app::input", "LA: {:?} => {:04x}", word, entry);
+                if entry > 0 || !flag {
+                    let parse_address = parse_buffer + 2 + (4 * word_count);
+                    store_parsed_entry(state, &word, word_start + offset, parse_address, entry as u16)?;
+                    info!(target: "app::input", "LA: store to parse buffer {:04x}", parse_address);
+                    words = words + 1;
+                }
+                word_count = word_count + 1;
+            }
+
+            // Store the separator
+            if word_count < max_words {
+                let sep = vec![c];
+                let entry = from_dictionary(state, dictionary, &sep)?;
+                if entry > 0 || !flag {
+                    info!(target: "app::input", "LA: {:?} => {:04x}", word, entry);
+                    let parse_address = parse_buffer + 2 + (4 * word_count);
+                    store_parsed_entry(
+                        state,
+                        &sep,
+                        word_start + word.len() + offset,
+                        parse_address,
+                        entry as u16,
+                    )?;
+                    info!(target: "app::input", "LA: store to parse buffer {:04x}", parse_address);
+
+                    words = words + 1;
+                }
+
+                word_count = word_count + 1;
+            }
+            word.clear();
+            word_start = i + 1;
+        } else if c == ' ' {
+            // Store the word but not the space
+            if word.len() > 0 {
+                let entry = from_dictionary(state, dictionary, &word)?;
+                info!(target: "app::input", "LA: {:?} => {:04x}", word, entry);
+                if entry > 0 || !flag {
+                    let parse_address = parse_buffer + 2 + (4 * word_count);
+                    store_parsed_entry(state, &word, word_start + offset, parse_address, entry as u16)?;
+                    info!(target: "app::input", "LA: store to parse buffer {:04x}", parse_address);
+                    words = words + 1;
+                }
+
+                word_count = word_count + 1;
+            }
+            word.clear();
+            word_start = i + 1;
+        } else {
+            word.push(c)
+        }
+    }
+
+    // End of input, parse anything collected
+    if word.len() > 0 && word_count < max_words {
+        let entry = from_dictionary(state, dictionary, &word)?;
+        info!(target: "app::input", "LA: {:?} => {:04x}", word, entry);
+        if entry > 0 || !flag {
+            let parse_address = parse_buffer + 2 + (4 * word_count);
+            info!(target: "app::input", "LA: store to parse buffer {:04x}", parse_address);
+            store_parsed_entry(state, &word, word_start + offset, parse_address, entry as u16)?;
+            words = words + 1;
+        }
+
+        word_count = word_count + 1;
+    }
+
+    info!(target: "app::input", "LA: parsed {} words", words);
+    if flag {
+        let w = state.read_byte(parse_buffer + 1)?;
+        state.write_byte(parse_buffer + 1, w + words as u8)?;
+    } else {
+        state.write_byte(parse_buffer + 1, words as u8)?;
+    }
+
+    Ok(())
 }
