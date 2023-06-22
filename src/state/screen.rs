@@ -1,5 +1,6 @@
 pub mod buffer;
 mod easy_curses;
+mod pancurses;
 
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
@@ -8,6 +9,8 @@ use crate::error::*;
 use buffer::Buffer;
 use buffer::CellStyle;
 use easy_curses::ECTerminal;
+
+use self::pancurses::PCTerminal;
 
 #[derive(Clone, Copy)]
 pub enum Color {
@@ -52,7 +55,7 @@ pub struct Screen {
 
 impl Screen {
     pub fn new_v3(foreground: Color, background: Color) -> Screen {
-        let terminal = Box::new(ECTerminal::new());
+        let terminal = Box::new(PCTerminal::new());
         let (rows, columns) = terminal.as_ref().size();
         let buffer = Buffer::new(rows, columns, (foreground, background));
 
