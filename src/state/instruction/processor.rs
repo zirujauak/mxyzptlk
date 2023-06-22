@@ -283,7 +283,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x19 => processor_var::call_vn(state, instruction),
                 0x1a => processor_var::call_vn2(state, instruction),
                 0x1b => processor_var::tokenise(state, instruction),
-                //             0x1c => processor_var::encode_text(context, instruction),
+                0x1c => processor_var::encode_text(state, instruction),
                 0x1d => processor_var::copy_table(state, instruction),
                 0x1e => processor_var::print_table(state, instruction),
                 0x1f => processor_var::check_arg_count(state, instruction),

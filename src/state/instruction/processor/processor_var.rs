@@ -483,12 +483,30 @@ pub fn tokenise(state: &mut State, instruction: &Instruction) -> Result<usize, R
     Ok(instruction.next_address())
 }
 
-// pub fn encode_text(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     todo!()
-// }
+pub fn encode_text(
+    state: &mut State,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(state, instruction)?;
+    let text_buffer = operands[0] as usize;
+    let length = operands[1] as usize;
+    let from = operands[2] as usize;
+    let dest_buffer = operands[3] as usize;
+
+    let mut zchars = Vec::new();
+    for i in 0..length {
+        zchars.push(state.read_byte(text_buffer + from + i)? as u16);
+    }
+
+    let encoded_text = text::encode_text(&zchars, 3);
+    
+    info!(target: "app::input", "Encoded text: {:04x} {:04x} {:04x}", encoded_text[0], encoded_text[1], encoded_text[2]);
+    for i in 0..encoded_text.len() {
+        state.write_word(dest_buffer + (i * 2), encoded_text[i])?
+    }
+
+    Ok(instruction.next_address())
+}
 
 pub fn copy_table(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
