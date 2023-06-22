@@ -152,7 +152,10 @@ fn find_char(c: &char) -> Vec<u8> {
         }
     }
 
-    panic!("Unknown input {}", c)
+    let z1 = (*c as u8 >> 5) & 0x1f;
+    let z2 = *c as u8 & 0x1f;
+    return vec![5, 6, z1, z2];
+//    panic!("Unknown input {}", c)
 }
 
 fn as_word(z1: u8, z2: u8, z3: u8) -> u16 {
@@ -258,13 +261,37 @@ pub fn from_dictionary(
     };
 
     let mut zchars = Vec::new();
-    for i in 0..word_count * 3 {
-        if let Some(c) = word.get(i) {
-            zchars.append(&mut find_char(c))
-        } else {
+    let mut index = 0;
+    loop {
+        if zchars.len() > word_count * 3 {
+            break;
+        }
+        match word.get(index) {
+            Some(c) => {
+                let mut z = find_char(c);
+                index = index + 1;
+                zchars.append(&mut z);
+            },
+            None => break
+        }
+    }
+
+    if zchars.len() > word_count * 3 {
+        zchars.truncate(word_count * 3);
+    } else {
+        for i in zchars.len()..word_count * 3 {
             zchars.push(5);
         }
     }
+
+    info!(target: "app::input", "LA: encoded text: {:?}", zchars);
+    // for i in 0..word_count * 3 {
+    //     if let Some(c) = word.get(i) {
+    //         zchars.append(&mut find_char(c))
+    //     } else {
+    //         zchars.push(5);
+    //     }
+    // }
 
     let mut words = Vec::new();
     for i in 0..word_count {
