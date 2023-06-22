@@ -145,13 +145,14 @@ impl State {
             )?;
             header::set_byte(&mut self.memory, HeaderField::FontWidth, 1)?;
             header::set_byte(&mut self.memory, HeaderField::FontHeight, 1)?;
-            header::set_flag1(&mut self.memory, Flags1v4::PicturesAvailable as u8)?;
+            header::clear_flag1(&mut self.memory, Flags1v4::PicturesAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::ColoursAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::BoldfaceAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::ItalicAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::FixedSpaceAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::TimedInputAvailable as u8)?;
             header::clear_flag2(&mut self.memory, Flags2::RequestMouse)?;
+            // Graphics font 3 support is crap atm
             header::clear_flag2(&mut self.memory, Flags2::RequestPictures)?;
         }
 
