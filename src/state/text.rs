@@ -1,7 +1,6 @@
 use crate::error::*;
 use crate::state::header;
 use crate::state::header::*;
-use crate::state::instruction::processor;
 use crate::state::State;
 
 const ALPHABET_V3: [[char; 26]; 3] = [
@@ -160,14 +159,6 @@ fn as_word(z1: u8, z2: u8, z3: u8) -> u16 {
     (((z1 as u16) & 0x1F) << 10) | (((z2 as u16) & 0x1F) << 5) | (z3 as u16) & 0x1F
 }
 
-// pub fn from_default_dictionary(state: &State, word: &Vec<char>) -> Result<usize, RuntimeError> {
-//     self::from_dictionary(
-//         state,
-//         header::field_word(state.memory(), HeaderField::Dictionary)? as usize,
-//         word,
-//     )
-// }
-
 fn search_entry(
     state: &State,
     address: usize,
@@ -320,6 +311,37 @@ pub fn from_dictionary(
     }
 }
 
+fn find_word(
+    state: &mut State,
+    version: u8,
+    dictionary: usize,
+    parse_buffer: usize,
+    flag: bool,
+    parse_index: usize,
+    word_count: usize,
+    word_start: usize,
+    word: &Vec<char>,
+) -> Result<(usize, usize), RuntimeError> {
+    let entry = from_dictionary(state, dictionary, word)?;
+    let offset = if version < 5 { 1 } else { 2 };
+
+    info!(target: "app::input", "LEXICAL ANALYSIS: {:?} => {:04x}", word, entry);
+    if entry > 0 || !flag {
+        let parse_address = parse_buffer + 2 + (4 * parse_index);
+        store_parsed_entry(
+            state,
+            &word,
+            word_start + offset,
+            parse_address,
+            entry as u16,
+        )?;
+        info!(target: "app::input", "LEXICAL ANALYSIS: store to parse buffer {:04x}", parse_address);
+        Ok((parse_index + 1, word_count + 1))
+    } else {
+        Ok((parse_index + 1, word_count))
+    }
+}
+
 fn store_parsed_entry(
     state: &mut State,
     word: &Vec<char>,
@@ -327,7 +349,7 @@ fn store_parsed_entry(
     entry_address: usize,
     entry: u16,
 ) -> Result<(), RuntimeError> {
-    info!(target: "app::input", "READ: dictionary for {:?} => stored to ${:04x}: {:#04x}/{}/{}", word, entry_address, entry, word.len(), word_start);
+    info!(target: "app::input", "LEXICAL_ANALYSIS: dictionary for {:?} => stored to ${:04x}: {:#04x}/{}/{}", word, entry_address, entry, word.len(), word_start);
     state.write_word(entry_address, entry as u16)?;
     state.write_byte(entry_address + 2, word.len() as u8)?;
     state.write_byte(entry_address + 3, word_start as u8)?;
@@ -342,18 +364,14 @@ pub fn parse_text(
     dictionary: usize,
     flag: bool,
 ) -> Result<(), RuntimeError> {
-    info!(target: "app::input", "Lexical analysis: text @ {:04x}, parse @ {:04x}, dictionary @ {:04x}, skip {}", text_buffer, parse_buffer, dictionary, flag);
+    info!(target: "app::input", "LEXICAL ANALYSIS: text @ {:04x}, parse @ {:04x}, dictionary @ {:04x}, skip {}", text_buffer, parse_buffer, dictionary, flag);
     let separators = separators(state, dictionary)?;
     let mut word = Vec::new();
     let mut word_start: usize = 0;
     let mut word_count: usize = 0;
     let mut words: usize = 0;
     let mut data = Vec::new();
-    let offset = if version < 5 {
-        1
-    } else {
-        2
-    };
+    let offset = if version < 5 { 1 } else { 2 };
 
     if version < 5 {
         let mut i = 1;
@@ -385,53 +403,20 @@ pub fn parse_text(
         if separators.contains(&c) {
             // Store the word
             if word.len() > 0 {
-                let entry = from_dictionary(state, dictionary, &word)?;
-                info!(target: "app::input", "LA: {:?} => {:04x}", word, entry);
-                if entry > 0 || !flag {
-                    let parse_address = parse_buffer + 2 + (4 * word_count);
-                    store_parsed_entry(state, &word, word_start + offset, parse_address, entry as u16)?;
-                    info!(target: "app::input", "LA: store to parse buffer {:04x}", parse_address);
-                    words = words + 1;
-                }
-                word_count = word_count + 1;
+                (word_count, words) = find_word(state, version, dictionary, parse_buffer, flag, word_count, words, word_start, &word)?;
             }
 
             // Store the separator
             if word_count < max_words {
                 let sep = vec![c];
-                let entry = from_dictionary(state, dictionary, &sep)?;
-                if entry > 0 || !flag {
-                    info!(target: "app::input", "LA: {:?} => {:04x}", word, entry);
-                    let parse_address = parse_buffer + 2 + (4 * word_count);
-                    store_parsed_entry(
-                        state,
-                        &sep,
-                        word_start + word.len() + offset,
-                        parse_address,
-                        entry as u16,
-                    )?;
-                    info!(target: "app::input", "LA: store to parse buffer {:04x}", parse_address);
-
-                    words = words + 1;
-                }
-
-                word_count = word_count + 1;
+                (word_count, words) = find_word(state, version, dictionary, parse_buffer, flag, word_count, words, word_start + word.len(), &sep)?;
             }
             word.clear();
             word_start = i + 1;
         } else if c == ' ' {
             // Store the word but not the space
             if word.len() > 0 {
-                let entry = from_dictionary(state, dictionary, &word)?;
-                info!(target: "app::input", "LA: {:?} => {:04x}", word, entry);
-                if entry > 0 || !flag {
-                    let parse_address = parse_buffer + 2 + (4 * word_count);
-                    store_parsed_entry(state, &word, word_start + offset, parse_address, entry as u16)?;
-                    info!(target: "app::input", "LA: store to parse buffer {:04x}", parse_address);
-                    words = words + 1;
-                }
-
-                word_count = word_count + 1;
+                (word_count, words) = find_word(state, version, dictionary, parse_buffer, flag, word_count, words, word_start, &word)?;
             }
             word.clear();
             word_start = i + 1;
@@ -442,19 +427,10 @@ pub fn parse_text(
 
     // End of input, parse anything collected
     if word.len() > 0 && word_count < max_words {
-        let entry = from_dictionary(state, dictionary, &word)?;
-        info!(target: "app::input", "LA: {:?} => {:04x}", word, entry);
-        if entry > 0 || !flag {
-            let parse_address = parse_buffer + 2 + (4 * word_count);
-            info!(target: "app::input", "LA: store to parse buffer {:04x}", parse_address);
-            store_parsed_entry(state, &word, word_start + offset, parse_address, entry as u16)?;
-            words = words + 1;
-        }
-
-        word_count = word_count + 1;
+        (word_count, words) = find_word(state, version, dictionary, parse_buffer, flag, word_count, words, word_start, &word)?;
     }
 
-    info!(target: "app::input", "LA: parsed {} words", words);
+    info!(target: "app::input", "LEXICAL ANALYSIS: parsed {} words", words);
     if flag {
         let w = state.read_byte(parse_buffer + 1)?;
         state.write_byte(parse_buffer + 1, w + words as u8)?;
