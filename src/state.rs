@@ -562,7 +562,7 @@ impl State {
     // Input
     pub fn read_key(&mut self, timeout: u16) -> Result<Option<u16>, RuntimeError> {
         trace!(target: "app::trace.log", "read_key timeout {:?}", timeout);
-        let key = self.screen.read_key(timeout as u128 * 1000);
+        let key = self.screen.read_key(timeout as u128);
         info!(target: "app::input", "read_key -> {:?}", key);
         Ok(key)
     }
@@ -582,7 +582,7 @@ impl State {
                 .duration_since(UNIX_EPOCH)
                 .expect("Error getting system time")
                 .as_millis()
-                + (timeout as u128 * 1000)
+                + (timeout as u128)
         } else {
             0
         };

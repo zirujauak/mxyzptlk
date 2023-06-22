@@ -138,7 +138,7 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
     let terminators = terminators(state)?;
     info!(target: "app::input", "READ terminators: {:?}", terminators);
 
-    let input_buffer = state.read_line(&existing_input, len, &terminators, timeout / 10)?;
+    let input_buffer = state.read_line(&existing_input, len, &terminators, timeout * 100)?;
     let terminator = if let Some(c) = input_buffer.last() {
         if terminators.contains(c) {
             Some(c)
@@ -373,7 +373,7 @@ pub fn read_char(state: &mut State, instruction: &Instruction) -> Result<usize, 
         0
     };
 
-    let key = match state.read_key(timeout / 10)? {
+    let key = match state.read_key(timeout * 100)? {
         Some(key) => key,
         None => {
             if routine > 0 {
