@@ -151,7 +151,7 @@ impl State {
             header::set_flag1(&mut self.memory, Flags1v4::ItalicAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::FixedSpaceAvailable as u8)?;
             header::set_flag1(&mut self.memory, Flags1v4::TimedInputAvailable as u8)?;
-            header::clear_flag2(&mut self.memory, Flags2::RequestMouse)?;
+            //header::clear_flag2(&mut self.memory, Flags2::RequestMouse)?;
             // Graphics font 3 support is crap atm
             header::clear_flag2(&mut self.memory, Flags2::RequestPictures)?;
         }
@@ -565,7 +565,22 @@ impl State {
         trace!(target: "app::trace.log", "read_key timeout {:?}", timeout);
         let key = self.screen.read_key(timeout as u128);
         info!(target: "app::input", "read_key -> {:?}", key);
-        Ok(key)
+        if let Some(c) = key.zchar() {
+            if c == 253 || c == 254 {
+                info!(target: "app::input", "Storing mouse coordinates {},{}", key.column().unwrap(), key.row().unwrap());
+                header::set_extension(
+                    &mut self.memory,
+                    1,
+                    key.column().expect("Mouse click with no column data"),
+                )?;
+                header::set_extension(
+                    &mut self.memory,
+                    2,
+                    key.row().expect("Mouse click with no row data"),
+                )?;
+            }
+        }
+        Ok(key.zchar())
     }
 
     pub fn read_line(
@@ -601,9 +616,25 @@ impl State {
 
             info!(target: "app::input", "Now: {}, End: {}, Timeout: {}", now, end, timeout);
 
-            match self.screen.read_key(timeout) {
+            let e = self.screen.read_key(timeout);
+            match e.zchar() {
                 Some(key) => {
-                    if terminators.contains(&key) {
+                    if terminators.contains(&key)
+                        || (terminators.contains(&255) && (key > 128))
+                    {
+                        if key == 254 || key == 253 {
+                            header::set_extension(
+                                &mut self.memory,
+                                1,
+                                e.column().expect("Mouse click with no column data"),
+                            )?;
+                            header::set_extension(
+                                &mut self.memory,
+                                2,
+                                e.row().expect("Mouse click with no row data"),
+                            )?;
+                        }
+
                         input_buffer.push(key);
                         if key == 0x0d {
                             self.print(&vec![key])?;
@@ -777,6 +808,13 @@ impl State {
         Ok(self.frame_stack.pc()?)
     }
 
+    pub fn quit(&mut self) -> Result<(), RuntimeError> {
+        self.print(&"Press any key to exit".as_bytes().iter().map(|x| *x as u16).collect())?;
+        self.read_key(0)?;
+
+        self.screen.quit();
+        Ok(())
+    }
     // pub fn print_char(&mut self, char: u16) -> Result<(),RuntimeError> {
     //     self.screen.print_char(char);
     //     Ok(())

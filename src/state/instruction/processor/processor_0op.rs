@@ -100,7 +100,8 @@ pub fn catch(state: &mut State, instruction: &Instruction) -> Result<usize, Runt
     Ok(instruction.next_address())
 }
 
-pub fn quit(_state: &mut State, _instruction: &Instruction) -> Result<usize, RuntimeError> {
+pub fn quit(state: &mut State, _instruction: &Instruction) -> Result<usize, RuntimeError> {
+    state.quit()?;
     Ok(0)
 }
 

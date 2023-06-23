@@ -62,11 +62,10 @@ fn main() {
                             .collect();
                         state.print(&error);
                         state.read_key(0);
+                        state.quit();
                         panic!("{}", r)
                     }
 
-                    state.print(&"Press any key to exit".as_bytes().iter().map(|x| *x as u16).collect());
-                    state.read_key(0);
                     // let name: Vec<&str> = filename.split(".").collect();
                     // let mut e = Executor::from_vec(name[0].to_string(), buffer);
                     // // blorb::rebuild_blorb(name[0].to_string());

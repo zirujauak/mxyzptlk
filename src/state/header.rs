@@ -129,3 +129,16 @@ pub fn clear_flag2(memory: &mut Memory, flag: Flags2) -> Result<(), RuntimeError
     flags = flags & !(flag as u16);
     memory.write_word(HeaderField::Flags2 as usize, flags)
 }
+
+pub fn set_extension(memory: &mut Memory, index: usize, value: u16) -> Result<(), RuntimeError> {
+    let extension_table_address = field_word(memory, HeaderField::ExtensionTable)? as usize;
+    if extension_table_address > 0 {
+        let table_size = memory.read_word(extension_table_address)? as usize;
+        if table_size >= index {
+            memory.write_word(extension_table_address + (index * 2), value)?;
+        }
+
+    }
+
+    Ok(())
+}

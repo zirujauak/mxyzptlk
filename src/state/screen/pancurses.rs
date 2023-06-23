@@ -1,7 +1,6 @@
 use pancurses::*;
 
-use super::{Color, Terminal, buffer::CellStyle, Style};
-
+use super::{buffer::CellStyle, Color, Style, Terminal, InputEvent};
 
 pub struct PCTerminal {
     window: Window,
@@ -15,10 +14,12 @@ fn cp(fg: i16, bg: i16) -> i16 {
 
 impl PCTerminal {
     pub fn new() -> PCTerminal {
+        info!(target: "app::input", "Initialize pancurses terminal");
         let window = pancurses::initscr();
         pancurses::curs_set(0);
         pancurses::noecho();
         pancurses::cbreak();
+        info!(target: "app::input", "Mouse mask: {:08x}", pancurses::mousemask(BUTTON1_CLICKED | BUTTON1_DOUBLE_CLICKED | REPORT_MOUSE_POSITION, None));
         window.keypad(true);
         window.clear();
         window.refresh();
@@ -46,100 +47,120 @@ impl PCTerminal {
         }
     }
 
-    fn input_to_u16(&self, input: Input) -> Option<u16> {
+    fn input_to_u16(&self, input: Input) -> InputEvent {
         match input {
             Input::Character(c) => match c {
-                '\u{7f}' => Some(0x08),
-                '\u{0a}' => Some(0x0d),
-                ' '..='~' => Some(c as u16),
-                '\u{e4}' => Some(0x9b),
-                '\u{f6}' => Some(0x9c),
-                '\u{fc}' => Some(0x9d),
-                '\u{c4}' => Some(0x9e),
-                '\u{d6}' => Some(0x9f),
-                '\u{dc}' => Some(0xa0),
-                '\u{df}' => Some(0xa1),
-                '\u{bb}' => Some(0xa2),
-                '\u{ab}' => Some(0xa3),
-                '\u{eb}' => Some(0xa4),
-                '\u{ef}' => Some(0xa5),
-                '\u{ff}' => Some(0xa6),
-                '\u{cb}' => Some(0xa7),
-                '\u{cf}' => Some(0xa8),
-                '\u{e1}' => Some(0xa9),
-                '\u{e9}' => Some(0xaa),
-                '\u{ed}' => Some(0xab),
-                '\u{f3}' => Some(0xac),
-                '\u{fa}' => Some(0xad),
-                '\u{fd}' => Some(0xae),
-                '\u{c1}' => Some(0xaf),
-                '\u{c9}' => Some(0xb0),
-                '\u{cd}' => Some(0xb1),
-                '\u{d3}' => Some(0xb2),
-                '\u{da}' => Some(0xb3),
-                '\u{dd}' => Some(0xb4),
-                '\u{e0}' => Some(0xb5),
-                '\u{e8}' => Some(0xb6),
-                '\u{ec}' => Some(0xb7),
-                '\u{f2}' => Some(0xb8),
-                '\u{f9}' => Some(0xb9),
-                '\u{c0}' => Some(0xba),
-                '\u{c8}' => Some(0xbb),
-                '\u{cc}' => Some(0xbc),
-                '\u{d2}' => Some(0xbd),
-                '\u{d9}' => Some(0xbe),
-                '\u{e2}' => Some(0xbf),
-                '\u{ea}' => Some(0xc0),
-                '\u{ee}' => Some(0xc1),
-                '\u{f4}' => Some(0xc2),
-                '\u{fb}' => Some(0xc3),
-                '\u{c2}' => Some(0xc4),
-                '\u{ca}' => Some(0xc5),
-                '\u{ce}' => Some(0xc6),
-                '\u{d4}' => Some(0xc7),
-                '\u{db}' => Some(0xc8),
-                '\u{e5}' => Some(0xc9),
-                '\u{c5}' => Some(0xca),
-                '\u{f8}' => Some(0xcb),
-                '\u{d8}' => Some(0xcc),
-                '\u{e3}' => Some(0xcd),
-                '\u{f1}' => Some(0xce),
-                '\u{f5}' => Some(0xcf),
-                '\u{c3}' => Some(0xd0),
-                '\u{d1}' => Some(0xd1),
-                '\u{d5}' => Some(0xd2),
-                '\u{e6}' => Some(0xd3),
-                '\u{c6}' => Some(0xd4),
-                '\u{e7}' => Some(0xd5),
-                '\u{c7}' => Some(0xd6),
-                '\u{fe}' => Some(0xd7),
-                '\u{f0}' => Some(0xd8),
-                '\u{de}' => Some(0xd9),
-                '\u{d0}' => Some(0xda),
-                '\u{a3}' => Some(0xdb),
-                '\u{153}' => Some(0xdc),
-                '\u{152}' => Some(0xdd),
-                '\u{a1}' => Some(0xde),
-                '\u{bf}' => Some(0xdf),
-                _ => None,
+                '\u{7f}' => InputEvent::from_char(0x08),
+                '\u{0a}' => InputEvent::from_char(0x0d),
+                ' '..='~' => InputEvent::from_char(c as u16),
+                '\u{e4}' => InputEvent::from_char(0x9b),
+                '\u{f6}' => InputEvent::from_char(0x9c),
+                '\u{fc}' => InputEvent::from_char(0x9d),
+                '\u{c4}' => InputEvent::from_char(0x9e),
+                '\u{d6}' => InputEvent::from_char(0x9f),
+                '\u{dc}' => InputEvent::from_char(0xa0),
+                '\u{df}' => InputEvent::from_char(0xa1),
+                '\u{bb}' => InputEvent::from_char(0xa2),
+                '\u{ab}' => InputEvent::from_char(0xa3),
+                '\u{eb}' => InputEvent::from_char(0xa4),
+                '\u{ef}' => InputEvent::from_char(0xa5),
+                '\u{ff}' => InputEvent::from_char(0xa6),
+                '\u{cb}' => InputEvent::from_char(0xa7),
+                '\u{cf}' => InputEvent::from_char(0xa8),
+                '\u{e1}' => InputEvent::from_char(0xa9),
+                '\u{e9}' => InputEvent::from_char(0xaa),
+                '\u{ed}' => InputEvent::from_char(0xab),
+                '\u{f3}' => InputEvent::from_char(0xac),
+                '\u{fa}' => InputEvent::from_char(0xad),
+                '\u{fd}' => InputEvent::from_char(0xae),
+                '\u{c1}' => InputEvent::from_char(0xaf),
+                '\u{c9}' => InputEvent::from_char(0xb0),
+                '\u{cd}' => InputEvent::from_char(0xb1),
+                '\u{d3}' => InputEvent::from_char(0xb2),
+                '\u{da}' => InputEvent::from_char(0xb3),
+                '\u{dd}' => InputEvent::from_char(0xb4),
+                '\u{e0}' => InputEvent::from_char(0xb5),
+                '\u{e8}' => InputEvent::from_char(0xb6),
+                '\u{ec}' => InputEvent::from_char(0xb7),
+                '\u{f2}' => InputEvent::from_char(0xb8),
+                '\u{f9}' => InputEvent::from_char(0xb9),
+                '\u{c0}' => InputEvent::from_char(0xba),
+                '\u{c8}' => InputEvent::from_char(0xbb),
+                '\u{cc}' => InputEvent::from_char(0xbc),
+                '\u{d2}' => InputEvent::from_char(0xbd),
+                '\u{d9}' => InputEvent::from_char(0xbe),
+                '\u{e2}' => InputEvent::from_char(0xbf),
+                '\u{ea}' => InputEvent::from_char(0xc0),
+                '\u{ee}' => InputEvent::from_char(0xc1),
+                '\u{f4}' => InputEvent::from_char(0xc2),
+                '\u{fb}' => InputEvent::from_char(0xc3),
+                '\u{c2}' => InputEvent::from_char(0xc4),
+                '\u{ca}' => InputEvent::from_char(0xc5),
+                '\u{ce}' => InputEvent::from_char(0xc6),
+                '\u{d4}' => InputEvent::from_char(0xc7),
+                '\u{db}' => InputEvent::from_char(0xc8),
+                '\u{e5}' => InputEvent::from_char(0xc9),
+                '\u{c5}' => InputEvent::from_char(0xca),
+                '\u{f8}' => InputEvent::from_char(0xcb),
+                '\u{d8}' => InputEvent::from_char(0xcc),
+                '\u{e3}' => InputEvent::from_char(0xcd),
+                '\u{f1}' => InputEvent::from_char(0xce),
+                '\u{f5}' => InputEvent::from_char(0xcf),
+                '\u{c3}' => InputEvent::from_char(0xd0),
+                '\u{d1}' => InputEvent::from_char(0xd1),
+                '\u{d5}' => InputEvent::from_char(0xd2),
+                '\u{e6}' => InputEvent::from_char(0xd3),
+                '\u{c6}' => InputEvent::from_char(0xd4),
+                '\u{e7}' => InputEvent::from_char(0xd5),
+                '\u{c7}' => InputEvent::from_char(0xd6),
+                '\u{fe}' => InputEvent::from_char(0xd7),
+                '\u{f0}' => InputEvent::from_char(0xd8),
+                '\u{de}' => InputEvent::from_char(0xd9),
+                '\u{d0}' => InputEvent::from_char(0xda),
+                '\u{a3}' => InputEvent::from_char(0xdb),
+                '\u{153}' => InputEvent::from_char(0xdc),
+                '\u{152}' => InputEvent::from_char(0xdd),
+                '\u{a1}' => InputEvent::from_char(0xde),
+                '\u{bf}' => InputEvent::from_char(0xdf),
+                _ => InputEvent::no_input(),
             },
-            Input::KeyUp => Some(129),
-            Input::KeyDown => Some(130),
-            Input::KeyLeft => Some(131),
-            Input::KeyRight => Some(132),
-            Input::KeyF1 => Some(133),
-            Input::KeyF2 => Some(134),
-            Input::KeyF3 => Some(135),
-            Input::KeyF4 => Some(136),
-            Input::KeyF5 => Some(137),
-            Input::KeyF6 => Some(138),
-            Input::KeyF7 => Some(139),
-            Input::KeyF8 => Some(140),
-            Input::KeyF9 => Some(141),
-            Input::KeyF10 => Some(142),
-            Input::KeyF11 => Some(143),
-            Input::KeyF12 => Some(144),
-            _ => None,
+            Input::KeyUp => InputEvent::from_char(129),
+            Input::KeyDown => InputEvent::from_char(130),
+            Input::KeyLeft => InputEvent::from_char(131),
+            Input::KeyRight => InputEvent::from_char(132),
+            Input::KeyF1 => InputEvent::from_char(133),
+            Input::KeyF2 => InputEvent::from_char(134),
+            Input::KeyF3 => InputEvent::from_char(135),
+            Input::KeyF4 => InputEvent::from_char(136),
+            Input::KeyF5 => InputEvent::from_char(137),
+            Input::KeyF6 => InputEvent::from_char(138),
+            Input::KeyF7 => InputEvent::from_char(139),
+            Input::KeyF8 => InputEvent::from_char(140),
+            Input::KeyF9 => InputEvent::from_char(141),
+            Input::KeyF10 => InputEvent::from_char(142),
+            Input::KeyF11 => InputEvent::from_char(143),
+            Input::KeyF12 => InputEvent::from_char(144),
+            Input::KeyMouse => {
+                match pancurses::getmouse() {
+                    Ok(event) => {
+                        info!(target: "app::input", "Mouse: {:?}", event);
+                        if event.bstate & BUTTON1_CLICKED == BUTTON1_CLICKED {
+                            InputEvent::from_mouse(254, event.y as u16 + 1, event.x as u16 + 1)
+                        } else if event.bstate & BUTTON1_DOUBLE_CLICKED == BUTTON1_DOUBLE_CLICKED {
+                            InputEvent::from_mouse(253, event.y as u16 + 1, event.x as u16 + 1)
+                        } else {
+                            InputEvent::no_input()
+                        }
+                    },
+                    Err(e) => {
+                        error!(target: "app::input", "{}", e);
+                        InputEvent::no_input()}
+                }
+            }
+            _ => {
+                info!(target: "app::input", "Input: {:?}", input);
+                InputEvent::no_input()
+            }
         }
     }
 
@@ -269,7 +290,7 @@ impl PCTerminal {
                     trace!("Font 3 {:02x}", zchar as u8);
                     zchar as u8 as char
                 }
-            }
+            },
             _ => '@',
         }
     }
@@ -311,7 +332,7 @@ impl Terminal for PCTerminal {
         self.window.refresh();
     }
 
-    fn read_key(&mut self, timeout: u128) -> Option<u16> {
+    fn read_key(&mut self, timeout: u128) -> InputEvent {
         pancurses::curs_set(1);
         pancurses::raw();
         if let Some(i) = self.window.getch() {
@@ -319,7 +340,7 @@ impl Terminal for PCTerminal {
             self.input_to_u16(i)
         } else {
             pancurses::curs_set(0);
-            None
+            InputEvent::no_input()
         }
     }
 
@@ -344,5 +365,13 @@ impl Terminal for PCTerminal {
 
     fn reset(&mut self) {
         self.window.clear();
+    }
+
+    fn quit(&mut self) {
+        info!(target: "app::input", "Closing pancurses terminal");
+        pancurses::curs_set(2);
+        pancurses::endwin();
+        pancurses::doupdate();
+        pancurses::reset_shell_mode();
     }
 }

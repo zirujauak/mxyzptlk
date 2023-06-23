@@ -32,6 +32,37 @@ pub enum Style {
     Fixed = 8,
 }
 
+#[derive(Debug)]
+pub struct InputEvent {
+    zchar: Option<u16>,
+    row: Option<u16>,
+    column: Option<u16>
+}
+
+impl InputEvent {
+    pub fn no_input() -> InputEvent {
+        InputEvent { zchar: None, row: None, column: None }
+    }
+    pub fn from_char(zchar: u16) -> InputEvent {
+        InputEvent { zchar: Some(zchar), row: None, column: None }
+    }
+    pub fn from_mouse(zchar: u16, row: u16, column: u16) -> InputEvent {
+        InputEvent { zchar: Some(zchar), row: Some(row), column: Some(column) }
+    }
+
+    pub fn zchar(&self) -> Option<u16> {
+        self.zchar
+    }
+
+    pub fn row(&self) -> Option<u16> {
+        self.row
+    }
+
+    pub fn column(&self) -> Option<u16> {
+        self.column
+    }
+}
+
 pub struct Screen {
     version: u8,
     rows: u32,
@@ -80,7 +111,7 @@ impl Screen {
     }
 
     pub fn new_v4(foreground: Color, background: Color) -> Screen {
-        let terminal = Box::new(ECTerminal::new());
+        let terminal = Box::new(PCTerminal::new());
         let (rows, columns) = terminal.as_ref().size();
         let buffer = Buffer::new(rows, columns, (foreground, background));
 
@@ -105,7 +136,7 @@ impl Screen {
     }
 
     pub fn new_v5(foreground: Color, background: Color) -> Screen {
-        let terminal = Box::new(ECTerminal::new());
+        let terminal = Box::new(PCTerminal::new());
         let (rows, columns) = terminal.as_ref().size();
         let buffer = Buffer::new(rows, columns, (foreground, background));
 
@@ -441,7 +472,7 @@ impl Screen {
         Ok(())
     }
 
-    pub fn read_key(&mut self, timeout: u128) -> Option<u16> {
+    pub fn read_key(&mut self, timeout: u128) -> InputEvent {
         let end = if timeout > 0 {
             SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -461,11 +492,12 @@ impl Screen {
         loop {
             let now =  SystemTime::now().duration_since(UNIX_EPOCH).expect("Error getting system time").as_millis();
             if now > end {
-                return None;
+                return InputEvent::no_input();
             }
 
-            if let Some(k) = self.terminal.read_key(end - now) {
-                return Some(k);
+            let e = self.terminal.read_key(end - now);
+            if let Some(_) = e.zchar {
+                return e;
             }
         }
     }
@@ -506,6 +538,10 @@ impl Screen {
     pub fn reset(&mut self) {
         self.terminal.reset();
     }
+
+    pub fn quit(&mut self) {
+        self.terminal.quit();
+    }
 }
 
 pub trait Terminal {
@@ -520,10 +556,11 @@ pub trait Terminal {
         font: u8
     );
     fn flush(&mut self);
-    fn read_key(&mut self, timeout: u128) -> Option<u16>;
+    fn read_key(&mut self, timeout: u128) -> InputEvent;
     fn scroll(&mut self, row: u32);
     fn backspace(&mut self, at: (u32, u32));
     fn beep(&mut self);
     fn move_cursor(&mut self, at: (u32, u32));
     fn reset(&mut self);
+    fn quit(&mut self);
 }
