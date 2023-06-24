@@ -15,6 +15,7 @@ use std::io::Write;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
+use crate::config::Config;
 use crate::error::*;
 use crate::iff::quetzal::Quetzal;
 use frame_stack::*;
@@ -53,7 +54,7 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(memory: Memory, name: &str) -> Result<State, RuntimeError> {
+    pub fn new(memory: Memory, config: Config, name: &str) -> Result<State, RuntimeError> {
         let version = header::field_byte(&memory, HeaderField::Version)?;
         let static_mark = header::field_word(&memory, HeaderField::StaticMark)? as usize;
         let mut dynamic = Vec::new();
@@ -70,9 +71,9 @@ impl State {
             ))
         } else {
             let screen = match version {
-                3 => Screen::new_v3(Color::White, Color::Black),
-                4 => Screen::new_v4(Color::White, Color::Black),
-                _ => Screen::new_v5(Color::White, Color::Black),
+                3 => Screen::new_v3(config)?,
+                4 => Screen::new_v4(config)?,
+                _ => Screen::new_v5(config)?,
             };
             let frame_stack =
                 FrameStack::new(header::field_word(&memory, HeaderField::InitialPC)? as usize);
@@ -110,12 +111,12 @@ impl State {
             header::set_byte(
                 &mut self.memory,
                 HeaderField::DefaultBackground,
-                Color::Black as u8,
+                self.screen.default_colors().1 as u8
             )?;
             header::set_byte(
                 &mut self.memory,
                 HeaderField::DefaultForeground,
-                Color::White as u8,
+                self.screen.default_colors().0 as u8,
             )?;
             header::set_byte(
                 &mut self.memory,

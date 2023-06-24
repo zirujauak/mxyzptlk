@@ -541,18 +541,9 @@ pub fn print_table(state: &mut State, instruction: &Instruction) -> Result<usize
     let height = if operands.len() > 2 { operands[2] } else { 1 } as usize;
     let skip = if operands.len() > 3 { operands[3] } else { 0 } as usize;
 
-    let left = state.cursor()?.1;
-    let mut padding = Vec::new();
-    for _ in 1..left {
-        padding.push(0x20 as u16);
-    }
-
-    for i in 0..height {
-        if i > 0 {
-            state.new_line()?;
-            state.print(&padding)?;
-        }
-
+    let origin = state.cursor()?;
+    for i in 0..height as usize {
+        state.set_cursor(origin.0 + i as u16, origin.1)?;
         for j in 0..width {
             let offset = i * (width + skip);
             state.print(&vec![state.read_byte(table + offset + j)? as u16])?;

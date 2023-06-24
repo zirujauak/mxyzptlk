@@ -1,18 +1,17 @@
 pub mod buffer;
-mod easy_curses;
-mod pancurses;
+mod curses;
 
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
+use crate::config::Config;
 use crate::error::*;
 use buffer::Buffer;
 use buffer::CellStyle;
-use easy_curses::ECTerminal;
+use curses::pancurses::PCTerminal;
+use curses::easy_curses::ECTerminal;
 
-use self::pancurses::PCTerminal;
-
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Color {
     Black = 2,
     Red = 3,
@@ -23,6 +22,7 @@ pub enum Color {
     Cyan = 8,
     White = 9,
 }
+
 
 pub enum Style {
     Roman = 0,
@@ -63,6 +63,29 @@ impl InputEvent {
     }
 }
 
+fn map_color(color: u8) -> Result<Color, RuntimeError> {
+    match color {
+        2 => Ok(Color::Black),
+        3 => Ok(Color::Red),
+        4 => Ok(Color::Green),
+        5 => Ok(Color::Yellow),
+        6 => Ok(Color::Blue),
+        7 => Ok(Color::Magenta),
+        8 => Ok(Color::Cyan),
+        9 => Ok(Color::White),
+        _ => Err(RuntimeError::new(
+            ErrorCode::InvalidColor,
+            format!("Invalid color {}", color),
+        )),
+    }
+}
+
+fn map_colors(foreground: u8, background: u8) -> Result<(Color, Color), RuntimeError> {
+    Ok((
+        map_color(foreground)?,
+        map_color(background)?,
+    ))
+}
 pub struct Screen {
     version: u8,
     rows: u32,
@@ -85,12 +108,20 @@ pub struct Screen {
 }
 
 impl Screen {
-    pub fn new_v3(foreground: Color, background: Color) -> Screen {
-        let terminal = Box::new(PCTerminal::new());
-        let (rows, columns) = terminal.as_ref().size();
-        let buffer = Buffer::new(rows, columns, (foreground, background));
+    pub fn new_v3(config: Config) -> Result<Screen, RuntimeError> { //foreground: Color, background: Color) -> Screen {
+        let terminal:Box<dyn Terminal> = if config.terminal().eq("pancurses") {
+            Box::new(PCTerminal::new())
+        } else if config.terminal().eq("easycurses") {
+            Box::new(ECTerminal::new()) 
+        } else {
+            return Err(RuntimeError::new(ErrorCode::System, format!("Invalid terminal '{}'", config.terminal())));
+        };
 
-        Screen {
+        let (rows, columns) = terminal.as_ref().size();
+        let colors = map_colors(config.foreground(), config.background())?;
+        let buffer = Buffer::new(rows, columns, colors);
+
+        Ok(Screen {
             version: 3,
             rows,
             columns,
@@ -100,22 +131,29 @@ impl Screen {
             window_1_top: None,
             window_1_bottom: None,
             selected_window: 0,
-            default_colors: (foreground.clone(), background.clone()),
-            current_colors: (foreground.clone(), background.clone()),
+            default_colors: colors,
+            current_colors: colors,
             current_style: CellStyle::new(),
             font: 1,
             cursor_0: (rows, 1),
             cursor_1: None,
             terminal,
-        }
+        })
     }
 
-    pub fn new_v4(foreground: Color, background: Color) -> Screen {
-        let terminal = Box::new(PCTerminal::new());
-        let (rows, columns) = terminal.as_ref().size();
-        let buffer = Buffer::new(rows, columns, (foreground, background));
+    pub fn new_v4(config: Config) -> Result<Screen, RuntimeError> {
+        let terminal:Box<dyn Terminal> = if config.terminal().eq("pancurses") {
+            Box::new(PCTerminal::new())
+        } else if config.terminal().eq("easycurses") {
+            Box::new(ECTerminal::new()) 
+        } else {
+            return Err(RuntimeError::new(ErrorCode::System, format!("Invalid terminal '{}'", config.terminal())));
+        };
 
-        Screen {
+        let (rows, columns) = terminal.as_ref().size();
+        let colors = map_colors(config.foreground(), config.background())?;
+        let buffer = Buffer::new(rows, columns, colors);
+        Ok(Screen {
             version: 4,
             rows,
             columns,
@@ -125,22 +163,30 @@ impl Screen {
             window_1_top: None,
             window_1_bottom: None,
             selected_window: 0,
-            default_colors: (foreground.clone(), background.clone()),
-            current_colors: (foreground.clone(), background.clone()),
+            default_colors: colors,
+            current_colors: colors,
             current_style: CellStyle::new(),
             font: 1,
             cursor_0: (rows, 1),
             cursor_1: None,
             terminal,
-        }
+        })
     }
 
-    pub fn new_v5(foreground: Color, background: Color) -> Screen {
-        let terminal = Box::new(PCTerminal::new());
-        let (rows, columns) = terminal.as_ref().size();
-        let buffer = Buffer::new(rows, columns, (foreground, background));
+    pub fn new_v5(config: Config) -> Result<Screen, RuntimeError> {
+        let terminal:Box<dyn Terminal> = if config.terminal().eq("pancurses") {
+            Box::new(PCTerminal::new())
+        } else if config.terminal().eq("easycurses") {
+            Box::new(ECTerminal::new()) 
+        } else {
+            return Err(RuntimeError::new(ErrorCode::System, format!("Invalid terminal '{}'", config.terminal())));
+        };
 
-        Screen {
+        let (rows, columns) = terminal.as_ref().size();
+        let colors = map_colors(config.foreground(), config.background())?;
+        let buffer = Buffer::new(rows, columns, colors);
+
+        Ok(Screen {
             version: 5,
             rows,
             columns,
@@ -150,14 +196,14 @@ impl Screen {
             window_1_bottom: None,
             window_0_top: 1,
             selected_window: 0,
-            default_colors: (foreground.clone(), background.clone()),
-            current_colors: (foreground.clone(), background.clone()),
+            default_colors: colors.clone(),
+            current_colors: colors.clone(),
             current_style: CellStyle::new(),
             font: 1,
             cursor_0: (1, 1),
             cursor_1: None,
             terminal,
-        }
+        })
     }
 
     pub fn rows(&self) -> u32 {
@@ -174,6 +220,10 @@ impl Screen {
         } else {
             self.cursor_1.unwrap()
         }
+    }
+
+    pub fn default_colors(&self) -> (Color, Color) {
+        self.default_colors
     }
 
     pub fn selected_window(&self) -> u8 {
@@ -206,6 +256,7 @@ impl Screen {
             )),
         }
     }
+
     fn map_colors(&self, foreground: u8, background: u8) -> Result<(Color, Color), RuntimeError> {
         Ok((
             self.map_color(foreground, self.current_colors.0, self.default_colors.0)?,

@@ -10,7 +10,9 @@ use std::panic;
 pub mod error;
 pub mod state;
 pub mod iff;
+pub mod config;
 
+use crate::config::Config;
 //use crate::iff::Chunk;
 use crate::log::*;
 use state::memory::*;
@@ -34,6 +36,18 @@ fn main() {
     info!(target: "app::variable", "Start variable log for '{}'", name);
     log_mdc::insert("instruction_count", format!("{:8x}", 0));
 
+    let config_file = File::open("config.yml");
+    let config = if let Ok(f) = config_file {
+        if let Ok(c) = Config::from_file(f) {
+            c
+        } else {
+            Config::default()
+        }
+    } else {
+        Config::default()
+    };
+    trace!(target: "app::trace", "{:?}", config);
+    
     // let mut f = File::open("lurking-horror.blorb").unwrap();
     // let mut b = Vec::new();
     // f.read_to_end(&mut b).unwrap();
@@ -51,7 +65,7 @@ fn main() {
             match f.read_to_end(&mut buffer) {
                 Ok(_) => {
                     let memory = Memory::new(&buffer);
-                    let mut state = State::new(memory, &name).expect("Error creating state");
+                    let mut state = State::new(memory, config, &name).expect("Error creating state");
                     state.initialize();
 
                     if let Err(r) = state.run() {
