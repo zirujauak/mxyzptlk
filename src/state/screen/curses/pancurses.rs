@@ -26,7 +26,6 @@ impl PCTerminal {
         pancurses::noecho();
         pancurses::cbreak();
         pancurses::start_color();
-        info!(target: "app::input", "Mouse mask: {:08x}", pancurses::mousemask(BUTTON1_CLICKED | BUTTON1_DOUBLE_CLICKED | REPORT_MOUSE_POSITION, None));
         window.keypad(true);
         window.clear();
         window.refresh();
@@ -126,7 +125,6 @@ impl Terminal for PCTerminal {
         if style.is_style(Style::Reverse) {
             attributes = attributes | A_REVERSE;
         }
-        trace!(target: "app::trace", "print @ {},{} '{}' {:06b} ({:?},{:?}) -> {:08x}", row, column, c, cp, colors.0, colors.1, attributes);
         self.window.mv(row as i32 - 1, column as i32 - 1);
         self.window.addstr(format!("{}", c));
         self.window.mv(row as i32 - 1, column as i32 - 1);
@@ -152,11 +150,16 @@ impl Terminal for PCTerminal {
     fn scroll(&mut self, row: u32) {
         self.window.mv(row as i32 - 1, 0);
         self.window.deleteln();
+        let curs = self.window.get_max_yx();
+        for i in 0..curs.1 {
+            self.window.mvaddch(curs.0 - 1, i, ' ');
+        }
     }
 
     fn backspace(&mut self, at: (u32, u32)) {
-        self.window.mv(at.0 as i32 - 1, at.1 as i32 - 1);
-        self.window.delch();
+        let attributes = self.window.mvinch(at.0 as i32 - 1, at.1 as i32 - 1);
+        let ch = (attributes & 0xFFFFFF00) | 0x20;
+        self.window.mvaddch(at.0 as i32 - 1, at.1 as i32 - 1, ch);
         self.window.mv(at.0 as i32 - 1, at.1 as i32 - 1);
     }
 
@@ -178,5 +181,10 @@ impl Terminal for PCTerminal {
         pancurses::endwin();
         pancurses::doupdate();
         pancurses::reset_shell_mode();
+    }
+
+    fn set_colors(&mut self, colors: (Color, Color)) {
+        let cp = cp(self.as_color(colors.0), self.as_color(colors.1));
+        self.window.color_set(cp);
     }
 }

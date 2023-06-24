@@ -121,6 +121,11 @@ impl Terminal for ECTerminal {
     fn scroll(&mut self, row: u32) {
         self.easycurses.move_rc(row as i32 - 1, 0);
         self.easycurses.delete_line();
+        let curs = self.easycurses.get_row_col_count();
+        self.easycurses.move_rc(curs.0 - 1, 0);
+        for i in 0..curs.1 {
+            self.easycurses.print_char(' ');
+        }
     }
 
     fn backspace(&mut self, at: (u32, u32)) {
@@ -143,5 +148,9 @@ impl Terminal for ECTerminal {
 
     fn quit(&mut self) {
         
+    }
+
+    fn set_colors(&mut self, colors: (screen::Color, screen::Color)) {
+
     }
 }

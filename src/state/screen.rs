@@ -266,6 +266,7 @@ impl Screen {
 
     pub fn set_colors(&mut self, foreground: u16, background: u16) -> Result<(), RuntimeError> {
         self.current_colors = self.map_colors(foreground as u8, background as u8)?;
+        self.terminal.set_colors(self.current_colors);
         Ok(())
     }
 
@@ -322,7 +323,7 @@ impl Screen {
     pub fn erase_window(&mut self, window: i8) -> Result<(), RuntimeError> {
         match window {
             0 => {
-                for i in self.window_0_top..self.rows {
+                for i in self.window_0_top..=self.rows {
                     for j in 1..self.columns {
                         self.buffer
                             .clear(&mut self.terminal, self.current_colors, (i, j));
@@ -338,7 +339,7 @@ impl Screen {
             1 => {
                 if let Some(start) = self.window_1_top {
                     if let Some(end) = self.window_1_bottom {
-                        for i in start..end {
+                        for i in start..=end {
                             for j in 1..self.columns {
                                 self.buffer
                                     .clear(&mut self.terminal, self.current_colors, (i, j));
@@ -354,8 +355,8 @@ impl Screen {
                 self.window_1_bottom = None;
                 self.cursor_1 = None;
                 self.window_0_top = 1;
-                for i in self.window_0_top..self.rows {
-                    for j in 1..self.columns {
+                for i in self.window_0_top..=self.rows {
+                    for j in 1..=self.columns {
                         self.buffer
                             .clear(&mut self.terminal, self.current_colors, (i, j));
                     }
@@ -614,4 +615,5 @@ pub trait Terminal {
     fn move_cursor(&mut self, at: (u32, u32));
     fn reset(&mut self);
     fn quit(&mut self);
+    fn set_colors(&mut self, colors: (Color, Color));
 }
