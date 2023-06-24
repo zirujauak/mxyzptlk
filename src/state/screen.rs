@@ -8,8 +8,8 @@ use crate::config::Config;
 use crate::error::*;
 use buffer::Buffer;
 use buffer::CellStyle;
-use curses::pancurses::PCTerminal;
 use curses::easy_curses::ECTerminal;
+use curses::pancurses::PCTerminal;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Color {
@@ -23,7 +23,6 @@ pub enum Color {
     White = 9,
 }
 
-
 pub enum Style {
     Roman = 0,
     Reverse = 1,
@@ -36,18 +35,30 @@ pub enum Style {
 pub struct InputEvent {
     zchar: Option<u16>,
     row: Option<u16>,
-    column: Option<u16>
+    column: Option<u16>,
 }
 
 impl InputEvent {
     pub fn no_input() -> InputEvent {
-        InputEvent { zchar: None, row: None, column: None }
+        InputEvent {
+            zchar: None,
+            row: None,
+            column: None,
+        }
     }
     pub fn from_char(zchar: u16) -> InputEvent {
-        InputEvent { zchar: Some(zchar), row: None, column: None }
+        InputEvent {
+            zchar: Some(zchar),
+            row: None,
+            column: None,
+        }
     }
     pub fn from_mouse(zchar: u16, row: u16, column: u16) -> InputEvent {
-        InputEvent { zchar: Some(zchar), row: Some(row), column: Some(column) }
+        InputEvent {
+            zchar: Some(zchar),
+            row: Some(row),
+            column: Some(column),
+        }
     }
 
     pub fn zchar(&self) -> Option<u16> {
@@ -81,10 +92,7 @@ fn map_color(color: u8) -> Result<Color, RuntimeError> {
 }
 
 fn map_colors(foreground: u8, background: u8) -> Result<(Color, Color), RuntimeError> {
-    Ok((
-        map_color(foreground)?,
-        map_color(background)?,
-    ))
+    Ok((map_color(foreground)?, map_color(background)?))
 }
 pub struct Screen {
     version: u8,
@@ -105,16 +113,21 @@ pub struct Screen {
     cursor_0: (u32, u32),
     cursor_1: Option<(u32, u32)>,
     terminal: Box<dyn Terminal>,
+    lines_since_input: u32,
 }
 
 impl Screen {
-    pub fn new_v3(config: Config) -> Result<Screen, RuntimeError> { //foreground: Color, background: Color) -> Screen {
-        let terminal:Box<dyn Terminal> = if config.terminal().eq("pancurses") {
+    pub fn new_v3(config: Config) -> Result<Screen, RuntimeError> {
+        //foreground: Color, background: Color) -> Screen {
+        let terminal: Box<dyn Terminal> = if config.terminal().eq("pancurses") {
             Box::new(PCTerminal::new())
         } else if config.terminal().eq("easycurses") {
-            Box::new(ECTerminal::new()) 
+            Box::new(ECTerminal::new())
         } else {
-            return Err(RuntimeError::new(ErrorCode::System, format!("Invalid terminal '{}'", config.terminal())));
+            return Err(RuntimeError::new(
+                ErrorCode::System,
+                format!("Invalid terminal '{}'", config.terminal()),
+            ));
         };
 
         let (rows, columns) = terminal.as_ref().size();
@@ -138,16 +151,20 @@ impl Screen {
             cursor_0: (rows, 1),
             cursor_1: None,
             terminal,
+            lines_since_input: 0,
         })
     }
 
     pub fn new_v4(config: Config) -> Result<Screen, RuntimeError> {
-        let terminal:Box<dyn Terminal> = if config.terminal().eq("pancurses") {
+        let terminal: Box<dyn Terminal> = if config.terminal().eq("pancurses") {
             Box::new(PCTerminal::new())
         } else if config.terminal().eq("easycurses") {
-            Box::new(ECTerminal::new()) 
+            Box::new(ECTerminal::new())
         } else {
-            return Err(RuntimeError::new(ErrorCode::System, format!("Invalid terminal '{}'", config.terminal())));
+            return Err(RuntimeError::new(
+                ErrorCode::System,
+                format!("Invalid terminal '{}'", config.terminal()),
+            ));
         };
 
         let (rows, columns) = terminal.as_ref().size();
@@ -170,16 +187,20 @@ impl Screen {
             cursor_0: (rows, 1),
             cursor_1: None,
             terminal,
+            lines_since_input: 0,
         })
     }
 
     pub fn new_v5(config: Config) -> Result<Screen, RuntimeError> {
-        let terminal:Box<dyn Terminal> = if config.terminal().eq("pancurses") {
+        let terminal: Box<dyn Terminal> = if config.terminal().eq("pancurses") {
             Box::new(PCTerminal::new())
         } else if config.terminal().eq("easycurses") {
-            Box::new(ECTerminal::new()) 
+            Box::new(ECTerminal::new())
         } else {
-            return Err(RuntimeError::new(ErrorCode::System, format!("Invalid terminal '{}'", config.terminal())));
+            return Err(RuntimeError::new(
+                ErrorCode::System,
+                format!("Invalid terminal '{}'", config.terminal()),
+            ));
         };
 
         let (rows, columns) = terminal.as_ref().size();
@@ -203,6 +224,7 @@ impl Screen {
             cursor_0: (1, 1),
             cursor_1: None,
             terminal,
+            lines_since_input: 0,
         })
     }
 
@@ -301,6 +323,7 @@ impl Screen {
     }
 
     pub fn select_window(&mut self, window: u8) -> Result<(), RuntimeError> {
+        self.lines_since_input = 0;
         if window == 0 {
             self.selected_window = 0;
             Ok(())
@@ -334,6 +357,8 @@ impl Screen {
                 } else {
                     (self.window_0_top, 1)
                 };
+
+                self.lines_since_input = 0;
                 Ok(())
             }
             1 => {
@@ -367,6 +392,7 @@ impl Screen {
                     (self.window_0_top, 1)
                 };
                 self.selected_window = 0;
+                self.lines_since_input = 0;
                 Ok(())
             }
             -2 => {
@@ -384,6 +410,7 @@ impl Screen {
                         (self.window_0_top, 1)
                     };
                 }
+                self.lines_since_input = 0;
                 Ok(())
             }
             _ => Err(RuntimeError::new(
@@ -405,19 +432,43 @@ impl Screen {
         }
     }
 
+    fn next_line(&mut self) {
+        self.lines_since_input = self.lines_since_input + 1;
+        if self.cursor_0.0 == self.rows {
+            self.buffer
+                .scroll(&mut self.terminal, self.window_0_top, self.current_colors);
+            self.cursor_0 = (self.rows, 1);
+        } else {
+            self.cursor_0 = (self.cursor_0.0 + 1, 1);
+        }
+
+        let l = self.rows - self.window_0_top;
+        trace!(target: "app::trace", "{} of {} lines printed since input", self.lines_since_input, l);
+        if self.lines_since_input >= l {
+            let reverse = self.current_style.is_style(Style::Reverse);
+            self.current_style.set(Style::Reverse as u8);
+            self.print(&"[MORE]".chars().map(|c| c as u16).collect());
+            if let Some(c) = self.read_key(0).zchar() {
+                if c == 0xd {
+                    self.lines_since_input = l - 1;
+                } else {
+                    self.lines_since_input = 0;
+                }
+            }
+            self.cursor_0 = (self.rows, 1);
+            self.current_style.clear(Style::Reverse as u8);
+            self.print(&vec![0x20 as u16; 6]);
+            if reverse {
+                self.current_style.set(Style::Reverse as u8)
+            }
+            self.cursor_0 = (self.rows, 1);
+        }
+    }
     fn advance_cursor(&mut self) {
         if self.selected_window == 0 {
             if self.cursor_0.1 == self.columns {
                 // At the end of the row
-                if self.cursor_0.0 == self.rows {
-                    // At bottom of screen, scroll window 0 up 1 row and set the cursor to the bottom left
-                    self.buffer
-                        .scroll(&mut self.terminal, self.window_0_top, self.current_colors);
-                    self.cursor_0 = (self.rows, 1);
-                } else {
-                    // Not at the bottom, so just move the cursor to the start of the next line
-                    self.cursor_0 = (self.cursor_0.0 + 1, 1)
-                }
+                self.next_line();
             } else {
                 // Just move the cursor to the right
                 self.cursor_0 = (self.cursor_0.0, self.cursor_0.1 + 1)
@@ -447,18 +498,6 @@ impl Screen {
         for c in text {
             self.print_char(*c);
         }
-        // if self.selected_window == 1 || !self.buffered {
-        //     self.print_word(text);
-        // } else {
-        //     let words = text.split_inclusive(|c| *c == 0x20);
-        //     for word in words {
-        //         if self.columns - self.cursor_0.1 < word.len() as u32 {
-        //             self.new_line();
-        //         }
-        //         self.print_word(&word.to_vec());
-        //     }
-        // }
-
         self.terminal.flush();
     }
 
@@ -467,6 +506,7 @@ impl Screen {
             self.new_line();
         } else if zchar != 0 {
             if self.selected_window == 0 {
+                trace!(target: "app::trace", "Print '{}' @ {:?}", (zchar as u8) as char, self.cursor_0);
                 self.buffer.print(
                     &mut self.terminal,
                     zchar,
@@ -505,13 +545,7 @@ impl Screen {
 
     pub fn new_line(&mut self) {
         if self.selected_window == 0 {
-            if self.cursor_0.0 == self.rows {
-                self.buffer
-                    .scroll(&mut self.terminal, self.window_0_top, self.current_colors);
-                self.cursor_0 = (self.rows, 1)
-            } else {
-                self.cursor_0 = (self.cursor_0.0 + 1, 1);
-            }
+            self.next_line();
         } else {
             if self.cursor_1.unwrap().0 < self.window_1_bottom.unwrap() {
                 self.cursor_1 = Some((self.cursor_1.unwrap().0 + 1, 1));
@@ -525,12 +559,13 @@ impl Screen {
     }
 
     pub fn read_key(&mut self, timeout: u128) -> InputEvent {
+        self.lines_since_input = 0;
         let end = if timeout > 0 {
             SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Error getting system time")
-            .as_millis()
-            + timeout
+                .duration_since(UNIX_EPOCH)
+                .expect("Error getting system time")
+                .as_millis()
+                + timeout
         } else {
             u128::MAX
         };
@@ -542,7 +577,10 @@ impl Screen {
         }
 
         loop {
-            let now =  SystemTime::now().duration_since(UNIX_EPOCH).expect("Error getting system time").as_millis();
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Error getting system time")
+                .as_millis();
             if now > end {
                 return InputEvent::no_input();
             }
@@ -605,7 +643,7 @@ pub trait Terminal {
         cursor: u32,
         colors: (Color, Color),
         style: &CellStyle,
-        font: u8
+        font: u8,
     );
     fn flush(&mut self);
     fn read_key(&mut self, timeout: u128) -> InputEvent;
