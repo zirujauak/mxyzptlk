@@ -352,7 +352,7 @@ pub fn sound_effect(state: &mut State, instruction: &Instruction) -> Result<usiz
 
 pub fn read_char(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
-    if operands[0] != 1 {
+    if operands.len() > 0 && operands[0] != 1 {
         return Err(RuntimeError::new(
             ErrorCode::Instruction,
             format!("READ_CHAR argument 1 must be 1, was {}", operands[0]),
