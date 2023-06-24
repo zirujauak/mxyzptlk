@@ -44,6 +44,7 @@ Refactored a lot of the code to make it more readable and manageable.  I also re
 * Transcripting
 * Passes czech.z5 and praxis.z5 tests
 * Everything works in etude.z5
+* Suggest filenames `{story-name}-{##}.{ext}` for save, restore, and script
 
 ## Fixed!
 * AREAD opcode correctly sets the text buffer positions of words, which fixed problems with jigsaw.z8
