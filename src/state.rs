@@ -7,6 +7,7 @@ mod object;
 mod rng;
 mod screen;
 mod text;
+mod files;
 
 use std::fs;
 use std::fs::File;
@@ -663,10 +664,7 @@ impl State {
     // Save/restore
     pub fn prompt_and_create(&mut self, prompt: &str, suffix: &str) -> Result<File, RuntimeError> {
         self.print(&prompt.chars().map(|c| c as u16).collect())?;
-        let n = format!("{}.{}", self.name, suffix)
-            .chars()
-            .map(|c| c as u16)
-            .collect();
+        let n = files::first_available(&self.name, suffix)?;
         self.print(&n)?;
 
         let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
@@ -689,22 +687,6 @@ impl State {
         data: &Vec<u8>,
     ) -> Result<(), RuntimeError> {
         let mut file = self.prompt_and_create(prompt, suffix)?;
-        // self.print(&prompt.chars().map(|c| c as u16).collect())?;
-        // let n = format!("{}.{}", self.name, suffix)
-        //     .chars()
-        //     .map(|c| c as u16)
-        //     .collect();
-        // self.print(&n)?;
-
-        // let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
-        // let filename = String::from_utf16(&f).unwrap();
-        // trace!(target: "app::trace", "Save '{}'", filename.trim());
-        // let mut file = fs::OpenOptions::new()
-        //     .create(true)
-        //     .truncate(true)
-        //     .write(true)
-        //     .open(filename.trim())
-        //     .unwrap();
 
         match file.write_all(data) {
             Ok(_) => (),
@@ -718,10 +700,7 @@ impl State {
 
     pub fn prompt_and_read(&mut self, prompt: &str, suffix: &str) -> Result<Vec<u8>, RuntimeError> {
         self.print(&prompt.chars().map(|c| c as u16).collect())?;
-        let n = format!("{}.{}", self.name, suffix)
-            .chars()
-            .map(|c| c as u16)
-            .collect();
+        let n = files::last_existing(&self.name, suffix)?;
         self.print(&n)?;
 
         let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
@@ -816,21 +795,7 @@ impl State {
         self.screen.quit();
         Ok(())
     }
-    // pub fn print_char(&mut self, char: u16) -> Result<(),RuntimeError> {
-    //     self.screen.print_char(char);
-    //     Ok(())
-    // }
 
-    // pub fn print_num(&mut self, n: i16) -> Result<(), RuntimeError> {
-    //     let s = format!("{}", n);
-    //     let mut text = Vec::new();
-    //     for c in s.chars() {
-    //         text.push(c as u16);
-    //     }
-
-    //     self.screen.print(&text);
-    //     Ok(())
-    // }
 
     pub fn new_line(&mut self) -> Result<(), RuntimeError> {
         if self.output_streams & 0x5 == 0x1 {
