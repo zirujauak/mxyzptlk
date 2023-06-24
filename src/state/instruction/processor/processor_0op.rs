@@ -51,32 +51,68 @@ pub fn save(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
             instruction.store().unwrap().address
         },
     );
-    state.prompt_and_write("Save to: ", "ifzs", &quetzal.to_vec())?;
+    match state.prompt_and_write("Save to: ", "ifzs", &quetzal.to_vec()) {
+        Ok(_) => {
+            if version == 3 {
+                branch(state, instruction, true)
+            } else {
+                store_result(state, instruction, 1)?;
+                Ok(instruction.next_address())
+            }
+        },
+        Err(e) => {
+            state.print(&format!("Error writing: {}\r", e).chars().map(|c| c as u16).collect())?;
+            if state.version == 3 {
+                branch(state, instruction, false)
+            } else {
+                store_result(state, instruction, 0)?;
+                Ok(instruction.next_address())
+            }
 
-    if version == 3 {
-        branch(state, instruction, true)
-    } else {
-        store_result(state, instruction, 1)?;
-        Ok(instruction.next_address())
+        }
     }
 }
 
 pub fn restore(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let data = state.prompt_and_read("Restore from: ", "ifzs")?;
-    let quetzal = Quetzal::from_vec(&data).unwrap();
-    match state.restore(quetzal) {
-        Ok(address) => {
-            let i = decoder::decode_instruction(state.memory(), address - 1)?;
-            if header::field_byte(state.memory(), HeaderField::Version)? == 3 {
-                // V3 is a branch
-                branch(state, &i, true)
-            } else {
-                // V4 is a store
-                store_result(state, instruction, 2)?;
-                Ok(i.next_address())
+    match state.prompt_and_read("Restore from: ", "ifzs") {
+        Ok(data) => {
+            let quetzal = Quetzal::from_vec(&data).unwrap();
+            match state.restore(quetzal) {
+                Ok(address) => {
+                    if address == 0 {
+                        branch(state, instruction, false)
+                    } else {
+                        let i = decoder::decode_instruction(state.memory(), address - 1)?;
+                        if state.version == 3 {
+                            // V3 is a branch
+                            branch(state, &i, true)
+                        } else {
+                            // V4 is a store
+                            store_result(state, instruction, 2)?;
+                            Ok(i.next_address())
+                        }
+                    }
+                }
+                Err(e) => {
+                    state.print(&format!("Error reading: {}\r", e).chars().map(|c| c as u16).collect())?;
+                    if state.version == 3 {
+                        branch(state, instruction, false)
+                    } else {
+                        store_result(state, instruction, 0)?;
+                        Ok(instruction.next_address())
+                    }
+                }
             }
-        }
-        Err(_) => branch(state, instruction, false),
+        }, 
+        Err(e) => {
+            state.print(&format!("Error reading: {}\r", e).chars().map(|c| c as u16).collect())?;
+            if state.version == 3 {
+                branch(state, instruction, false)
+            } else {
+                store_result(state, instruction, 0)?;
+                Ok(instruction.next_address())
+            }
+}
     }
 }
 

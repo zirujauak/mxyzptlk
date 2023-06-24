@@ -11,8 +11,15 @@ pub fn save(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
         ))
     } else {
         let quetzal = Quetzal::from_state(state, instruction.store().unwrap().address);
-        state.prompt_and_write("Save to: ", "ifzs", &quetzal.to_vec())?;
-        store_result(state, instruction, 1)?;
+        match state.prompt_and_write("Save to: ", "ifzs", &quetzal.to_vec()) {
+            Ok(_) => {
+                store_result(state, instruction, 1)?;
+            },
+            Err(e) => {
+                state.print(&format!("Error writing: {}\r", e).chars().map(|c| c as u16).collect())?;
+                store_result(state, instruction, 0)?;
+            }
+        }
         Ok(instruction.next_address())
     }
 }
@@ -25,23 +32,33 @@ pub fn restore(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
             "SAVE table not implemented".to_string(),
         ))
     } else {
-        let data = state.prompt_and_read("Restore from: ", "ifzs")?;
-        let quetzal = Quetzal::from_vec(&data).unwrap();
-        match state.restore(quetzal) {
-            Ok(address) => {
-                let i = decoder::decode_instruction(state.memory(), address - 3)?;
-                store_result(state, instruction, 2)?;
-                Ok(i.next_address())
+        match state.prompt_and_read("Restore from: ", "ifzs") {
+            Ok(data) => {
+                let quetzal = Quetzal::from_vec(&data).unwrap();
+                match state.restore(quetzal) {
+                    Ok(address) => {
+                        if address == 0 {
+                            store_result(state, instruction, 0)?;
+                            Ok(instruction.next_address())
+                        } else {
+                            let i = decoder::decode_instruction(state.memory(), address - 3)?;
+                            store_result(state, instruction, 2)?;
+                            Ok(i.next_address())
+                        }
+                    }
+                    Err(_) => branch(state, instruction, false),
+                }
             }
-            Err(_) => branch(state, instruction, false),
+            Err(e) => {
+                state.print(&format!("Error reading: {}\r", e).chars().map(|c| c as u16).collect())?;
+                store_result(state, instruction, 0)?;
+                Ok(instruction.next_address())
+            }
         }
     }
 }
 
-pub fn log_shift(
-    state: &mut State,
-    instruction: &Instruction,
-) -> Result<usize, RuntimeError> {
+pub fn log_shift(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
     let value = operands[0];
     let places = operands[1] as i16;
@@ -60,10 +77,7 @@ pub fn log_shift(
     Ok(instruction.next_address())
 }
 
-pub fn art_shift(
-    state: &mut State,
-    instruction: &Instruction,
-) -> Result<usize, RuntimeError> {
+pub fn art_shift(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
     let value = operands[0] as i16;
     let places = operands[1] as i16;
