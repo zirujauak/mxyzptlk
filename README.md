@@ -33,18 +33,20 @@ $ mxyzptlk filename.z5
 $ cargo run -- filename.z5
 ```
 
-# June 23, 2023
+# June 24, 2023
 
 Refactored a lot of the code to make it more readable and manageable.  I also rewrote the terminal implementation to use either easycurses or pancurses, which are mostly the same except pancurses exposes mouse click and location info.  Easycurses should be able to do this by accessing the underlying pancurses lib.
 
 ## Working
-* Curses-based terminal interpreter (two!) with working zmachine screen model including color and font styling, though italic characters are underlined due to limitations in curses.  Mouse input is also working correctly in Beyond Zork
+* Curses-based terminal interpreter (two!) with working zmachine screen model including color and font styling, though italic characters are underlined due to limitations in curses.  Mouse input is also working correctly in Beyond Zork.
+* Output pauses when a full screen of text has been printed without input from the player.  Hitting `Enter` (or `Return`) will print just one more line, any other key prints up to a full page.
 * Multiple undo states as with previous update
 * Save/restore game state to/from Quetzal IFF files using compressed memory
 * Transcripting
 * Passes czech.z5 and praxis.z5 tests
 * Everything works in etude.z5
 * Suggest filenames `{story-name}-{##}.{ext}` for save, restore, and script
+* V3 sound (The Lurking Horror)
 
 ## Fixed!
 * AREAD opcode correctly sets the text buffer positions of words, which fixed problems with jigsaw.z8
