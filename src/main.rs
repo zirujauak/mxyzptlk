@@ -48,14 +48,11 @@ fn main() {
     };
     trace!(target: "app::trace", "{:?}", config);
     
-    // let mut f = File::open("lurking-horror.blorb").unwrap();
-    // let mut b = Vec::new();
-    // f.read_to_end(&mut b).unwrap();
-    // let form = Chunk::from_vec(&b);
-    // trace!(target: "app::trace", "{}", form);
     let prev = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         trace!(target: "app::trace", "{}", &info);
+        // Reset the terminal because curses may not exit cleanly
+        std::process::Command::new("reset").status();
         prev(info);
     }));
 
