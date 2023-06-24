@@ -1,3 +1,4 @@
+mod files;
 mod frame_stack;
 pub mod header;
 mod input;
@@ -6,8 +7,8 @@ pub mod memory;
 mod object;
 mod rng;
 mod screen;
+pub mod sound;
 mod text;
-mod files;
 
 use std::fs;
 use std::fs::File;
@@ -18,6 +19,7 @@ use std::time::UNIX_EPOCH;
 
 use crate::config::Config;
 use crate::error::*;
+use crate::iff::quetzal::ifhd::IFhd;
 use crate::iff::quetzal::Quetzal;
 use frame_stack::*;
 use header::*;
@@ -30,6 +32,7 @@ use screen::buffer::CellStyle;
 use screen::*;
 
 use self::frame_stack::frame::Frame;
+use self::sound::Sounds;
 
 pub struct Stream3 {
     table: usize,
@@ -52,10 +55,16 @@ pub struct State {
     input_interrupt: Option<u16>,
     input_interrupt_print: bool,
     buffered: bool,
+    sounds: Option<Sounds>,
 }
 
 impl State {
-    pub fn new(memory: Memory, config: Config, name: &str) -> Result<State, RuntimeError> {
+    pub fn new(
+        memory: Memory,
+        config: Config,
+        sounds: Option<Sounds>,
+        name: &str,
+    ) -> Result<State, RuntimeError> {
         let version = header::field_byte(&memory, HeaderField::Version)?;
         let static_mark = header::field_word(&memory, HeaderField::StaticMark)? as usize;
         let mut dynamic = Vec::new();
@@ -63,6 +72,9 @@ impl State {
             dynamic.push(memory.read_byte(i)?);
         }
 
+        if let Some(s) = sounds.as_ref() {
+            trace!(target: "app::target", "{} sounds loaded", s.sounds().len())
+        }
         let rng = ChaChaRng::new();
 
         if version < 3 || version == 6 || version > 8 {
@@ -95,6 +107,7 @@ impl State {
                 input_interrupt: None,
                 input_interrupt_print: false,
                 buffered: true,
+                sounds,
             })
         }
     }
@@ -112,7 +125,7 @@ impl State {
             header::set_byte(
                 &mut self.memory,
                 HeaderField::DefaultBackground,
-                self.screen.default_colors().1 as u8
+                self.screen.default_colors().1 as u8,
             )?;
             header::set_byte(
                 &mut self.memory,
@@ -621,9 +634,7 @@ impl State {
             let e = self.screen.read_key(timeout);
             match e.zchar() {
                 Some(key) => {
-                    if terminators.contains(&key)
-                        || (terminators.contains(&255) && (key > 128))
-                    {
+                    if terminators.contains(&key) || (terminators.contains(&255) && (key > 128)) {
                         if key == 254 || key == 253 {
                             header::set_extension(
                                 &mut self.memory,
@@ -670,14 +681,23 @@ impl State {
         let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
         let filename = String::from_utf16(&f).unwrap();
         trace!(target: "app::trace", "Save '{}'", filename.trim());
-        let file = fs::OpenOptions::new()
+        match fs::OpenOptions::new()
             .create(true)
             .truncate(true)
             .write(true)
             .open(filename.trim())
-            .unwrap();
+        {
+            Ok(f) => Ok(f),
+            Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+        }
+        // let file = fs::OpenOptions::new()
+        //     .create(true)
+        //     .truncate(true)
+        //     .write(true)
+        //     .open(filename.trim())
+        //     .unwrap();
 
-        Ok(file)
+        // Ok(file)
     }
 
     pub fn prompt_and_write(
@@ -717,47 +737,62 @@ impl State {
     }
 
     pub fn restore(&mut self, quetzal: Quetzal) -> Result<usize, RuntimeError> {
-        let mut fs = FrameStack::new(0);
-        for stackframe in quetzal.stks.stks {
-            let result = if stackframe.flags & 0x10 == 0x00 {
-                Some(StoreResult::new(0, stackframe.result_variable))
-            } else {
-                None
-            };
-            let f = Frame::new(
-                0,
-                0,
-                &stackframe.local_variables,
-                stackframe.flags & 0xF,
-                &stackframe.stack,
-                result,
-                stackframe.return_address as usize,
-            );
-            fs.frames_mut().push(f);
-        }
-
-        self.frame_stack = fs;
-
-        let dynamic = if let Some(cmem) = quetzal.cmem {
-            cmem.to_vec(&self)
-        } else if let Some(umem) = quetzal.umem {
-            umem.data
+        let ifhd = IFhd::from_state(&self, 0);
+        if ifhd.release_number != quetzal.ifhd.release_number
+            || ifhd.checksum != quetzal.ifhd.checksum
+            || !ifhd.serial_number.eq(&quetzal.ifhd.serial_number)
+        {
+            self.print(
+                &"That save is not for this story\r"
+                    .chars()
+                    .map(|c| c as u16)
+                    .collect(),
+            )?;
+            // TODO: should return an Option<usize>
+            Ok(0)
         } else {
-            return Err(RuntimeError::new(
-                ErrorCode::System,
-                "No CMEM or UMEM chunk".to_string(),
-            ));
-        };
-        for i in 0..dynamic.len() {
-            if i != 0x10 && i != 0x11 {
-                self.memory.write_byte(i, dynamic[i])?;
+            let mut fs = FrameStack::new(0);
+            for stackframe in quetzal.stks.stks {
+                let result = if stackframe.flags & 0x10 == 0x00 {
+                    Some(StoreResult::new(0, stackframe.result_variable))
+                } else {
+                    None
+                };
+                let f = Frame::new(
+                    0,
+                    0,
+                    &stackframe.local_variables,
+                    stackframe.flags & 0xF,
+                    &stackframe.stack,
+                    result,
+                    stackframe.return_address as usize,
+                );
+                fs.frames_mut().push(f);
             }
+
+            self.frame_stack = fs;
+
+            let dynamic = if let Some(cmem) = quetzal.cmem {
+                cmem.to_vec(&self)
+            } else if let Some(umem) = quetzal.umem {
+                umem.data
+            } else {
+                return Err(RuntimeError::new(
+                    ErrorCode::System,
+                    "No CMEM or UMEM chunk".to_string(),
+                ));
+            };
+            for i in 0..dynamic.len() {
+                if i != 0x10 && i != 0x11 {
+                    self.memory.write_byte(i, dynamic[i])?;
+                }
+            }
+
+            // Reset stream 3
+            self.stream_3 = Vec::new();
+
+            Ok(quetzal.ifhd.pc as usize)
         }
-
-        // Reset stream 3
-        self.stream_3 = Vec::new();
-
-        Ok(quetzal.ifhd.pc as usize)
     }
 
     pub fn save_undo(&mut self, instruction: &Instruction) -> Result<(), RuntimeError> {
@@ -789,13 +824,18 @@ impl State {
     }
 
     pub fn quit(&mut self) -> Result<(), RuntimeError> {
-        self.print(&"Press any key to exit".as_bytes().iter().map(|x| *x as u16).collect())?;
+        self.print(
+            &"Press any key to exit"
+                .as_bytes()
+                .iter()
+                .map(|x| *x as u16)
+                .collect(),
+        )?;
         self.read_key(0)?;
 
         self.screen.quit();
         Ok(())
     }
-
 
     pub fn new_line(&mut self) -> Result<(), RuntimeError> {
         if self.output_streams & 0x5 == 0x1 {
@@ -814,6 +854,28 @@ impl State {
 
     pub fn backspace(&mut self) -> Result<(), RuntimeError> {
         self.screen.backspace()
+    }
+
+    // Sound
+    pub fn play_sound(&mut self, effect: u16, volume: u8, repeats: u8) -> Result<(), RuntimeError> {
+        if let Some(sounds) = self.sounds.as_mut() {
+            if sounds.current_effect() == effect {
+                sounds.change_volume(volume);
+                Ok(())
+            } else {
+                sounds.play_sound(effect, volume, repeats)
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn stop_sound(&mut self) -> Result<(), RuntimeError> {
+        if let Some(sounds) = self.sounds.as_mut() {
+            sounds.stop_sound()
+        }
+
+        Ok(())
     }
 
     // Run

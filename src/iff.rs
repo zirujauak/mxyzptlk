@@ -145,7 +145,7 @@ impl Chunk {
 
 pub struct IFF {
     form: String,
-    length: u32,
+    _length: u32,
     sub_form: String,
     chunks: Vec<Chunk>,
 }
@@ -178,7 +178,7 @@ impl IFF {
         );
         IFF {
             form,
-            length,
+            _length: length,
             sub_form,
             chunks,
         }

@@ -31,19 +31,19 @@ impl CellStyle {
 }
 
 struct BufferCell {
-    zchar: u16,
+    _zchar: u16,
     // foreground, background)
-    color: (Color, Color),
-    style: CellStyle
+    _color: (Color, Color),
+    _style: CellStyle
 }
 
 impl BufferCell {
     pub fn new(zchar: u16, colors: (Color, Color), style: CellStyle) -> BufferCell {
-        BufferCell { zchar, color: colors, style: style.clone() }
+        BufferCell { _zchar: zchar, _color: colors, _style: style.clone() }
     }
 }
 pub struct Buffer {
-    rows: u32,
+    _rows: u32,
     columns: u32,
     buffer: Vec<Vec<BufferCell>>
 }
@@ -59,7 +59,7 @@ impl Buffer {
             buffer.push(r);
         }
 
-        Buffer { rows, columns, buffer }
+        Buffer { _rows: rows, columns, buffer }
     }
 
     pub fn clear(&mut self, terminal: &mut Box<dyn Terminal>, colors: (Color, Color), at: (u32,u32)) {

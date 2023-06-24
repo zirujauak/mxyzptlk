@@ -4,6 +4,7 @@ use crate::state::{header::{self, HeaderField}, State};
 
 use super::super::*;
 
+#[derive(Debug)]
 pub struct IFhd {
     pub release_number: u16,
     pub serial_number: Vec<u8>,

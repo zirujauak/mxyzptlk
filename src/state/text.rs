@@ -481,7 +481,7 @@ pub fn parse_text(
 
     // End of input, parse anything collected
     if word.len() > 0 && word_count < max_words {
-        (word_count, words) = find_word(
+        (_, words) = find_word(
             state,
             version,
             dictionary,

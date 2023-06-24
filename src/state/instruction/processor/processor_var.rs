@@ -66,20 +66,6 @@ pub fn to_lower_case(c: u16) -> u8 {
     }
 }
 
-fn store_parsed_entry(
-    state: &mut State,
-    word: &Vec<char>,
-    word_start: usize,
-    entry_address: usize,
-    entry: u16,
-) -> Result<(), RuntimeError> {
-    info!(target: "app::input", "READ: dictionary for {:?} => stored to ${:04x}: {:#04x}/{}/{}", word, entry_address, entry, word.len(), word_start);
-    state.write_word(entry_address, entry as u16)?;
-    state.write_byte(entry_address + 2, word.len() as u8)?;
-    state.write_byte(entry_address + 3, word_start as u8)?;
-    Ok(())
-}
-
 pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
 
@@ -337,14 +323,34 @@ pub fn output_stream(state: &mut State, instruction: &Instruction) -> Result<usi
 
 pub fn sound_effect(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands: Vec<u16> = operand_values(state, instruction)?;
-
-    match operands[0] {
+    let number = operands[0];
+    match number {
         1 => state.beep()?,
         2 => {
             state.beep()?;
             state.beep()?
         }
-        _ => trace!(target: "app::trace", "SOUND_EFFECT not fully implemented"),
+        _ => {
+            let effect = operands[1];
+            match effect {
+                1 => {
+                    // Do nothing?
+                }
+                2 => {
+                    let (volume, repeats) = if operands.len() > 2 {
+                        (operands[2] & 0xFF, (operands[2] >> 8) & 0xFF)
+                    } else {
+                        (255, 1)
+                    };
+
+                    state.play_sound(number, volume as u8, repeats as u8)?
+                },
+                3 | 4 => {
+                    state.stop_sound()?
+                },
+                _ => return Err(RuntimeError::new(ErrorCode::System, format!("Invalid SOUND_EFFECT effect {}", effect)))
+            }
+        }
     }
 
     Ok(instruction.next_address())

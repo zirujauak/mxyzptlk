@@ -132,7 +132,7 @@ pub fn pop(state: &mut State, instruction: &Instruction) -> Result<usize, Runtim
 
 pub fn catch(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let depth = state.frame_stack.frames().len();
-    store_result(state, instruction, depth as u16);
+    store_result(state, instruction, depth as u16)?;
     Ok(instruction.next_address())
 }
 

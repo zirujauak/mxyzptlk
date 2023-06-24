@@ -15,9 +15,36 @@ pub mod config;
 use crate::config::Config;
 //use crate::iff::Chunk;
 use crate::log::*;
+use iff::blorb::Blorb;
 use state::memory::*;
 use state::State;
+use state::sound::Sounds;
 
+fn open_blorb(name: &str) -> Option<Sounds> {
+    let filename = format!("{}.blorb", name);
+    match File::open(&filename) {
+        Ok(mut f) => {
+            let mut data = Vec::new();
+            match f.read_to_end(&mut data) {
+                Ok(_) => {
+                    if let Some(blorb) = Blorb::from_vec(data) {
+                        Some(Sounds::from_blorb(blorb))
+                    } else {
+                        None
+                    }
+                },
+                Err(e) => {
+                    error!(target: "app::trace", "Error reading {}: {}", &filename, e);
+                    None
+                }
+            }
+        },
+        Err(e) => {
+            error!(target: "app::trace", "Error opening {}: {}", &filename, e);
+            None
+        }
+    }
+}
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -62,7 +89,8 @@ fn main() {
             match f.read_to_end(&mut buffer) {
                 Ok(_) => {
                     let memory = Memory::new(&buffer);
-                    let mut state = State::new(memory, config, &name).expect("Error creating state");
+                    let blorb = open_blorb(&name);
+                    let mut state = State::new(memory, config, blorb, &name).expect("Error creating state");
                     state.initialize();
 
                     if let Err(r) = state.run() {
