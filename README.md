@@ -114,5 +114,5 @@ It's going to be sloppy - I'm still acclimating to the peculiarities of Rust and
 
 ## History
 0.0.1 - ... work in progress
-
+0.0.2 - 20230623 - refactor
 
