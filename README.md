@@ -46,7 +46,7 @@ Refactored a lot of the code to make it more readable and manageable.  I also re
 * Everything works in etude.z5
 
 ## Fixed!
-* AREAD opcode correctly sets the text buffer positions of words, which fixed problems with jigsaw.v8
+* AREAD opcode correctly sets the text buffer positions of words, which fixed problems with jigsaw.z8
 
 ## Backlog
 * Restore sound support after refactoring it out
