@@ -4,6 +4,13 @@ appenders:
   stdout:
     kind: console
 
+  blorb:
+    kind: file
+    path: "blorb.log"
+    append: false
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+
   frame:
     kind: file
     path: "frame.log"
@@ -87,6 +94,12 @@ root:
     - trace
 
 loggers:
+  app::blorb:
+    level: info
+    appenders:
+      - blorb
+    additive: false
+
   app::frame:
     level: info
     appenders:
@@ -118,7 +131,7 @@ loggers:
     additive: false
 
   app::quetzal:
-    level: info
+    level: debug
     appenders:
       - quetzal
     additive: false
