@@ -137,13 +137,18 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
 
     info!(target: "app::input", "READ: input {:?}", input_buffer);
     info!(target: "app::input", "READ: terminator {:?}", terminator);
-
+    info!(target: "app::input", "READ: sound interrupt {:?}", state.sound_interrupt);
     if let None = terminator {
         state.write_byte(text_buffer + 1, input_buffer.len() as u8)?;
         for i in 0..input_buffer.len() {
             state.write_byte(text_buffer + 2 + i, input_buffer[i] as u8)?;
         }
-        return state.read_interrupt(routine, instruction.address());
+
+        if let Some(address) = state.sound_interrupt {
+            return state.call_sound_interrupt(address, instruction.address());
+        } else {
+            return state.read_interrupt(routine, instruction.address());
+        }
     }
 
     let end = input_buffer.len()
@@ -342,13 +347,22 @@ pub fn sound_effect(state: &mut State, instruction: &Instruction) -> Result<usiz
                     } else {
                         (255, 1)
                     };
+                    let routine = if operands.len() > 3 {
+                        Some(packed_routine_address(state.memory(), operands[3])?)
+                    } else {
+                        None
+                    };
 
-                    state.play_sound(number, volume as u8, repeats as u8)?
-                },
-                3 | 4 => {
-                    state.stop_sound()?
-                },
-                _ => return Err(RuntimeError::new(ErrorCode::System, format!("Invalid SOUND_EFFECT effect {}", effect)))
+                    trace!(target: "app::trace", "Sound interrupt routine: {:?}", routine);
+                    state.play_sound(number, volume as u8, repeats as u8, routine)?
+                }
+                3 | 4 => state.stop_sound()?,
+                _ => {
+                    return Err(RuntimeError::new(
+                        ErrorCode::System,
+                        format!("Invalid SOUND_EFFECT effect {}", effect),
+                    ))
+                }
             }
         }
     }
@@ -382,7 +396,9 @@ pub fn read_char(state: &mut State, instruction: &Instruction) -> Result<usize, 
     let key = match state.read_key(timeout * 100)? {
         Some(key) => key,
         None => {
-            if routine > 0 {
+            if let Some(address) = state.sound_interrupt {
+                return state.call_sound_interrupt(address, instruction.address());
+            } else if routine > 0 {
                 return state.read_interrupt(routine, instruction.address());
             } else {
                 return Err(RuntimeError::new(
@@ -489,10 +505,7 @@ pub fn tokenise(state: &mut State, instruction: &Instruction) -> Result<usize, R
     Ok(instruction.next_address())
 }
 
-pub fn encode_text(
-    state: &mut State,
-    instruction: &Instruction,
-) -> Result<usize, RuntimeError> {
+pub fn encode_text(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
     let text_buffer = operands[0] as usize;
     let length = operands[1] as usize;
@@ -505,7 +518,7 @@ pub fn encode_text(
     }
 
     let encoded_text = text::encode_text(&zchars, 3);
-    
+
     info!(target: "app::input", "Encoded text: {:04x} {:04x} {:04x}", encoded_text[0], encoded_text[1], encoded_text[2]);
     for i in 0..encoded_text.len() {
         state.write_word(dest_buffer + (i * 2), encoded_text[i])?

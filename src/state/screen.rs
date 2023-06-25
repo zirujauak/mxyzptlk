@@ -443,12 +443,11 @@ impl Screen {
         }
 
         let l = self.rows - self.window_0_top;
-        trace!(target: "app::trace", "{} of {} lines printed since input", self.lines_since_input, l);
         if self.lines_since_input >= l {
             let reverse = self.current_style.is_style(Style::Reverse);
             self.current_style.set(Style::Reverse as u8);
             self.print(&"[MORE]".chars().map(|c| c as u16).collect());
-            if let Some(c) = self.read_key(0).zchar() {
+            if let Some(c) = self.read_key(true).zchar() {
                 if c == 0xd {
                     self.lines_since_input = l - 1;
                 } else {
@@ -506,7 +505,6 @@ impl Screen {
             self.new_line();
         } else if zchar != 0 {
             if self.selected_window == 0 {
-                trace!(target: "app::trace", "Print '{}' @ {:?}", (zchar as u8) as char, self.cursor_0);
                 self.buffer.print(
                     &mut self.terminal,
                     zchar,
@@ -558,38 +556,15 @@ impl Screen {
         Ok(())
     }
 
-    pub fn read_key(&mut self, timeout: u128) -> InputEvent {
+    pub fn read_key(&mut self, wait: bool) -> InputEvent {
         self.lines_since_input = 0;
-        let end = if timeout > 0 {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Error getting system time")
-                .as_millis()
-                + timeout
-        } else {
-            u128::MAX
-        };
-
         if self.selected_window == 0 {
             self.terminal.move_cursor(self.cursor_0);
         } else {
             self.terminal.move_cursor(self.cursor_1.unwrap());
         }
 
-        loop {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Error getting system time")
-                .as_millis();
-            if now > end {
-                return InputEvent::no_input();
-            }
-
-            let e = self.terminal.read_key(end - now);
-            if let Some(_) = e.zchar {
-                return e;
-            }
-        }
+        self.terminal.read_key(wait)
     }
 
     pub fn backspace(&mut self) -> Result<(), RuntimeError> {
@@ -646,7 +621,7 @@ pub trait Terminal {
         font: u8,
     );
     fn flush(&mut self);
-    fn read_key(&mut self, timeout: u128) -> InputEvent;
+    fn read_key(&mut self, wait: bool) -> InputEvent;
     fn scroll(&mut self, row: u32);
     fn backspace(&mut self, at: (u32, u32));
     fn beep(&mut self);

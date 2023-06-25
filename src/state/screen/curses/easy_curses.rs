@@ -96,15 +96,15 @@ impl Terminal for ECTerminal {
         self.easycurses.refresh();
     }
 
-    fn read_key(&mut self, timeout: u128) -> InputEvent {
+    fn read_key(&mut self, wait: bool) -> InputEvent {
         self.easycurses
             .set_cursor_visibility(CursorVisibility::Visible);
 
         self.easycurses.set_input_mode(InputMode::RawCharacter);
-        let mode = if timeout > 0 {
-            TimeoutMode::WaitUpTo(timeout as i32)
-        } else {
+        let mode = if wait {
             TimeoutMode::Never
+        } else {
+            TimeoutMode::Immediate
         };
         self.easycurses.set_input_timeout(mode);
         if let Some(i) = self.easycurses.get_input() {

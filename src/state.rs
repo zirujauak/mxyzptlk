@@ -14,6 +14,8 @@ use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
+use std::thread;
+use std::time::Duration;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
@@ -56,6 +58,7 @@ pub struct State {
     input_interrupt_print: bool,
     buffered: bool,
     sounds: Option<Sounds>,
+    sound_interrupt: Option<usize>,
 }
 
 impl State {
@@ -108,6 +111,7 @@ impl State {
                 input_interrupt_print: false,
                 buffered: true,
                 sounds,
+                sound_interrupt: None,
             })
         }
     }
@@ -357,6 +361,18 @@ impl State {
         self.frame_stack.pc()
     }
 
+    pub fn call_sound_interrupt(
+        &mut self,
+        address: usize,
+        return_address: usize,
+    ) -> Result<usize, RuntimeError> {
+        trace!(target: "app::trace", "Sound interrupt {:06x}", address);
+        self.sound_interrupt = None;
+        self.frame_stack
+            .sound_interrupt(&mut self.memory, address, return_address)?;
+        self.frame_stack.pc()
+    }
+
     pub fn return_routine(&mut self, value: u16) -> Result<usize, RuntimeError> {
         if self.frame_stack.current_frame()?.input_interrupt() {
             self.input_interrupt = Some(value);
@@ -577,37 +593,7 @@ impl State {
 
     // Input
     pub fn read_key(&mut self, timeout: u16) -> Result<Option<u16>, RuntimeError> {
-        trace!(target: "app::trace.log", "read_key timeout {:?}", timeout);
-        let key = self.screen.read_key(timeout as u128);
-        info!(target: "app::input", "read_key -> {:?}", key);
-        if let Some(c) = key.zchar() {
-            if c == 253 || c == 254 {
-                info!(target: "app::input", "Storing mouse coordinates {},{}", key.column().unwrap(), key.row().unwrap());
-                header::set_extension(
-                    &mut self.memory,
-                    1,
-                    key.column().expect("Mouse click with no column data"),
-                )?;
-                header::set_extension(
-                    &mut self.memory,
-                    2,
-                    key.row().expect("Mouse click with no row data"),
-                )?;
-            }
-        }
-        Ok(key.zchar())
-    }
-
-    pub fn read_line(
-        &mut self,
-        text: &Vec<u16>,
-        len: usize,
-        terminators: &Vec<u16>,
-        timeout: u16,
-    ) -> Result<Vec<u16>, RuntimeError> {
-        let mut input_buffer = text.clone();
-
-        // TODO: Set a timeout
+        trace!(target: "app::trace", "read_key timeout {:?}", timeout);
         let end = if timeout > 0 {
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -619,11 +605,93 @@ impl State {
         };
 
         loop {
+            // If a sound interrupt is set and there is no sound playing,
+            // return buffer and clear any pending input_interrupt
+            if let Some(_) = self.sound_interrupt {
+                trace!(target: "app::trace", "Sound interrupt pending");
+                if let Some(sounds) = self.sounds.as_mut() {
+                    trace!(target: "app::trace", "Sound playing? {}", sounds.is_playing());
+                    if !sounds.is_playing() {
+                        trace!(target: "app::trace", "Sound interrupt firing");
+                        self.input_interrupt = None;
+                        return Ok(None);
+                    }
+                }
+            }
+
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Error getting system time")
                 .as_millis();
             if end > 0 && now > end {
+                return Ok(None);
+            }
+
+            let key = self.screen.read_key(end == 0);
+
+            if let Some(c) = key.zchar() {
+                if c == 253 || c == 254 {
+                    info!(target: "app::input", "Storing mouse coordinates {},{}", key.column().unwrap(), key.row().unwrap());
+                    header::set_extension(
+                        &mut self.memory,
+                        1,
+                        key.column().expect("Mouse click with no column data"),
+                    )?;
+                    header::set_extension(
+                        &mut self.memory,
+                        2,
+                        key.row().expect("Mouse click with no row data"),
+                    )?;
+                }
+
+                return Ok(key.zchar());
+            }
+
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    pub fn read_line(
+        &mut self,
+        text: &Vec<u16>,
+        len: usize,
+        terminators: &Vec<u16>,
+        timeout: u16,
+    ) -> Result<Vec<u16>, RuntimeError> {
+        let mut input_buffer = text.clone();
+
+        let end = if timeout > 0 {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Error getting system time")
+                .as_millis()
+                + (timeout as u128)
+        } else {
+            0
+        };
+
+        info!(target: "app::input", "Sound interrupt {:?}", self.sound_interrupt);
+
+        loop {
+            // If a sound interrupt is set and there is no sound playing,
+            // return buffer and clear any pending input_interrupt
+            if let Some(_) = self.sound_interrupt {
+                if let Some(sounds) = self.sounds.as_mut() {
+                    info!(target: "app::input", "Sound playing? {}", sounds.is_playing());
+                    if !sounds.is_playing() {
+                        info!(target: "app::input", "Sound interrupt firing");
+                        self.input_interrupt = None;
+                        return Ok(input_buffer);
+                    }
+                }
+            }
+
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Error getting system time")
+                .as_millis();
+            if end > 0 && now > end {
+                info!(target: "app::input", "read_line timed out");
                 return Ok(input_buffer);
             }
 
@@ -631,7 +699,7 @@ impl State {
 
             info!(target: "app::input", "Now: {}, End: {}, Timeout: {}", now, end, timeout);
 
-            let e = self.screen.read_key(timeout);
+            let e = self.screen.read_key(end == 0);
             match e.zchar() {
                 Some(key) => {
                     if terminators.contains(&key) || (terminators.contains(&255) && (key > 128)) {
@@ -665,7 +733,7 @@ impl State {
                         }
                     }
                 }
-                None => break,
+                None => thread::sleep(Duration::from_millis(10)),
             }
         }
 
@@ -857,8 +925,17 @@ impl State {
     }
 
     // Sound
-    pub fn play_sound(&mut self, effect: u16, volume: u8, repeats: u8) -> Result<(), RuntimeError> {
+    pub fn play_sound(
+        &mut self,
+        effect: u16,
+        volume: u8,
+        repeats: u8,
+        routine: Option<usize>,
+    ) -> Result<(), RuntimeError> {
+        trace!(target: "app::trace", "Sound routine: {:?}", routine);
         if let Some(sounds) = self.sounds.as_mut() {
+            self.sound_interrupt = routine;
+            trace!(target: "app::trace", "Sound routine: {:?}", self.sound_interrupt);
             if sounds.current_effect() == effect {
                 sounds.change_volume(volume);
                 Ok(())
@@ -872,6 +949,7 @@ impl State {
 
     pub fn stop_sound(&mut self) -> Result<(), RuntimeError> {
         if let Some(sounds) = self.sounds.as_mut() {
+            self.sound_interrupt = None;
             sounds.stop_sound()
         }
 
@@ -889,7 +967,29 @@ impl State {
             if pc == 0 {
                 return Ok(());
             }
-            self.set_pc(pc)?;
+
+            if let Some(address) = self.sound_interrupt {
+                trace!(target: "app::trace", "Pending sound interrupt");
+                if let Some(sounds) = self.sounds.as_mut() {
+                    trace!(target: "app::trace", "Check for sound: {}", sounds.is_playing());
+                    if !sounds.is_playing() {
+                        let pc = self.call_sound_interrupt(address, pc)?;
+                        self.set_pc(pc)?;
+                    } else {
+                        self.set_pc(pc)?;
+                    }
+                }
+            } else {
+                self.set_pc(pc)?;
+            }
+            // if let Some(address) = self.sound_interrupt {
+            //     if let Some(sounds) = self.sounds {
+            //         if !sounds.is_playing() {
+            //             let pc = self.call_routine(address, &!vec[], )
+            //         }
+            //     }
+            // }
+            // self.set_pc(pc)?;
             n = n + 1;
         }
     }

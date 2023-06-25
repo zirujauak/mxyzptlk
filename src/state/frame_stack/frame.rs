@@ -14,6 +14,7 @@ pub struct Frame {
     result: Option<StoreResult>,
     return_address: usize,
     input_interrupt: bool,
+    sound_interrupt: bool,
 }
 
 impl Frame {
@@ -34,7 +35,8 @@ impl Frame {
             stack: stack.clone(),
             result: result.clone(),
             return_address,
-            input_interrupt: false
+            input_interrupt: false,
+            sound_interrupt: false,
         }
     }
 
@@ -74,6 +76,14 @@ impl Frame {
         self.input_interrupt = v;
     }
 
+    pub fn sound_interrupt(&self) -> bool {
+        self.sound_interrupt
+    }
+
+    pub fn set_sound_interrupt(&mut self, v: bool) {
+        self.sound_interrupt = v;
+    }
+    
     pub fn pop(&mut self) -> Result<u16,RuntimeError> {
         if let Some(v) = self.stack.pop() {
             Ok(v)

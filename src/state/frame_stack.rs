@@ -123,6 +123,13 @@ impl FrameStack {
         Ok(())
     }
 
+    pub fn sound_interrupt(&mut self, memory: &mut Memory, address: usize, return_address: usize) -> Result<(), RuntimeError> {
+        let mut frame = Frame::call_routine(memory, address, &vec![], None, return_address)?;
+        info!(target: "app::frame", "Sound interrupt ${:06x}", address);
+        self.frames.push(frame);
+        Ok(())
+    }
+    
     pub fn return_routine(&mut self, _memory: &mut Memory, _result: u16) -> Result<Option<StoreResult>, RuntimeError> {
         let f = self.pop_frame()?;
         let n = self.current_frame_mut()?;

@@ -135,14 +135,19 @@ impl Terminal for PCTerminal {
         self.window.refresh();
     }
 
-    fn read_key(&mut self, _timeout: u128) -> InputEvent {
+    fn read_key(&mut self, wait: bool) -> InputEvent {
+        if wait {
+            self.window.nodelay(false);
+        } else {
+            self.window.nodelay(true);
+        }
         pancurses::curs_set(1);
         pancurses::raw();
+
         if let Some(i) = self.window.getch() {
             pancurses::curs_set(0);
             self.input_to_u16(i)
         } else {
-            pancurses::curs_set(0);
             InputEvent::no_input()
         }
     }

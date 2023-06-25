@@ -6,10 +6,7 @@ use tempfile::NamedTempFile;
 
 use crate::{
     error::RuntimeError,
-    iff::blorb::{
-        oggv::OGGV,
-        Blorb,
-    },
+    iff::blorb::{oggv::OGGV, Blorb},
 };
 
 pub struct Sound {
@@ -20,7 +17,13 @@ pub struct Sound {
 
 impl fmt::Display for Sound {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Sound {}: {} bytes", self.number, self.data.len())
+        write!(
+            f,
+            "Sound {}, repeats: {:?},  {} bytes",
+            self.number,
+            self.repeats,
+            self.data.len()
+        )
     }
 }
 
@@ -43,21 +46,23 @@ pub struct Sounds {
 }
 
 impl Sounds {
-    pub fn from_blorb(blorb: Blorb) -> Sounds {
+    pub fn from_blorb(blorb: Blorb, version: u8) -> Sounds {
         let mut sounds = HashMap::new();
         let mut loops = HashMap::new();
-        if let Some(l) = blorb.sloop {
-            for entry in l.entries {
-                loops.insert(entry.number, entry.repeats);
+        if version != 5 {
+            if let Some(l) = blorb.sloop {
+                for entry in l.entries {
+                    loops.insert(entry.number, entry.repeats);
+                }
             }
         }
+
         for index in blorb.ridx.entries {
             if index.usage.eq("Snd ") {
                 if let Some(oggv) = blorb.snds.get(&(index.start as usize)) {
-                    sounds.insert(
-                        index.number,
-                        Sound::from_oggv(index.number, oggv, loops.get(&index.number)),
-                    );
+                    let s = Sound::from_oggv(index.number, oggv, loops.get(&index.number));
+                    trace!("Sound: {}", s);
+                    sounds.insert(index.number, s);
                 }
             }
         }
@@ -104,8 +109,8 @@ impl Sounds {
     }
 
     pub fn is_playing(&mut self) -> bool {
-        if let Some(sink) = self.get_sink() {
-            sink.empty()
+        if let Some(sink) = self.get_sink().as_mut() {
+            !sink.empty()
         } else {
             false
         }
@@ -137,9 +142,12 @@ impl Sounds {
                                             if repeats == 255 {
                                                 sink.append(source.repeat_infinite());
                                             } else {
-                                                sink.append(
-                                                    Decoder::new(write.reopen().unwrap()).unwrap(),
-                                                );
+                                                for _ in 0..repeats {
+                                                    sink.append(
+                                                        Decoder::new(write.reopen().unwrap())
+                                                            .unwrap(),
+                                                    );
+                                                }
                                             }
                                         }
 
