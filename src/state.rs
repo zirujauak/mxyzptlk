@@ -22,8 +22,8 @@ use std::time::UNIX_EPOCH;
 
 use crate::config::Config;
 use crate::error::*;
-use crate::iff::quetzal::Quetzal;
 use crate::iff::quetzal::ifhd::IFhd;
+use crate::iff::quetzal::Quetzal;
 use frame_stack::*;
 use header::*;
 use instruction::*;
@@ -183,7 +183,7 @@ impl State {
         self.write_byte(0x32, 1)?;
         self.write_byte(0x33, 0)?;
 
-        self.screen.reset();
+        //self.screen.reset();
 
         Ok(())
     }
@@ -300,38 +300,78 @@ impl State {
     }
 
     // Variables
+    fn global_variable_address(&self, variable: u8) -> Result<usize, RuntimeError> {
+        let table = header::field_word(self.memory(), HeaderField::GlobalTable)? as usize;
+        let index = (variable as usize - 16) * 2;
+        Ok(table + index)
+    }
     pub fn variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
-        self.frame_stack
-            .variable(&mut self.memory, variable as usize)
+        if variable < 16 {
+            self.frame_stack
+                .local_variable(variable)
+        } else {
+            let address = self.global_variable_address(variable)?;
+            self.read_word(address)
+        }
     }
 
     pub fn peek_variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
-        if variable == 0 {
-            self.frame_stack.current_frame()?.peek()
+        if variable < 16 {
+            self.frame_stack.peek_local_variable(variable)
         } else {
-            self.frame_stack
-                .variable(&mut self.memory, variable as usize)
+            let address = self.global_variable_address(variable)?;
+            self.read_word(address)
         }
     }
 
     pub fn set_variable(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
+        if variable < 16 {
         self.frame_stack
-            .set_variable(&mut self.memory, variable as usize, value)
+            .set_local_variable(variable, value)
+        } else {
+            let address = self.global_variable_address(variable)?;
+            self.write_word(address, value)
+        }
     }
 
     pub fn set_variable_indirect(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
-        if variable == 0 {
-            self.frame_stack.current_frame_mut()?.pop()?;
+        if variable < 16 {
+            self.frame_stack.set_local_variable_indirect(variable, value)
+        } else {
+            let address = self.global_variable_address(variable)?;
+            self.write_word(address, value)
         }
-        self.frame_stack
-            .set_variable(&mut self.memory, variable as usize, value)
+        // if variable == 0 {
+        //     self.frame_stack.current_frame_mut()?.pop()?;
+        // }
+        // self.frame_stack
+        //     .set_variable(&mut self.memory, variable as usize, value)
     }
 
     pub fn push(&mut self, value: u16) -> Result<(), RuntimeError> {
-        Ok(self.frame_stack.current_frame_mut()?.push(value))
+        self.frame_stack.set_local_variable(0, value)
+        // Ok(self.frame_stack.current_frame_mut()?.push(value))
     }
 
     // Routines
+    fn routine_header(&self, address: usize) -> Result<(usize, Vec<u16>), RuntimeError> {
+        let variable_count = self.memory().read_byte(address)? as usize;
+        let mut local_variables = vec![0 as u16; variable_count];
+
+        let initial_pc = if self.version < 5 {
+            for i in 0..variable_count {
+                let a = address + 1 + (i * 2);
+                local_variables[i] = self.memory().read_word(a)?;
+            }
+
+            address + 1 + (variable_count * 2)
+        } else {
+            address + 1
+        };
+
+        Ok((initial_pc, local_variables))
+    }
+
     pub fn call_routine(
         &mut self,
         address: usize,
@@ -339,14 +379,32 @@ impl State {
         result: Option<StoreResult>,
         return_address: usize,
     ) -> Result<usize, RuntimeError> {
+        let (initial_pc, local_variables) = self.routine_header(address)?;
+        // // Decode routine header
+        // let variable_count = self.memory().read_byte(address)? as usize;
+        // let mut local_variables = vec![0 as u16; variable_count];
+
+        // let initial_pc = if self.version < 5 {
+        //     for i in 0..variable_count {
+        //         let a = address + 1 + (i * 2);
+        //         local_variables[i] = self.memory().read_word(a)?;
+        //     }
+
+        //     address + 1 + (variable_count * 2)
+        // } else {
+        //     address + 1
+        // };
+
         self.frame_stack.call_routine(
-            &mut self.memory,
             address,
+            initial_pc,
             arguments,
+            local_variables,
             result,
             return_address,
         )?;
-        self.frame_stack.pc()
+
+        Ok(initial_pc)
     }
 
     pub fn read_interrupt(
@@ -356,20 +414,22 @@ impl State {
     ) -> Result<usize, RuntimeError> {
         self.input_interrupt = None;
         self.input_interrupt_print = false;
+        let (initial_pc, local_variables) = self.routine_header(address)?;
         self.frame_stack
-            .input_interrupt(&mut self.memory, address, return_address)?;
-        self.frame_stack.pc()
+            .input_interrupt( address, initial_pc, local_variables, return_address)?;
+        Ok(initial_pc)
     }
 
     pub fn call_sound_interrupt(&mut self, return_address: usize) -> Result<usize, RuntimeError> {
-        let address = self
-            .sound_interrupt
-            .expect("No sound interrupt routine to call!");
-        info!(target: "app::sound", "Sound interrupt {:06x}", address);
-        self.sound_interrupt = None;
-        self.frame_stack
-            .sound_interrupt(&mut self.memory, address, return_address)?;
-        self.frame_stack.pc()
+        if let Some(address) = self.sound_interrupt {
+            debug!(target: "app::sound", "Sound interrupt routine firing @ ${:06x}", address);
+            self.sound_interrupt = None;
+            let (initial_pc, local_variables) = self.routine_header(address)?;
+            self.frame_stack.sound_interrupt(address, initial_pc, local_variables, return_address)?;
+            Ok(initial_pc)
+        } else {
+            Err(RuntimeError::new(ErrorCode::System, "No sound interrupt routine".to_string()))
+        }
     }
 
     pub fn return_routine(&mut self, value: u16) -> Result<usize, RuntimeError> {
@@ -377,7 +437,7 @@ impl State {
             self.input_interrupt = Some(value);
         }
 
-        let result = self.frame_stack.return_routine(&mut self.memory, value)?;
+        let result = self.frame_stack.return_routine()?;
         match result {
             Some(r) => self.set_variable(r.variable(), value)?,
             None => (),
@@ -855,6 +915,11 @@ impl State {
                     self.memory.write_byte(i, data[i])?;
                 }
             }
+
+            // Re-initialize header
+            self.initialize()?;
+
+            // Restore FLAGS2
             self.memory.write_word(0x10, flags2)?;
 
             // Reset output stream 3
@@ -873,15 +938,21 @@ impl State {
                     self.undo_stack.push(quetzal);
                     self.undo_stack.truncate(10);
                     Ok(())
-                }, 
+                }
                 Err(e) => {
                     error!(target: "app::quetzal", "Error saving undo state: {}", e);
-                    Err(RuntimeError::new(ErrorCode::Save, format!("Error saving undo state: {}", e)))
+                    Err(RuntimeError::new(
+                        ErrorCode::Save,
+                        format!("Error saving undo state: {}", e),
+                    ))
                 }
             }
         } else {
             error!(target: "app::quetzal", "SAVE_UNDO should be a store instruction");
-            Err(RuntimeError::new(ErrorCode::Save, "SAVE_UNDO should be a store instruction".to_string()))
+            Err(RuntimeError::new(
+                ErrorCode::Save,
+                "SAVE_UNDO should be a store instruction".to_string(),
+            ))
         }
     }
 

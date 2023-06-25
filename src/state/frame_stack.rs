@@ -1,11 +1,8 @@
 pub mod frame;
 
 use crate::error::*;
-use crate::iff::quetzal::stks::{self, Stks};
-use crate::state::header;
-use crate::state::header::*;
+use crate::iff::quetzal::stks::Stks;
 use crate::state::instruction::StoreResult;
-use crate::state::memory::Memory;
 use frame::Frame;
 
 pub struct FrameStack {
@@ -87,34 +84,43 @@ impl FrameStack {
         }
     }
 
-    fn global_variable_address(
-        &self,
-        memory: &Memory,
-        variable: usize,
-    ) -> Result<usize, RuntimeError> {
-        let table = header::field_word(memory, HeaderField::GlobalTable)? as usize;
-        let index = (variable - 16) * 2;
-        Ok(table + index)
-    }
-
-    pub fn variable(&mut self, memory: &Memory, variable: usize) -> Result<u16, RuntimeError> {
+    pub fn local_variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
         if variable < 16 {
             self.current_frame_mut()?.variable(variable)
         } else {
-            memory.read_word(self.global_variable_address(memory, variable)?)
+            Err(RuntimeError::new(ErrorCode::InvalidLocalVariable, format!("Variable {} is not a frame local variable", variable)))
         }
     }
 
-    pub fn set_variable(
+    pub fn peek_local_variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
+        if variable < 16 {
+            self.current_frame()?.peek_variable(variable)
+        } else {
+            Err(RuntimeError::new(ErrorCode::InvalidLocalVariable, format!("Variable {} is not a frame local variable", variable)))
+        }
+    }
+
+    pub fn set_local_variable(
         &mut self,
-        memory: &mut Memory,
-        variable: usize,
+        variable: u8,
         value: u16,
     ) -> Result<(), RuntimeError> {
         if variable < 16 {
             self.current_frame_mut()?.set_variable(variable, value)
         } else {
-            memory.write_word(self.global_variable_address(memory, variable)?, value)
+            Err(RuntimeError::new(ErrorCode::InvalidLocalVariable, format!("Variable {} is not a frame local variable", variable)))
+        }
+    }
+
+    pub fn set_local_variable_indirect(
+        &mut self,
+        variable: u8,
+        value: u16,
+    ) -> Result<(), RuntimeError> {
+        if variable < 16 {
+            self.current_frame_mut()?.set_variable_indirect(variable, value)
+        } else {
+            Err(RuntimeError::new(ErrorCode::InvalidLocalVariable, format!("Variable {} is not a frame local variable", variable)))
         }
     }
 
@@ -124,13 +130,21 @@ impl FrameStack {
 
     pub fn call_routine(
         &mut self,
-        memory: &mut Memory,
         address: usize,
+        initial_pc: usize,
         arguments: &Vec<u16>,
+        local_variables: Vec<u16>,
         result: Option<StoreResult>,
         return_address: usize,
     ) -> Result<(), RuntimeError> {
-        let frame = Frame::call_routine(memory, address, arguments, result, return_address)?;
+        let frame = Frame::call_routine(
+            address,
+            initial_pc,
+            arguments,
+            local_variables,
+            result,
+            return_address,
+        )?;
         info!(target: "app::frame", "Call to ${:06x} => {:?}", address, result);
         self.frames.push(frame);
         Ok(())
@@ -138,11 +152,19 @@ impl FrameStack {
 
     pub fn input_interrupt(
         &mut self,
-        memory: &mut Memory,
         address: usize,
+        initial_pc: usize,
+        local_variables: Vec<u16>,
         return_address: usize,
     ) -> Result<(), RuntimeError> {
-        let mut frame = Frame::call_routine(memory, address, &vec![], None, return_address)?;
+        let mut frame = Frame::call_routine(
+            address,
+            initial_pc,
+            &vec![],
+            local_variables,
+            None,
+            return_address,
+        )?;
         frame.set_input_interrupt(true);
         info!(target: "app::frame", "Input interrupt ${:06x}", address);
         self.frames.push(frame);
@@ -151,11 +173,19 @@ impl FrameStack {
 
     pub fn sound_interrupt(
         &mut self,
-        memory: &mut Memory,
         address: usize,
+        initial_pc: usize,
+        local_variables: Vec<u16>,
         return_address: usize,
     ) -> Result<(), RuntimeError> {
-        let mut frame = Frame::call_routine(memory, address, &vec![], None, return_address)?;
+        let frame = Frame::call_routine(
+            address,
+            initial_pc,
+            &vec![],
+            local_variables,
+            None,
+            return_address,
+        )?;
         info!(target: "app::frame", "Sound interrupt ${:06x}", address);
         self.frames.push(frame);
         Ok(())
@@ -163,8 +193,6 @@ impl FrameStack {
 
     pub fn return_routine(
         &mut self,
-        _memory: &mut Memory,
-        _result: u16,
     ) -> Result<Option<StoreResult>, RuntimeError> {
         let f = self.pop_frame()?;
         let n = self.current_frame_mut()?;

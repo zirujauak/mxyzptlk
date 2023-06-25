@@ -1,8 +1,5 @@
 use crate::error::*;
-use crate::state::header;
-use crate::state::header::*;
 use crate::state::instruction::StoreResult;
-use crate::state::memory::*;
 
 #[derive(Debug)]
 pub struct Frame {
@@ -114,18 +111,11 @@ impl Frame {
         self.return_address
     }
 
-    pub fn variable(&mut self, variable: usize) -> Result<u16, RuntimeError> {
+    pub fn variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
         if variable == 0 {
-            if let Some(v) = self.stack.pop() {
-                Ok(v)
-            } else {
-                Err(RuntimeError::new(
-                    ErrorCode::StackUnderflow,
-                    format!("Popped an empty stack"),
-                ))
-            }
-        } else if variable <= self.local_variables.len() {
-            Ok(self.local_variables[variable - 1])
+            self.pop()
+        } else if variable <= self.local_variables.len() as u8 {
+            Ok(self.local_variables[variable as usize - 1])
         } else {
             Err(RuntimeError::new(
                 ErrorCode::InvalidLocalVariable,
@@ -138,12 +128,48 @@ impl Frame {
         }
     }
 
-    pub fn set_variable(&mut self, variable: usize, value: u16) -> Result<(), RuntimeError> {
+    pub fn peek_variable(&self, variable: u8) -> Result<u16, RuntimeError> {
+        if variable == 0 {
+            self.peek()
+        } else if variable <= self.local_variables().len() as u8 {
+            Ok(self.local_variables[variable as usize - 1])
+        } else {
+            Err(RuntimeError::new(
+                ErrorCode::InvalidLocalVariable,
+                format!(
+                    "Peek for local variable {} out of range ({})",
+                    variable,
+                    self.local_variables.len()
+                ),
+            ))
+        }
+    }
+    pub fn set_variable(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
         if variable == 0 {
             self.push(value);
             Ok(())
-        } else if variable <= self.local_variables.len() {
-            self.local_variables[variable - 1] = value;
+        } else if variable <= self.local_variables.len() as u8 {
+            self.local_variables[variable as usize - 1] = value;
+            Ok(())
+        } else {
+            Err(RuntimeError::new(
+                ErrorCode::InvalidLocalVariable,
+                format!(
+                    "Write to local variable {} out of range ({})",
+                    variable,
+                    self.local_variables.len()
+                ),
+            ))
+        }
+    }
+
+    pub fn set_variable_indirect(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
+        if variable == 0 {
+            self.pop();
+            self.push(value);
+            Ok(())
+        } else if variable <= self.local_variables().len() as u8 {
+            self.local_variables[variable as usize - 1] = value;
             Ok(())
         } else {
             Err(RuntimeError::new(
@@ -158,30 +184,21 @@ impl Frame {
     }
 
     pub fn call_routine(
-        memory: &Memory,
         address: usize,
+        initial_pc: usize,
         arguments: &Vec<u16>,
+        local_variables: Vec<u16>,
         result: Option<StoreResult>,
         return_address: usize,
     ) -> Result<Frame, RuntimeError> {
-        let version = header::field_byte(memory, HeaderField::Version)?;
-        let var_count = memory.read_byte(address)?;
-        let initial_pc = if version < 5 {
-            address + 1 + (var_count as usize * 2)
-        } else {
-            address + 1
-        };
+        // let version = header::field_byte(memory, HeaderField::Version)?;
+        // let initial_pc = if version < 5 {
+        //     address + 1 + (var_count as usize * 2)
+        // } else {
+        //     address + 1
+        // };
 
-        let mut local_variables = if version < 5 {
-            let mut v = Vec::new();
-            for i in 0..var_count as usize {
-                let addr = address + 1 + (2 * i);
-                v.push(memory.read_word(addr)?);
-            }
-            v
-        } else {
-            vec![0 as u16; var_count as usize]
-        };
+        let mut local_variables = local_variables.clone();
 
         for i in 0..arguments.len() {
             if local_variables.len() > i {
