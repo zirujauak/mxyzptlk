@@ -1,5 +1,7 @@
 use std::{fs, io::Write};
 
+use crate::error::{ErrorCode, RuntimeError};
+
 pub mod blorb;
 pub mod quetzal;
 
@@ -71,6 +73,37 @@ pub struct Chunk {
 }
 
 impl Chunk {
+    pub fn new(offset: usize, form: Option<String>, id: String, data: &Vec<u8>) -> Chunk {
+        let length = data.len() as u32 + if data.len() % 2 == 1 { 1 } else { 0 };
+        Chunk {
+            offset,
+            form,
+            id,
+            length,
+            data: data.clone(),
+        }
+    }
+
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    pub fn form(&self) -> Option<&String> {
+        self.form.as_ref()
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn length(&self) -> u32 {
+        self.length
+    }
+
+    pub fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
+
     pub fn from_vec(vec: &Vec<u8>, offset: usize) -> Chunk {
         let mut form = None;
         let mut id = vec_to_id(&vec, offset);
@@ -135,7 +168,7 @@ impl Chunk {
         // Data
         v.append(&mut self.data.clone());
 
-        if self.data.len() %2 == 1 {
+        if self.data.len() % 2 == 1 {
             v.push(0);
         }
 
@@ -151,6 +184,17 @@ pub struct IFF {
 }
 
 impl IFF {
+    pub fn form_from_vec(v: &Vec<u8>) -> Result<String, RuntimeError> {
+        if v.len() < 4 {
+            Err(RuntimeError::new(
+                ErrorCode::IFF,
+                "Not an IFF file".to_string(),
+            ))
+        } else {
+            Ok(vec_to_id(v, 0))
+        }
+    }
+
     pub fn from_vec(v: &Vec<u8>) -> IFF {
         let form = vec_to_id(v, 0);
         let length = vec_to_u32(v, 4, 4);

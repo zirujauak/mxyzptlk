@@ -20,15 +20,15 @@ use state::memory::*;
 use state::State;
 use state::sound::Sounds;
 
-fn open_blorb(name: &str, version: u8) -> Option<Sounds> {
+fn open_blorb(name: &str) -> Option<Sounds> {
     let filename = format!("{}.blorb", name);
     match File::open(&filename) {
         Ok(mut f) => {
             let mut data = Vec::new();
             match f.read_to_end(&mut data) {
                 Ok(_) => {
-                    if let Some(blorb) = Blorb::from_vec(data) {
-                        Some(Sounds::from_blorb(blorb, version))
+                    if let Ok(blorb) = Blorb::try_from(data) {
+                        Some(Sounds::from(blorb))
                     } else {
                         None
                     }
@@ -88,7 +88,7 @@ fn main() {
             match f.read_to_end(&mut buffer) {
                 Ok(_) => {
                     let memory = Memory::new(&buffer);
-                    let blorb = open_blorb(&name, buffer[0]);
+                    let blorb = open_blorb(&name);
                     let mut state = State::new(memory, config, blorb, &name).expect("Error creating state");
                     state.initialize();
 

@@ -6,6 +6,7 @@ mod instruction;
 pub mod memory;
 mod object;
 mod rng;
+mod save_restore;
 mod screen;
 pub mod sound;
 mod text;
@@ -21,8 +22,8 @@ use std::time::UNIX_EPOCH;
 
 use crate::config::Config;
 use crate::error::*;
-use crate::iff::quetzal::ifhd::IFhd;
 use crate::iff::quetzal::Quetzal;
+use crate::iff::quetzal::ifhd::IFhd;
 use frame_stack::*;
 use header::*;
 use instruction::*;
@@ -33,7 +34,6 @@ use rng::RNG;
 use screen::buffer::CellStyle;
 use screen::*;
 
-use self::frame_stack::frame::Frame;
 use self::sound::Sounds;
 
 pub struct Stream3 {
@@ -361,11 +361,10 @@ impl State {
         self.frame_stack.pc()
     }
 
-    pub fn call_sound_interrupt(
-        &mut self,
-        return_address: usize,
-    ) -> Result<usize, RuntimeError> {
-        let address = self.sound_interrupt.expect("No sound interrupt routine to call!");
+    pub fn call_sound_interrupt(&mut self, return_address: usize) -> Result<usize, RuntimeError> {
+        let address = self
+            .sound_interrupt
+            .expect("No sound interrupt routine to call!");
         info!(target: "app::sound", "Sound interrupt {:06x}", address);
         self.sound_interrupt = None;
         self.frame_stack
@@ -555,7 +554,7 @@ impl State {
             left.push('.' as u16);
             left.push('.' as u16);
         }
-        
+
         let mut spaces = vec![0x20 as u16; width - left.len() - right.len() - 1];
         let mut status_line = vec![0x20 as u16];
         status_line.append(&mut left);
@@ -767,7 +766,6 @@ impl State {
 
         let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
         let filename = String::from_utf16(&f).unwrap();
-        info!(target: "app::quetzal", "Save '{}'", filename.trim());
         match fs::OpenOptions::new()
             .create(true)
             .truncate(true)
@@ -812,7 +810,6 @@ impl State {
 
         let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
         let filename = String::from_utf16(&f).unwrap();
-        info!(target: "app::quetzal", "Restore '{}'", filename.trim());
         let mut data = Vec::new();
         match File::open(filename.trim()) {
             Ok(mut file) => match file.read_to_end(&mut data) {
@@ -823,79 +820,81 @@ impl State {
         }
     }
 
-    pub fn restore(&mut self, quetzal: Quetzal) -> Result<usize, RuntimeError> {
-        let ifhd = IFhd::from_state(&self, 0);
-        if ifhd.release_number != quetzal.ifhd.release_number
-            || ifhd.checksum != quetzal.ifhd.checksum
-            || !ifhd.serial_number.eq(&quetzal.ifhd.serial_number)
-        {
+    pub fn prepare_save(&self, pc: usize) -> Result<Vec<u8>, RuntimeError> {
+        let quetzal = save_restore::quetzal(self, pc)?;
+        Ok(Vec::from(quetzal))
+    }
+
+    pub fn restore(&mut self, save_data: Vec<u8>) -> Result<Option<usize>, RuntimeError> {
+        let quetzal = Quetzal::try_from(save_data)?;
+        // &(*self) ... ick
+        let ifhd = IFhd::try_from(&(*self))?;
+        if &ifhd != quetzal.ifhd() {
+            error!(target: "app::quetzal", "Save file is not valid for the running story: {} != {}", quetzal.ifhd(), ifhd);
             self.print(
-                &"That save is not for this story\r"
+                &"Save was not created using the running story file\r"
                     .chars()
                     .map(|c| c as u16)
                     .collect(),
             )?;
-            // TODO: should return an Option<usize>
-            Ok(0)
+            Ok(None)
         } else {
-            let mut fs = FrameStack::new(0);
-            for stackframe in quetzal.stks.stks {
-                let result = if stackframe.flags & 0x10 == 0x00 {
-                    Some(StoreResult::new(0, stackframe.result_variable))
-                } else {
-                    None
-                };
-                let f = Frame::new(
-                    0,
-                    0,
-                    &stackframe.local_variables,
-                    stackframe.flags & 0xF,
-                    &stackframe.stack,
-                    result,
-                    stackframe.return_address as usize,
-                );
-                fs.frames_mut().push(f);
-            }
-
+            // Rebuild frame stack
+            let fs = FrameStack::from_stks(quetzal.stks())?;
             self.frame_stack = fs;
 
-            let dynamic = if let Some(cmem) = quetzal.cmem {
-                cmem.to_vec(&self)
-            } else if let Some(umem) = quetzal.umem {
-                umem.data
-            } else {
-                return Err(RuntimeError::new(
-                    ErrorCode::System,
-                    "No CMEM or UMEM chunk".to_string(),
-                ));
-            };
-            for i in 0..dynamic.len() {
-                if i != 0x10 && i != 0x11 {
-                    self.memory.write_byte(i, dynamic[i])?;
+            // Rebuild dynamic memory, preserving the contents of FLAGS2
+            let flags2 = self.read_word(0x10)?;
+            if let Some(umem) = quetzal.umem() {
+                for i in 0..umem.data().len() {
+                    self.memory.write_byte(i, umem.data()[i])?;
+                }
+            } else if let Some(cmem) = quetzal.cmem() {
+                let data = save_restore::decompress(cmem, self.dynamic());
+                for i in 0..data.len() {
+                    self.memory.write_byte(i, data[i])?;
                 }
             }
+            self.memory.write_word(0x10, flags2)?;
 
-            // Reset stream 3
+            // Reset output stream 3
             self.stream_3 = Vec::new();
 
-            Ok(quetzal.ifhd.pc as usize)
+            Ok(Some(quetzal.ifhd().pc() as usize))
         }
     }
 
     pub fn save_undo(&mut self, instruction: &Instruction) -> Result<(), RuntimeError> {
-        let q = Quetzal::from_state(&self, instruction.store().unwrap().address());
-        self.undo_stack.push(q);
-        self.undo_stack.truncate(10);
-        Ok(())
-    }
-
-    pub fn restore_undo(&mut self) -> Result<usize, RuntimeError> {
-        if let Some(q) = self.undo_stack.pop() {
-            self.restore(q)
+        // let q = Quetzal::from_state(&self, instruction.store().unwrap().address());
+        if let Some(r) = instruction.store() {
+            debug!(target: "app::quetzal", "Saving undo state");
+            match save_restore::quetzal(self, r.address()) {
+                Ok(quetzal) => {
+                    self.undo_stack.push(quetzal);
+                    self.undo_stack.truncate(10);
+                    Ok(())
+                }, 
+                Err(e) => {
+                    error!(target: "app::quetzal", "Error saving undo state: {}", e);
+                    Err(RuntimeError::new(ErrorCode::Save, format!("Error saving undo state: {}", e)))
+                }
+            }
         } else {
-            Ok(0)
+            error!(target: "app::quetzal", "SAVE_UNDO should be a store instruction");
+            Err(RuntimeError::new(ErrorCode::Save, "SAVE_UNDO should be a store instruction".to_string()))
         }
     }
+
+    pub fn restore_undo(&mut self) -> Result<Option<usize>, RuntimeError> {
+        if let Some(q) = self.undo_stack.pop() {
+            debug!(target: "app::quetzal", "Restoting undo state");
+            self.restore(Vec::from(q))
+        } else {
+            debug!(target: "app::quetzal", "No undo state to restore");
+            Ok(None)
+        }
+    }
+
     pub fn restart(&mut self) -> Result<usize, RuntimeError> {
         let f1 = self.read_byte(0x10)? & 0x3;
         for i in 0..self.dynamic.len() {
@@ -951,6 +950,12 @@ impl State {
         repeats: u8,
         routine: Option<usize>,
     ) -> Result<(), RuntimeError> {
+        let repeats = if self.version == 5 {
+            Some(repeats)
+        } else {
+            None
+        };
+
         if let Some(sounds) = self.sounds.as_mut() {
             self.sound_interrupt = routine;
             if sounds.current_effect() == effect {

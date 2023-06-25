@@ -13,7 +13,6 @@ fn property_table_address(state: &State, object: usize) -> Result<usize, Runtime
     };
 
     let result = state.read_word(object_address + offset)? as usize;
-    info!(target: "app::object", "Property table for {} @ ${:04x}", object, result);
     Ok(result)
 }
 
@@ -53,7 +52,6 @@ fn address(state: &State, object: usize, property: u8) -> Result<usize, RuntimeE
                     1
                 }
             };
-            info!(target: "app::object", "Property {} @ ${:04x} {} from ${:04x}", prop_num, property_address, prop_size, property_address + prop_data);
             if prop_num == property {
                 return Ok(property_address);
             } else if prop_num < property {
@@ -70,7 +68,6 @@ fn address(state: &State, object: usize, property: u8) -> Result<usize, RuntimeE
 
 fn size(state: &State, property_address: usize) -> Result<usize, RuntimeError> {
     let size_byte = state.read_byte(property_address)?;
-    info!(target: "app::object", "Size byte: {:02x}", size_byte);
     match header::field_byte(state.memory(), HeaderField::Version)? {
         3 => Ok((size_byte as usize / 32) + 1),
         _ => match size_byte & 0xc0 {
@@ -174,7 +171,6 @@ pub fn property(state: &State, object: usize, property: u8) -> Result<u16, Runti
 
 pub fn next_property(state: &State, object: usize, property: u8) -> Result<u8, RuntimeError> {
     let version = header::field_byte(state.memory(), HeaderField::Version)?;
-    info!(target: "app::object", "next_property {} -> {}", object, property);
     if property == 0 {
         let prop_table = property_table_address(state, object)?;
         let header_size = state.read_byte(prop_table)? as usize;
@@ -186,7 +182,6 @@ pub fn next_property(state: &State, object: usize, property: u8) -> Result<u8, R
         }
     } else {
         let prop_addr = address(state, object, property)?;
-        info!(target: "app::object", "property {} @ ${:04x}", property, prop_addr);
         if prop_addr == 0 {
             Ok(0)
         } else {

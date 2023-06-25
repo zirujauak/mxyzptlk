@@ -1,39 +1,40 @@
-use crate::state::State;
+use crate::error::{ErrorCode, RuntimeError};
 
-use self::{ifhd::IFhd, cmem::CMem, umem::UMem, stks::Stks};
+use self::{cmem::CMem, ifhd::IFhd, stks::Stks, umem::UMem};
 
 use super::*;
 
-pub mod ifhd;
 pub mod cmem;
-pub mod umem;
+pub mod ifhd;
 pub mod stks;
+mod umem;
 
 pub struct Quetzal {
-    pub ifhd: IFhd,
-    pub umem: Option<UMem>,
-    pub cmem: Option<CMem>,
-    pub stks: Stks,
+    ifhd: IFhd,
+    umem: Option<UMem>,
+    cmem: Option<CMem>,
+    stks: Stks,
 }
 
-impl Quetzal {
-    pub fn from_state(state: &State, instruction_address: usize) -> Quetzal {
-        info!(target: "app::quetzal", "Building quetzal from state");
-        let ifhd = IFhd::from_state(state, instruction_address);
-        info!(target: "app::quetzal", "{}", ifhd);
-        let cmem = CMem::from_state(state);
-        info!(target: "app::quetzal", "{}", cmem);
-        let stks = Stks::from_state(state);
-        info!(target: "app::quetzal", "{}", stks);
-        Quetzal { ifhd, umem: None, cmem: Some(cmem), stks }
-    }
+impl TryFrom<Vec<u8>> for Quetzal {
+    type Error = RuntimeError;
 
-    pub fn from_vec(data: &Vec<u8>) -> Option<Quetzal> {
-        let iff = IFF::from_vec(&data);
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        if !IFF::form_from_vec(&value)?.eq("FORM") {
+            error!(target: "app::quetzal", "Not an IFF file");
+            return Err(RuntimeError::new(
+                ErrorCode::IFF,
+                "Not an IFF file".to_string(),
+            ));
+        }
 
+        let iff = IFF::from_vec(&value);
         if iff.form != "FORM" || iff.sub_form != "IFZS" {
-            error!("Save file form and/or sub-form are incorrect: {}/{}", iff.form, iff.sub_form);
-            return None;
+            error!(target: "app::quetzal", "Expected sub form 'IFZS': '{}'", iff.sub_form);
+            return Err(RuntimeError::new(
+                ErrorCode::Restore,
+                "Not a Quetzal save file".to_string(),
+            ));
         }
 
         let mut ifhd = None;
@@ -42,60 +43,57 @@ impl Quetzal {
         let mut stks = None;
         for chunk in iff.chunks {
             match chunk.id.as_str() {
-                "IFhd" => ifhd = Some(IFhd::from_chunk(chunk)),
-                "CMem" => cmem = Some(CMem::from_chunk(chunk)),
-                "UMem" => umem = Some(UMem::from_chunk(chunk)),
-                "Stks" => stks = Some(Stks::from_chunk(chunk)),
-                _ => trace!("Ignoring chunk id {}", chunk.id)
+                "IFhd" => ifhd = Some(IFhd::from(chunk)),
+                "CMem" => cmem = Some(CMem::from(chunk)),
+                "UMem" => umem = Some(UMem::from(chunk)),
+                "Stks" => stks = Some(Stks::from(chunk)),
+                _ => debug!(target: "app::quetzal", "Ignoring chunk with id '{}'", chunk.id),
             }
         }
 
-        match ifhd {
-            Some(_) => match stks {
-                Some(_) => match cmem {
-                    Some(_) => (),
-                    None => match umem {
-                        Some(_) => (),
-                        None => {
-                            error!("Save file is missing CMem and UMem chunk");
-                            return None;
-                        }
-                    }
-                },
-                None => {
-                    error!("Save file is missing Stks chunk");
-                    return None;
-                }
-            },
-            None => {
-                error!("Save file is missing IFhd chunk");
-                return None;
+        if let None = ifhd {
+            return Err(RuntimeError::new(
+                ErrorCode::Restore,
+                "Quetzal is missing IFhd chunk".to_string(),
+            ));
+        }
+
+        if let None = stks {
+            return Err(RuntimeError::new(
+                ErrorCode::Restore,
+                "Quetzal is missing Stks chunk".to_string(),
+            ));
+        }
+
+        if let None = cmem {
+            if let None = umem {
+                return Err(RuntimeError::new(
+                    ErrorCode::Restore,
+                    "Quetzal is missing memory (CMem or UMem) chunk".to_string(),
+                ));
             }
         }
 
-        Some(Quetzal {
-            ifhd: ifhd.unwrap(),
-            umem,
-            cmem,
-            stks: stks.unwrap(),
-        })
+        Ok(Quetzal::new(ifhd.unwrap(), umem, cmem, stks.unwrap()))
     }
+}
 
-    pub fn to_vec(&self) -> Vec<u8> {
-        // IFF FORM
+impl From<Quetzal> for Vec<u8> {
+    fn from(value: Quetzal) -> Self {
         let mut form = id_as_vec("FORM");
 
         let mut ifzs = id_as_vec("IFZS");
-        ifzs.append(&mut self.ifhd.to_chunk());
-        match &self.umem {
-            Some(u) => ifzs.append(&mut u.to_chunk()),
-            None => ()
+        ifzs.append(&mut Vec::from(value.ifhd()));
+        // ifzs.append(&mut value.ifhd().to_chunk());
+        match value.umem() {
+            Some(u) => ifzs.append(&mut Vec::from(u)),
+            None => (),
         };
-        match &self.cmem {
-            Some(c) => ifzs.append(&mut c.to_chunk()),
-            None => ()
+        match value.cmem() {
+            Some(c) => ifzs.append(&mut Vec::from(c)),
+            None => (),
         };
-        ifzs.append(&mut self.stks.to_chunk());
+        ifzs.append(&mut Vec::from(value.stks()));
 
         form.append(&mut usize_as_vec(ifzs.len(), 4));
         form.append(&mut ifzs);
@@ -104,5 +102,32 @@ impl Quetzal {
         }
 
         form
+    }
+}
+
+impl Quetzal {
+    pub fn new(ifhd: IFhd, umem: Option<UMem>, cmem: Option<CMem>, stks: Stks) -> Quetzal {
+        Quetzal {
+            ifhd,
+            umem: umem,
+            cmem: cmem,
+            stks,
+        }
+    }
+
+    pub fn ifhd(&self) -> &IFhd {
+        &self.ifhd
+    }
+
+    pub fn umem(&self) -> Option<&UMem> {
+        self.umem.as_ref()
+    }
+
+    pub fn cmem(&self) -> Option<&CMem> {
+        self.cmem.as_ref()
+    }
+
+    pub fn stks(&self) -> &Stks {
+        &self.stks
     }
 }

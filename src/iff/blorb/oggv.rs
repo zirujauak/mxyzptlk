@@ -1,13 +1,29 @@
+use std::fmt;
+
 use super::super::*;
 
 pub struct OGGV {
-    pub data: Vec<u8>,
+    data: Vec<u8>,
+}
+
+impl fmt::Display for OGGV {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "OGG Vorbis data size: {}", self.data.len())
+    }
+}
+
+impl From<Chunk> for OGGV {
+    fn from(value: Chunk) -> OGGV {
+        OGGV::new(value.data())
+    }
 }
 
 impl OGGV {
-    pub fn from_chunk(chunk: Chunk) -> OGGV {
-        OGGV {
-            data: chunk.data.clone()
-        }
+    pub fn new(data: &Vec<u8>) -> OGGV {
+        OGGV { data: data.clone() }
+    }
+
+    pub fn data(&self) -> &Vec<u8> {
+        &self.data
     }
 }

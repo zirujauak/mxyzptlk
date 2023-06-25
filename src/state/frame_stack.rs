@@ -1,6 +1,7 @@
 pub mod frame;
 
 use crate::error::*;
+use crate::iff::quetzal::stks::{self, Stks};
 use crate::state::header;
 use crate::state::header::*;
 use crate::state::instruction::StoreResult;
@@ -20,6 +21,31 @@ impl FrameStack {
         FrameStack { frames }
     }
 
+    pub fn from_stks(stks: &Stks) -> Result<FrameStack, RuntimeError> {
+        let mut fs = FrameStack::new(0);
+        for frame in stks.stks() {
+            let result = if frame.flags() & 0x10 == 0x00 {
+                Some(StoreResult::new(0, frame.result_variable()))
+            } else {
+                None
+            };
+            let f = Frame::new(
+                0,
+                0,
+                frame.local_variables(),
+                frame.flags() & 0xF,
+                frame.stack(),
+                result,
+                frame.return_address() as usize,
+            );
+
+            //debug!(target: "app::quetzal", "Frame: {}", f);
+            fs.frames_mut().push(f);
+        }
+
+        Ok(fs)
+    }
+
     pub fn frames(&self) -> &Vec<Frame> {
         &self.frames
     }
@@ -27,7 +53,7 @@ impl FrameStack {
     pub fn frames_mut(&mut self) -> &mut Vec<Frame> {
         &mut self.frames
     }
-    
+
     pub fn pop_frame(&mut self) -> Result<Frame, RuntimeError> {
         if let Some(f) = self.frames.pop() {
             Ok(f)
@@ -123,14 +149,23 @@ impl FrameStack {
         Ok(())
     }
 
-    pub fn sound_interrupt(&mut self, memory: &mut Memory, address: usize, return_address: usize) -> Result<(), RuntimeError> {
+    pub fn sound_interrupt(
+        &mut self,
+        memory: &mut Memory,
+        address: usize,
+        return_address: usize,
+    ) -> Result<(), RuntimeError> {
         let mut frame = Frame::call_routine(memory, address, &vec![], None, return_address)?;
         info!(target: "app::frame", "Sound interrupt ${:06x}", address);
         self.frames.push(frame);
         Ok(())
     }
-    
-    pub fn return_routine(&mut self, _memory: &mut Memory, _result: u16) -> Result<Option<StoreResult>, RuntimeError> {
+
+    pub fn return_routine(
+        &mut self,
+        _memory: &mut Memory,
+        _result: u16,
+    ) -> Result<Option<StoreResult>, RuntimeError> {
         let f = self.pop_frame()?;
         let n = self.current_frame_mut()?;
         n.set_pc(f.return_address());

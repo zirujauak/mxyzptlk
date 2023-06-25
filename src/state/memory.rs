@@ -20,6 +20,10 @@ impl Memory {
         Memory { buffer }
     }
 
+    pub fn buffer(&self) -> &Vec<u8> {
+        &self.buffer
+    }
+    
     pub fn read_byte(&self, address: usize) -> Result<u8, RuntimeError> {
         if address < self.buffer.len() {
             Ok(self.buffer[address])

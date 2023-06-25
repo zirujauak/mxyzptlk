@@ -1,5 +1,3 @@
-use crate::iff::quetzal::Quetzal;
-
 use super::*;
 
 pub fn save(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
@@ -10,13 +8,18 @@ pub fn save(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
             "SAVE table not implemented".to_string(),
         ))
     } else {
-        let quetzal = Quetzal::from_state(state, instruction.store().unwrap().address);
-        match state.prompt_and_write("Save to: ", "ifzs", &quetzal.to_vec()) {
+        let save_data = state.prepare_save(instruction.store().unwrap().address)?;
+        match state.prompt_and_write("Save to: ", "ifzs", &save_data) {
             Ok(_) => {
                 store_result(state, instruction, 1)?;
-            },
+            }
             Err(e) => {
-                state.print(&format!("Error writing: {}\r", e).chars().map(|c| c as u16).collect())?;
+                state.print(
+                    &format!("Error writing: {}\r", e)
+                        .chars()
+                        .map(|c| c as u16)
+                        .collect(),
+                )?;
                 store_result(state, instruction, 0)?;
             }
         }
@@ -33,28 +36,36 @@ pub fn restore(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
         ))
     } else {
         match state.prompt_and_read("Restore from: ", "ifzs") {
-            Ok(data) => {
-                let quetzal = Quetzal::from_vec(&data).unwrap();
-                match state.restore(quetzal) {
-                    Ok(address) => {
-                        if address == 0 {
-                            store_result(state, instruction, 0)?;
-                            Ok(instruction.next_address())
-                        } else {
-                            let i = decoder::decode_instruction(state.memory(), address - 3)?;
-                            store_result(state, &i, 2)?;
-                            Ok(i.next_address())
-                        }
+            Ok(save_data) => match state.restore(save_data) {
+                Ok(address) => match address {
+                    Some(a) => {
+                        let i = decoder::decode_instruction(state.memory(), a - 3)?;
+                        store_result(state, &i, 2)?;
+                        Ok(i.next_address())
                     }
-                    Err(e) => {
-                        state.print(&format!("Error restoring: {}\r", e).chars().map(|c| c as u16).collect())?;
+                    None => {
                         store_result(state, instruction, 0)?;
                         Ok(instruction.next_address())
                     }
+                },
+                Err(e) => {
+                    state.print(
+                        &format!("Error restoring: {}\r", e)
+                            .chars()
+                            .map(|c| c as u16)
+                            .collect(),
+                    )?;
+                    store_result(state, instruction, 0)?;
+                    Ok(instruction.next_address())
                 }
-            }
+            },
             Err(e) => {
-                state.print(&format!("Error reading: {}\r", e).chars().map(|c| c as u16).collect())?;
+                state.print(
+                    &format!("Error reading: {}\r", e)
+                        .chars()
+                        .map(|c| c as u16)
+                        .collect(),
+                )?;
                 store_result(state, instruction, 0)?;
                 Ok(instruction.next_address())
             }
@@ -135,16 +146,17 @@ pub fn save_undo(state: &mut State, instruction: &Instruction) -> Result<usize, 
 
 pub fn restore_undo(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     match state.restore_undo() {
-        Ok(pc) => {
-            if pc == 0 {
-                store_result(state, instruction, 0)?;
-                Ok(instruction.next_address())
-            } else {
-                let i = decoder::decode_instruction(state.memory(), pc - 3)?;
+        Ok(pc) => match pc {
+            Some(address) => {
+                let i = decoder::decode_instruction(state.memory(), address - 3)?;
                 store_result(state, &i, 2)?;
                 Ok(i.next_address())
             }
-        }
+            None => {
+                store_result(state, instruction, 0)?;
+                Ok(instruction.next_address())
+            }
+        },
         Err(e) => {
             store_result(state, instruction, 0)?;
             Ok(instruction.next_address())

@@ -1,37 +1,42 @@
-use crate::state::{State, header::{self, HeaderField}};
+use std::fmt;
 
 use super::super::*;
 
 pub struct UMem {
-    pub data: Vec<u8>,
+    data: Vec<u8>,
+}
+
+impl fmt::Display for UMem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "uncompressed data size: {}", self.data.len())
+    }
+}
+
+impl From<Vec<u8>> for UMem {
+    fn from(value: Vec<u8>) -> UMem {
+        UMem::new(&value)
+    }
+}
+
+impl From<Chunk> for UMem {
+    fn from(value: Chunk) -> UMem {
+        UMem::new(value.data())
+    }
+}
+
+impl From<&UMem> for Vec<u8> {
+    fn from(value: &UMem) -> Vec<u8> {
+        chunk("UMem", &mut value.data.clone())
+    }
 }
 
 impl UMem {
-    pub fn from_state(state: &State) -> UMem {
-        let static_mark = header::field_word(state.memory(), HeaderField::StaticMark).expect("Error reading from header") as usize;
-        let mut data = Vec::new();
-        for i in 0..static_mark {
-            data.push(state.read_byte(i).expect("Error reading dynamic memory"));
-        }
-        UMem {
-            data
-        }
+    pub fn new(data: &Vec<u8>) -> UMem {
+        UMem { data: data.clone() }
     }
 
-    pub fn from_vec(chunk: Vec<u8>) -> UMem {
-        UMem {
-            data: chunk.clone(),
-        }
-    }
-
-    pub fn from_chunk(chunk: Chunk) -> UMem {
-        UMem {
-            data: chunk.data.clone()
-        }
-    }
-    
-    pub fn to_chunk(&self) -> Vec<u8> {
-        chunk("UMem", &mut self.data.clone())
+    pub fn data(&self) -> &Vec<u8> {
+        &self.data
     }
 }
 

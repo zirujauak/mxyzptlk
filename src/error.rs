@@ -2,7 +2,9 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum ErrorCode {
+    Blorb,
     FrameUnderflow,
+    IFF,
     IllegalAccess,
     Instruction,
     InvalidAddress,
@@ -11,6 +13,8 @@ pub enum ErrorCode {
     InvalidWindow,
     ObjectTreeState,
     PropertySize,
+    Restore,
+    Save,
     StackUnderflow,
     System,
     UnimplementedInstruction,
