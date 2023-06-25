@@ -168,7 +168,7 @@ pub mod pancurses;
                 0xd9 => '\u{2518}',
                 0xda => '\u{250c}',
                 _ => {
-                    trace!("Unmapped font 3 character {:02x}", zchar as u8);
+                    trace!(target: "app::trace", "Unmapped font 3 character {:02x}", zchar as u8);
                     zchar as u8 as char
                 }
             },

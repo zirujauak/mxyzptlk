@@ -83,9 +83,10 @@ impl Frame {
     pub fn set_sound_interrupt(&mut self, v: bool) {
         self.sound_interrupt = v;
     }
-    
+
     pub fn pop(&mut self) -> Result<u16,RuntimeError> {
         if let Some(v) = self.stack.pop() {
+            info!(target: "app::stack", "Pop {:04x} [{}]", v, self.stack.len());
             Ok(v)
         } else {
             Err(RuntimeError::new(ErrorCode::StackUnderflow, format!("Poppped an empty stack")))
@@ -102,6 +103,7 @@ impl Frame {
 
     pub fn push(&mut self, value: u16)  {
         self.stack.push(value);
+        info!(target: "app::stack", "Push {:04x} [{}]", value, self.stack.len());
     }
 
     pub fn result(&self) -> Option<&StoreResult> {
@@ -138,7 +140,7 @@ impl Frame {
 
     pub fn set_variable(&mut self, variable: usize, value: u16) -> Result<(), RuntimeError> {
         if variable == 0 {
-            self.stack.push(value);
+            self.push(value);
             Ok(())
         } else if variable <= self.local_variables.len() {
             self.local_variables[variable - 1] = value;

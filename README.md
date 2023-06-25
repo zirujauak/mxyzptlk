@@ -45,14 +45,15 @@ Refactored a lot of the code to make it more readable and manageable.  I also re
 * Transcripting
 * Passes czech.z5 and praxis.z5 tests
 * Everything works in etude.z5
-* Suggest filenames `{story-name}-{##}.{ext}` for save, restore, and script
+* Suggest filenames `{story-file-basename}-{##}.{ext}` for save, restore, and script
 * V3 sound (The Lurking Horror)
+* V5 sound (Sherlock) ... provisionally.  The clock chime sounds 6 times as 6AM and the interrupt routine runs (and does nothing of consequence), but I haven't played far enough to trigger an interrupt that does anything interesting.
 
 ## Fixed!
 * AREAD opcode correctly sets the text buffer positions of words, which fixed problems with jigsaw.z8
 
 ## Backlog
-* Restore sound support after refactoring it out
+* Refactor read/sound interrupt handling so it less ... hacky
 * Input streams
 * SAVE and RESTORE data (V5+)
 * Modify STATUS_LINE to handle narrow screens by eliding text

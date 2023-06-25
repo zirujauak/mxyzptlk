@@ -76,7 +76,7 @@ impl State {
         }
 
         if let Some(s) = sounds.as_ref() {
-            trace!(target: "app::target", "{} sounds loaded", s.sounds().len())
+            info!(target: "app::sound", "{} sounds loaded", s.sounds().len())
         }
         let rng = ChaChaRng::new();
 
@@ -363,10 +363,10 @@ impl State {
 
     pub fn call_sound_interrupt(
         &mut self,
-        address: usize,
         return_address: usize,
     ) -> Result<usize, RuntimeError> {
-        trace!(target: "app::trace", "Sound interrupt {:06x}", address);
+        let address = self.sound_interrupt.expect("No sound interrupt routine to call!");
+        info!(target: "app::sound", "Sound interrupt {:06x}", address);
         self.sound_interrupt = None;
         self.frame_stack
             .sound_interrupt(&mut self.memory, address, return_address)?;
@@ -548,6 +548,14 @@ impl State {
         };
 
         let width = self.screen.columns() as usize;
+        let available_for_left = width - right.len() - 1;
+        if left.len() > available_for_left {
+            left.truncate(available_for_left - 4);
+            left.push('.' as u16);
+            left.push('.' as u16);
+            left.push('.' as u16);
+        }
+        
         let mut spaces = vec![0x20 as u16; width - left.len() - right.len() - 1];
         let mut status_line = vec![0x20 as u16];
         status_line.append(&mut left);
@@ -592,8 +600,7 @@ impl State {
     }
 
     // Input
-    pub fn read_key(&mut self, timeout: u16) -> Result<Option<u16>, RuntimeError> {
-        trace!(target: "app::trace", "read_key timeout {:?}", timeout);
+    pub fn read_key(&mut self, timeout: u16) -> Result<InputEvent, RuntimeError> {
         let end = if timeout > 0 {
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -604,17 +611,23 @@ impl State {
             0
         };
 
+        let check_sound = if let Some(_) = self.sound_interrupt {
+            true
+        } else {
+            false
+        };
+
         loop {
             // If a sound interrupt is set and there is no sound playing,
             // return buffer and clear any pending input_interrupt
             if let Some(_) = self.sound_interrupt {
-                trace!(target: "app::trace", "Sound interrupt pending");
+                info!(target: "app::input", "Sound interrupt pending");
                 if let Some(sounds) = self.sounds.as_mut() {
-                    trace!(target: "app::trace", "Sound playing? {}", sounds.is_playing());
+                    info!(target: "app::input", "Sound playing? {}", sounds.is_playing());
                     if !sounds.is_playing() {
-                        trace!(target: "app::trace", "Sound interrupt firing");
+                        info!(target: "app::input", "Sound interrupt firing");
                         self.input_interrupt = None;
-                        return Ok(None);
+                        return Ok(InputEvent::from_interrupt(Interrupt::Sound));
                     }
                 }
             }
@@ -624,10 +637,10 @@ impl State {
                 .expect("Error getting system time")
                 .as_millis();
             if end > 0 && now > end {
-                return Ok(None);
+                return Ok(InputEvent::from_interrupt(Interrupt::ReadTimeout));
             }
 
-            let key = self.screen.read_key(end == 0);
+            let key = self.screen.read_key(end == 0 && !check_sound);
 
             if let Some(c) = key.zchar() {
                 if c == 253 || c == 254 {
@@ -644,7 +657,7 @@ impl State {
                     )?;
                 }
 
-                return Ok(key.zchar());
+                return Ok(key);
             }
 
             thread::sleep(Duration::from_millis(10));
@@ -670,7 +683,13 @@ impl State {
             0
         };
 
-        info!(target: "app::input", "Sound interrupt {:?}", self.sound_interrupt);
+        let check_sound = if let Some(_) = self.sound_interrupt {
+            true
+        } else {
+            false
+        };
+
+        info!(target: "app::input", "Sound interrupt {:?}", check_sound);
 
         loop {
             // If a sound interrupt is set and there is no sound playing,
@@ -699,7 +718,7 @@ impl State {
 
             info!(target: "app::input", "Now: {}, End: {}, Timeout: {}", now, end, timeout);
 
-            let e = self.screen.read_key(end == 0);
+            let e = self.screen.read_key(end == 0 && !check_sound);
             match e.zchar() {
                 Some(key) => {
                     if terminators.contains(&key) || (terminators.contains(&255) && (key > 128)) {
@@ -748,7 +767,7 @@ impl State {
 
         let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
         let filename = String::from_utf16(&f).unwrap();
-        trace!(target: "app::trace", "Save '{}'", filename.trim());
+        info!(target: "app::quetzal", "Save '{}'", filename.trim());
         match fs::OpenOptions::new()
             .create(true)
             .truncate(true)
@@ -793,7 +812,7 @@ impl State {
 
         let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
         let filename = String::from_utf16(&f).unwrap();
-        trace!(target: "app::trace", "Restore '{}'", filename.trim());
+        info!(target: "app::quetzal", "Restore '{}'", filename.trim());
         let mut data = Vec::new();
         match File::open(filename.trim()) {
             Ok(mut file) => match file.read_to_end(&mut data) {
@@ -932,10 +951,8 @@ impl State {
         repeats: u8,
         routine: Option<usize>,
     ) -> Result<(), RuntimeError> {
-        trace!(target: "app::trace", "Sound routine: {:?}", routine);
         if let Some(sounds) = self.sounds.as_mut() {
             self.sound_interrupt = routine;
-            trace!(target: "app::trace", "Sound routine: {:?}", self.sound_interrupt);
             if sounds.current_effect() == effect {
                 sounds.change_volume(volume);
                 Ok(())
@@ -968,12 +985,12 @@ impl State {
                 return Ok(());
             }
 
-            if let Some(address) = self.sound_interrupt {
-                trace!(target: "app::trace", "Pending sound interrupt");
+            if let Some(_) = self.sound_interrupt {
+                info!(target: "app::sound", "Pending sound interrupt");
                 if let Some(sounds) = self.sounds.as_mut() {
-                    trace!(target: "app::trace", "Check for sound: {}", sounds.is_playing());
+                    info!(target: "app::sound", "Check for sound: {}", sounds.is_playing());
                     if !sounds.is_playing() {
-                        let pc = self.call_sound_interrupt(address, pc)?;
+                        let pc = self.call_sound_interrupt(pc)?;
                         self.set_pc(pc)?;
                     } else {
                         self.set_pc(pc)?;
@@ -982,14 +999,6 @@ impl State {
             } else {
                 self.set_pc(pc)?;
             }
-            // if let Some(address) = self.sound_interrupt {
-            //     if let Some(sounds) = self.sounds {
-            //         if !sounds.is_playing() {
-            //             let pc = self.call_routine(address, &!vec[], )
-            //         }
-            //     }
-            // }
-            // self.set_pc(pc)?;
             n = n + 1;
         }
     }

@@ -1,5 +1,5 @@
 use super::*;
-use crate::state::{object::property, text};
+use crate::state::{object::property, text, screen::Interrupt};
 
 pub fn call_vs(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
@@ -144,8 +144,9 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
             state.write_byte(text_buffer + 2 + i, input_buffer[i] as u8)?;
         }
 
-        if let Some(address) = state.sound_interrupt {
-            return state.call_sound_interrupt(address, instruction.address());
+        info!(target: "app::input", "READ interrupted");
+        if let Some(_) = state.sound_interrupt {
+            return state.call_sound_interrupt(instruction.address());
         } else {
             return state.read_interrupt(routine, instruction.address());
         }
@@ -353,7 +354,7 @@ pub fn sound_effect(state: &mut State, instruction: &Instruction) -> Result<usiz
                         None
                     };
 
-                    trace!(target: "app::trace", "Sound interrupt routine: {:?}", routine);
+                    info!(target: "app::sound", "Sound interrupt routine: {:?}", routine);
                     state.play_sound(number, volume as u8, repeats as u8, routine)?
                 }
                 3 | 4 => state.stop_sound()?,
@@ -393,24 +394,23 @@ pub fn read_char(state: &mut State, instruction: &Instruction) -> Result<usize, 
         0
     };
 
-    let key = match state.read_key(timeout * 100)? {
-        Some(key) => key,
+    let key = state.read_key(timeout * 100)?;
+    match key.zchar() {
+        Some(c) => {
+            store_result(state, instruction, c);
+            Ok(instruction.next_address())
+        }
         None => {
-            if let Some(address) = state.sound_interrupt {
-                return state.call_sound_interrupt(address, instruction.address());
-            } else if routine > 0 {
-                return state.read_interrupt(routine, instruction.address());
+            if let Some(i) = key.interrupt() {
+                match i {
+                    Interrupt::ReadTimeout => state.read_interrupt(routine, instruction.address()),
+                    Interrupt::Sound => state.call_sound_interrupt(instruction.address()),
+                }
             } else {
-                return Err(RuntimeError::new(
-                    ErrorCode::System,
-                    "read_key returned None without a timeout".to_string(),
-                ));
+                Err(RuntimeError::new(ErrorCode::System, "read_key return no character or interrupt".to_string()))
             }
         }
-    };
-    store_result(state, instruction, key)?;
-
-    Ok(instruction.next_address())
+    }
 }
 
 pub fn scan_table(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {

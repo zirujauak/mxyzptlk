@@ -100,7 +100,6 @@ pub fn from_vec(state: &State, ztext: &Vec<u16>) -> Result<Vec<u16>, RuntimeErro
                 zscii_read1 = false;
             } else if zscii_read2 {
                 let z = ((zscii_b1 << 5) as u16 & 0x3E0) + b as u16;
-                trace!("text: ZSCII {:04x}", z);
                 s.push(z);
                 zscii_read2 = false;
             } else {

@@ -32,10 +32,17 @@ pub enum Style {
 }
 
 #[derive(Debug)]
+pub enum Interrupt {
+    ReadTimeout,
+    Sound
+}
+
+#[derive(Debug)]
 pub struct InputEvent {
     zchar: Option<u16>,
     row: Option<u16>,
     column: Option<u16>,
+    interrupt: Option<Interrupt>
 }
 
 impl InputEvent {
@@ -44,6 +51,7 @@ impl InputEvent {
             zchar: None,
             row: None,
             column: None,
+            interrupt: None,
         }
     }
     pub fn from_char(zchar: u16) -> InputEvent {
@@ -51,6 +59,7 @@ impl InputEvent {
             zchar: Some(zchar),
             row: None,
             column: None,
+            interrupt: None,
         }
     }
     pub fn from_mouse(zchar: u16, row: u16, column: u16) -> InputEvent {
@@ -58,9 +67,17 @@ impl InputEvent {
             zchar: Some(zchar),
             row: Some(row),
             column: Some(column),
+            interrupt: None,
         }
     }
-
+    pub fn from_interrupt(interrupt: Interrupt) -> InputEvent {
+        InputEvent {
+            zchar: None,
+            row: None,
+            column: None,
+            interrupt: Some(interrupt),
+        }
+    }
     pub fn zchar(&self) -> Option<u16> {
         self.zchar
     }
@@ -71,6 +88,10 @@ impl InputEvent {
 
     pub fn column(&self) -> Option<u16> {
         self.column
+    }
+
+    pub fn interrupt(&self) -> Option<&Interrupt> {
+        self.interrupt.as_ref()
     }
 }
 

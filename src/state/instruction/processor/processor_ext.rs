@@ -29,7 +29,7 @@ pub fn restore(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
     if operands.len() > 0 {
         Err(RuntimeError::new(
             ErrorCode::UnimplementedInstruction,
-            "SAVE table not implemented".to_string(),
+            "RESTORE table not implemented".to_string(),
         ))
     } else {
         match state.prompt_and_read("Restore from: ", "ifzs") {
@@ -42,11 +42,15 @@ pub fn restore(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
                             Ok(instruction.next_address())
                         } else {
                             let i = decoder::decode_instruction(state.memory(), address - 3)?;
-                            store_result(state, instruction, 2)?;
+                            store_result(state, &i, 2)?;
                             Ok(i.next_address())
                         }
                     }
-                    Err(_) => branch(state, instruction, false),
+                    Err(e) => {
+                        state.print(&format!("Error restoring: {}\r", e).chars().map(|c| c as u16).collect())?;
+                        store_result(state, instruction, 0)?;
+                        Ok(instruction.next_address())
+                    }
                 }
             }
             Err(e) => {
@@ -132,19 +136,16 @@ pub fn save_undo(state: &mut State, instruction: &Instruction) -> Result<usize, 
 pub fn restore_undo(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     match state.restore_undo() {
         Ok(pc) => {
-            trace!(target: "app::trace", "state.restore_undo() -> ${:04x}", pc);
             if pc == 0 {
                 store_result(state, instruction, 0)?;
                 Ok(instruction.next_address())
             } else {
                 let i = decoder::decode_instruction(state.memory(), pc - 3)?;
-                trace!(target: "app::target", "{}", i);
                 store_result(state, &i, 2)?;
                 Ok(i.next_address())
             }
         }
         Err(e) => {
-            trace!(target: "app::trace", "{}", e);
             store_result(state, instruction, 0)?;
             Ok(instruction.next_address())
         }

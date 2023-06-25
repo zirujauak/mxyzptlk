@@ -61,7 +61,7 @@ impl Sounds {
             if index.usage.eq("Snd ") {
                 if let Some(oggv) = blorb.snds.get(&(index.start as usize)) {
                     let s = Sound::from_oggv(index.number, oggv, loops.get(&index.number));
-                    trace!("Sound: {}", s);
+                    info!(target: "app::sound", "Sound: {}", s);
                     sounds.insert(index.number, s);
                 }
             }
@@ -117,7 +117,7 @@ impl Sounds {
     }
 
     pub fn play_sound(&mut self, effect: u16, volume: u8, repeats: u8) -> Result<(), RuntimeError> {
-        trace!(target: "app::trace", "play_sound({}, {}, {})", effect, volume, repeats);
+        info!(target: "app::sound", "play_sound({}, {}, {})", effect, volume, repeats);
         match NamedTempFile::new() {
             Ok(mut write) => match write.reopen() {
                 Ok(read) => match self.get_sound(effect as u32) {
@@ -152,9 +152,8 @@ impl Sounds {
                                         }
 
                                         sink.play();
-                                        trace!(target: "app::trace", "Sink len/empty: {}/{}", sink.len(), sink.empty());
+                                        info!(target: "app::sound", "Sink len/empty: {}/{}", sink.len(), sink.empty());
                                         self.current_effect = effect as u32;
-                                        //self.effect_routine = routine;
                                     }
                                     None => error!(target: "app::trace", "No sink"),
                                 }

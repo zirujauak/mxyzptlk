@@ -18,7 +18,6 @@ impl Config {
     pub fn from_file(file: File) -> Result<Config, RuntimeError> {
         match serde_yaml::from_reader::<File, Value>(file) {
             Ok(data) => {
-                trace!(target: "app::trace", "Config: {:?}", data);
                 let terminal = match data["terminal"].as_str() {
                     Some(t) => t.to_string(),
                     None => "pancurses".to_string(),

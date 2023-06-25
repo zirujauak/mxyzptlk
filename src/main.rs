@@ -73,7 +73,6 @@ fn main() {
     } else {
         Config::default()
     };
-    trace!(target: "app::trace", "{:?}", config);
     
     let prev = panic::take_hook();
     panic::set_hook(Box::new(move |info| {

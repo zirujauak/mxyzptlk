@@ -68,6 +68,7 @@ fn store_result(
     instruction: &Instruction,
     value: u16,
 ) -> Result<(), RuntimeError> {
+    trace!(target: "app::trace", "Storing {} to {:?}", value, instruction.store());
     match instruction.store() {
         Some(s) => state.set_variable(s.variable, value),
         None => Ok(()),

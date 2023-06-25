@@ -169,13 +169,6 @@ impl IFF {
             }
         }
 
-        trace!(
-            "IFF: {}/{} {:#05x}, {} chunks",
-            form,
-            sub_form,
-            length,
-            chunks.len()
-        );
         IFF {
             form,
             _length: length,
