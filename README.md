@@ -18,7 +18,22 @@ $ cargo build --release
 
 ### Testing
 
-TBD!
+The `zcode` directory contains several freely available test files.  I did not author these files and provide no guarantee of correctness.  I do wish to thank the authors, however, because these tests helped track down and squash several bugs resulting from my misinterpretation of the ZMachine standard.
+
+* [TerpEtude](https://www.ifarchive.org/if-archive/infocom/interpreters/tools/etude.tar.Z) by Andrew Plotkin
+    * Also available [here](https://github.com/townba/etude) with source code.  The `etude.z5` and `gntests.z5` files included are from this repo.
+* [Czech](https://www.ifarchive.org/if-archive/infocom/interpreters/tools/czech_0_8.zip) by Amir Karger
+* [Praxix](https://www.ifarchive.org/if-archive/infocom/interpreters/tools/praxix.zip) by Zarf & Dannii
+* [Strict](https://www.ifarchive.org/if-archive/infocom/interpreters/tools/strictz.z5) by Torbjorn Andersso
+
+These files have been included in this repo without express permission and will be removed upon request by the author.
+
+To run a test from the repo root:
+```
+$ cargo run -- zcode/etude.z5
+```
+
+Some are interactive, like TerpEtude, and others just run a sequence of tests and output results.
 
 ### Running a game
 
