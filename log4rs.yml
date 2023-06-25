@@ -46,6 +46,13 @@ appenders:
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
 
+  sound:
+    kind: file
+    path: "sound.log"
+    append: false
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+
   stack:
     kind: file
     path: "stack.log"
@@ -114,6 +121,12 @@ loggers:
     level: info
     appenders:
       - quetzal
+    additive: false
+
+  app::sound:
+    level: info
+    appenders:
+      - sound
     additive: false
 
   app::stack:
