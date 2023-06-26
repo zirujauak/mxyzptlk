@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    fmt,
-    fs::{self, File},
-    io::{Read, Write},
-};
+use std::{collections::HashMap, fmt};
 
 use ridx::RIdx;
 
@@ -57,6 +52,7 @@ impl TryFrom<Vec<u8>> for Blorb {
 
         if iff.form != "FORM" || iff.sub_form != "IFRS" {
             error!(
+                target: "app::blorb",
                 "Resource file form and/or sub-form are incorrect: {}/{}",
                 iff.form, iff.sub_form
             );
@@ -82,11 +78,13 @@ impl TryFrom<Vec<u8>> for Blorb {
                 "OGGV" => {
                     snds.insert(chunk.offset, OGGV::from(chunk));
                 }
-                _ => trace!("Ignoring chunk id {}", chunk.id),
+                _ => warn!(target: "app::blorb", "Ignoring chunk id {}", chunk.id),
             }
         }
 
-        Ok(Blorb::new(ridx, ifhd, snds, sloop))
+        let blorb = Blorb::new(ridx, ifhd, snds, sloop);
+        debug!(target: "app::blorb", "{}", blorb);
+        Ok(blorb)
     }
 }
 
@@ -120,7 +118,6 @@ impl Blorb {
     pub fn sloop(&self) -> Option<&Loop> {
         self.sloop.as_ref()
     }
-
 }
 
 // pub fn rebuild_blorb(name: String) {

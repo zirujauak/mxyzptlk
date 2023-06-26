@@ -1,9 +1,6 @@
 pub mod buffer;
 mod curses;
 
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
-
 use crate::config::Config;
 use crate::error::*;
 use buffer::Buffer;

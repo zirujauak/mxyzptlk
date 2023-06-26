@@ -7,7 +7,7 @@ use super::*;
 
 fn property_table_address(state: &State, object: usize) -> Result<usize, RuntimeError> {
     let object_address = object_address(state, object)?;
-    let offset = match header::field_byte(state.memory(), HeaderField::Version)? {
+    let offset = match state.version {
         3 => 7,
         _ => 12,
     };
@@ -21,9 +21,8 @@ fn address(state: &State, object: usize, property: u8) -> Result<usize, RuntimeE
     let header_size = state.read_byte(property_table_address)? as usize;
     let mut property_address = property_table_address + 1 + (header_size * 2);
     let mut size_byte = state.read_byte(property_address)?;
-    let version = header::field_byte(state.memory(), HeaderField::Version)?;
     while size_byte != 0 {
-        if version == 3 {
+        if state.version == 3 {
             let prop_num = size_byte & 0x1F;
             let prop_size = (size_byte as usize / 32) + 1;
             if prop_num == property {
@@ -68,7 +67,7 @@ fn address(state: &State, object: usize, property: u8) -> Result<usize, RuntimeE
 
 fn size(state: &State, property_address: usize) -> Result<usize, RuntimeError> {
     let size_byte = state.read_byte(property_address)?;
-    match header::field_byte(state.memory(), HeaderField::Version)? {
+    match state.version {
         3 => Ok((size_byte as usize / 32) + 1),
         _ => match size_byte & 0xc0 {
             0x40 => Ok(2),
@@ -86,7 +85,7 @@ fn size(state: &State, property_address: usize) -> Result<usize, RuntimeError> {
 }
 
 fn data_address(state: &State, property_address: usize) -> Result<usize, RuntimeError> {
-    match header::field_byte(state.memory(), HeaderField::Version)? {
+    match state.version {
         3 => Ok(property_address + 1),
         _ => {
             let b = state.read_byte(property_address)?;
@@ -117,7 +116,7 @@ pub fn property_length(state: &State, property_data_address: usize) -> Result<us
         Ok(0)
     } else {
         let size_byte = state.read_byte(property_data_address - 1)?;
-        match header::field_byte(state.memory(), HeaderField::Version)? {
+        match state.version {
             1 | 2 | 3 => size(state, property_data_address - 1),
             4 | 5 | 6 | 7 | 8 => {
                 if size_byte & 0x80 == 0x80 {
@@ -143,7 +142,7 @@ pub fn short_name(state: &State, object: usize) -> Result<Vec<u16>, RuntimeError
 }
 
 fn default_property(state: &State, property: u8) -> Result<u16, RuntimeError> {
-    let object_table = header::field_word(state.memory(), HeaderField::ObjectTable)? as usize;
+    let object_table = header::field_word(state, HeaderField::ObjectTable)? as usize;
     let property_address = object_table + ((property as usize - 1) * 2);
     state.read_word(property_address)
 }
@@ -170,12 +169,11 @@ pub fn property(state: &State, object: usize, property: u8) -> Result<u16, Runti
 }
 
 pub fn next_property(state: &State, object: usize, property: u8) -> Result<u8, RuntimeError> {
-    let version = header::field_byte(state.memory(), HeaderField::Version)?;
     if property == 0 {
         let prop_table = property_table_address(state, object)?;
         let header_size = state.read_byte(prop_table)? as usize;
         let p1 = state.read_byte(prop_table + 1 + (header_size * 2))?;
-        if version < 4 {
+        if state.version < 4 {
             Ok(p1 & 0x1f)
         } else {
             Ok(p1 & 0x3f)
@@ -188,7 +186,7 @@ pub fn next_property(state: &State, object: usize, property: u8) -> Result<u8, R
             let prop_len = size(state, prop_addr)?;
             let next_prop =
                 state.read_byte(property_data_address(state, object, property)? + prop_len)?;
-            if version < 4 {
+            if state.version < 4 {
                 Ok(next_prop & 0x1f)
             } else {
                 Ok(next_prop & 0x3f)
@@ -211,7 +209,7 @@ pub fn set_property(
         ))
     } else {
         let property_size = size(state, property_address)?;
-        let property_data = match header::field_byte(state.memory(), HeaderField::Version)? {
+        let property_data = match state.version {
             3 => property_address + 1,
             _ => {
                 let b = state.read_byte(property_address)?;

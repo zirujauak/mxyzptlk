@@ -1,5 +1,6 @@
-use crate::state::memory::Memory;
 use crate::error::*;
+
+use super::State;
 
 pub enum HeaderField {
     Version = 0x00,
@@ -54,6 +55,7 @@ pub enum Flags1v4 {
     TimedInputAvailable = 0x80,    // bit 7
 }
 
+#[derive(Debug)]
 pub enum Flags2 {
     Transcripting = 0x0001,        // bit 0
     ForceFixedPitch = 0x0002,      // bit 1
@@ -64,32 +66,32 @@ pub enum Flags2 {
     RequestSoundEffects = 0x0080,  // bit 7
 }
 
-pub fn field_byte(memory: &Memory, field: HeaderField) -> Result<u8, RuntimeError> {
-    memory.read_byte(field as usize)
+pub fn field_byte(state: &State, field: HeaderField) -> Result<u8, RuntimeError> {
+    state.read_byte(field as usize)
 }
 
-pub fn field_word(memory: &Memory, field: HeaderField) -> Result<u16, RuntimeError> {
-    memory.read_word(field as usize)
+pub fn field_word(state: &State, field: HeaderField) -> Result<u16, RuntimeError> {
+    state.read_word(field as usize)
 }
 
 pub fn set_byte(
-    memory: &mut Memory,
+    state: &mut State,
     field: HeaderField,
     value: u8,
 ) -> Result<(), RuntimeError> {
-    memory.write_byte(field as usize, value)
+    state.write_byte(field as usize, value)
 }
 
 pub fn set_word(
-    memory: &mut Memory,
+    state: &mut State,
     field: HeaderField,
     value: u16,
 ) -> Result<(), RuntimeError> {
-    memory.write_word(field as usize, value)
+    state.write_word(field as usize, value)
 }
 
-pub fn flag1(memory: &Memory, flag: u8) -> Result<u8, RuntimeError> {
-    let flags = field_byte(memory, HeaderField::Flags1)?;
+pub fn flag1(state: &State, flag: u8) -> Result<u8, RuntimeError> {
+    let flags = field_byte(state, HeaderField::Flags1)?;
     if flags & flag as u8 > 0 {
         Ok(1)
     } else {
@@ -97,8 +99,8 @@ pub fn flag1(memory: &Memory, flag: u8) -> Result<u8, RuntimeError> {
     }
 }
 
-pub fn flag2(memory: &Memory, flag: Flags2) -> Result<u8, RuntimeError> {
-    let flags = field_word(memory, HeaderField::Flags2)?;
+pub fn flag2(state: &State, flag: Flags2) -> Result<u8, RuntimeError> {
+    let flags = field_word(state, HeaderField::Flags2)?;
     if flags & flag as u16 > 0 {
         Ok(1)
     } else {
@@ -106,36 +108,43 @@ pub fn flag2(memory: &Memory, flag: Flags2) -> Result<u8, RuntimeError> {
     }
 }
 
-pub fn set_flag1(memory: &mut Memory, flag: u8) -> Result<(), RuntimeError> {
-    let mut flags = field_byte(memory, HeaderField::Flags1)?;
-    flags = flags | flag;
-    memory.write_byte(HeaderField::Flags1 as usize, flags)
+pub fn set_flag1(state: &mut State, flag: u8) -> Result<(), RuntimeError> {
+    let flags = field_byte(state, HeaderField::Flags1)?;
+    let new = flags | flag;
+    debug!(target: "app::header", "Set FLAG1 {:08b}: {:08b} => {:08b}", flag, flags, new);
+    state.write_byte(HeaderField::Flags1 as usize, new)
 }
 
-pub fn set_flag2(memory: &mut Memory, flag: Flags2) -> Result<(), RuntimeError> {
-    let mut flags = field_word(memory, HeaderField::Flags2)?;
-    flags = flags | flag as u16;
-    memory.write_word(HeaderField::Flags2 as usize, flags)
+pub fn set_flag2(state: &mut State, flag: Flags2) -> Result<(), RuntimeError> {
+    let f = format!("{:?}", flag);
+    let flags = field_word(state, HeaderField::Flags2)?;
+    let new = flags | flag as u16;
+    debug!(target: "app::header", "Set FLAG2 {}: {:010b} => {:010b}", f, flags, new);
+    state.memory.write_word(HeaderField::Flags2 as usize, new)
 }
 
-pub fn clear_flag1(memory: &mut Memory, flag: u8) -> Result<(), RuntimeError> {
-    let mut flags = field_byte(memory, HeaderField::Flags1)?;
-    flags = flags & !flag;
-    memory.write_byte(HeaderField::Flags1 as usize, flags)
+pub fn clear_flag1(state: &mut State, flag: u8) -> Result<(), RuntimeError> {
+    let flags = field_byte(state, HeaderField::Flags1)?;
+    let new = flags & !flag;
+    debug!(target: "app::header", "Clear FLAG1 {:08b}: {:08b} => {:08b}", flag, flags, new);
+    state.write_byte(HeaderField::Flags1 as usize, new)
 }
 
-pub fn clear_flag2(memory: &mut Memory, flag: Flags2) -> Result<(), RuntimeError> {
-    let mut flags = field_word(memory, HeaderField::Flags2)?;
-    flags = flags & !(flag as u16);
-    memory.write_word(HeaderField::Flags2 as usize, flags)
+pub fn clear_flag2(state: &mut State, flag: Flags2) -> Result<(), RuntimeError> {
+    let f = format!("{:?}", flag);
+    let flags = field_word(state, HeaderField::Flags2)?;
+    let new = flags & !(flag as u16);
+    debug!(target: "app::header", "Clear FLAG2 {}: {:010b} => {:010b}", f, flags, new);
+    state.memory.write_word(HeaderField::Flags2 as usize, new)
 }
 
-pub fn set_extension(memory: &mut Memory, index: usize, value: u16) -> Result<(), RuntimeError> {
-    let extension_table_address = field_word(memory, HeaderField::ExtensionTable)? as usize;
+pub fn set_extension(state: &mut State, index: usize, value: u16) -> Result<(), RuntimeError> {
+    let extension_table_address = field_word(state, HeaderField::ExtensionTable)? as usize;
     if extension_table_address > 0 {
-        let table_size = memory.read_word(extension_table_address)? as usize;
+        debug!(target: "app::header", "Set extension table word {} to {:04x}", index, value);
+        let table_size = state.read_word(extension_table_address)? as usize;
         if table_size >= index {
-            memory.write_word(extension_table_address + (index * 2), value)?;
+            state.write_word(extension_table_address + (index * 2), value)?;
         }
 
     }

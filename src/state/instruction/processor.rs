@@ -99,12 +99,12 @@ fn call_fn(
 }
 
 fn packed_routine_address(memory: &Memory, address: u16) -> Result<usize, RuntimeError> {
-    let version = header::field_byte(memory, HeaderField::Version)?;
+    let version = memory.read_byte(HeaderField::Version as usize)?;
     match version {
         1 | 2 | 3 => Ok(address as usize * 2),
         4 | 5 => Ok(address as usize * 4),
         7 => Ok((address as usize * 4)
-            + (header::field_word(memory, HeaderField::RoutinesOffset)? as usize * 8)),
+            + (memory.read_word(HeaderField::RoutinesOffset as usize)? as usize * 8)),
         8 => Ok(address as usize * 8),
         _ => Err(RuntimeError::new(
             ErrorCode::UnsupportedVersion,
@@ -114,12 +114,12 @@ fn packed_routine_address(memory: &Memory, address: u16) -> Result<usize, Runtim
 }
 
 fn packed_string_address(memory: &Memory, address: u16) -> Result<usize, RuntimeError> {
-    let version = header::field_byte(memory, HeaderField::Version)?;
+    let version = memory.read_byte(HeaderField::Version as usize)?;
     match version {
         1 | 2 | 3 => Ok(address as usize * 2),
         4 | 5 => Ok(address as usize * 4),
         7 => Ok((address as usize * 4)
-            + (header::field_word(memory, HeaderField::StringsOffset)? as usize * 8)),
+            + (memory.read_word(HeaderField::StringsOffset as usize)? as usize * 8)),
         8 => Ok(address as usize * 8),
         // TODO: error
         _ => Err(RuntimeError::new(
@@ -131,7 +131,6 @@ fn packed_string_address(memory: &Memory, address: u16) -> Result<usize, Runtime
 
 pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     info!(target: "app::instruction", "{}", instruction);
-    let version = header::field_byte(state.memory(), HeaderField::Version)?;
     match instruction.opcode().form() {
         OpcodeForm::Ext => match instruction.opcode().instruction() {
             0x00 => processor_ext::save(state, instruction),
@@ -178,7 +177,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x7 => processor_0op::restart(state, instruction),
                 0x8 => processor_0op::ret_popped(state, instruction),
                 0x9 => {
-                    if version < 5 {
+                    if state.version < 5 {
                         processor_0op::pop(state, instruction)
                     } else {
                         processor_0op::catch(state, instruction)
@@ -211,7 +210,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0xd => processor_1op::print_paddr(state, instruction),
                 0xe => processor_1op::load(state, instruction),
                 0xf => {
-                    if version < 5 {
+                    if state.version < 5 {
                         processor_1op::not(state, instruction)
                     } else {
                         processor_1op::call_1n(state, instruction)

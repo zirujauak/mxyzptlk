@@ -39,9 +39,9 @@ pub fn put_prop(state: &mut State, instruction: &Instruction) -> Result<usize, R
 fn terminators(state: &State) -> Result<Vec<u16>, RuntimeError> {
     let mut terminators = vec!['\r' as u16];
 
-    if header::field_byte(state.memory(), HeaderField::Version)? > 4 {
+    if state.version > 4 {
         let mut table_addr =
-            header::field_word(state.memory(), HeaderField::TerminatorTable)? as usize;
+            header::field_word(state, HeaderField::TerminatorTable)? as usize;
         loop {
             let b = state.read_byte(table_addr)?;
             if b == 0 {
@@ -86,9 +86,8 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
     };
 
     info!(target: "app::input", "READ: text buffer ${:04x} / parse buffer ${:04x}", text_buffer, parse);
-    let version = header::field_byte(state.memory(), HeaderField::Version)?;
 
-    let len = if version < 5 {
+    let len = if state.version < 5 {
         state.read_byte(text_buffer)? - 1
     } else {
         state.read_byte(text_buffer)?
@@ -103,12 +102,10 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
 
     let mut existing_input = Vec::new();
 
-    if version < 4 {
+    if state.version < 4 {
         // V3 show status line before input
         state.status_line()?;
-    }
-
-    if version > 4 {
+    } else if state.version > 4 {
         // text buffer may contain existing input
         let existing_len = state.read_byte(text_buffer + 1)? as usize;
         for i in 0..existing_len {
@@ -160,7 +157,7 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
 
     info!(target: "app::input", "READ: {} characters", end);
     // Store input to the text buffer
-    if version < 5 {
+    if state.version < 5 {
         info!(target: "app::input", "READ: write input buffer to ${:04x}", text_buffer + 1);
         // Store the buffer contents
         for i in 0..end {
@@ -178,12 +175,12 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
     }
 
     // Lexical analysis
-    if parse > 0 || version < 5 {
-        let dictionary = header::field_word(state.memory(), HeaderField::Dictionary)? as usize;
-        text::parse_text(state, version, text_buffer, parse, dictionary, false)?;
+    if parse > 0 || state.version < 5 {
+        let dictionary = header::field_word(state, HeaderField::Dictionary)? as usize;
+        text::parse_text(state, text_buffer, parse, dictionary, false)?;
     }
 
-    if version > 4 {
+    if state.version > 4 {
         if let Some(t) = terminator {
             info!(target: "app::input", "Store terminator {}", *t);
             store_result(state, instruction, *t)?;
@@ -397,7 +394,7 @@ pub fn read_char(state: &mut State, instruction: &Instruction) -> Result<usize, 
     let key = state.read_key(timeout * 100)?;
     match key.zchar() {
         Some(c) => {
-            store_result(state, instruction, c);
+            store_result(state, instruction, c)?;
             Ok(instruction.next_address())
         }
         None => {
@@ -486,7 +483,7 @@ pub fn tokenise(state: &mut State, instruction: &Instruction) -> Result<usize, R
     let dictionary = if operands.len() > 2 {
         operands[2] as usize
     } else {
-        header::field_word(state.memory(), HeaderField::Dictionary)? as usize
+        header::field_word(state, HeaderField::Dictionary)? as usize
     };
     let flag = if operands.len() > 3 {
         operands[3] > 0
@@ -496,7 +493,6 @@ pub fn tokenise(state: &mut State, instruction: &Instruction) -> Result<usize, R
 
     text::parse_text(
         state,
-        header::field_byte(state.memory(), HeaderField::Version)?,
         text_buffer,
         parse_buffer,
         dictionary,

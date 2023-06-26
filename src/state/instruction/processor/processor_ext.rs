@@ -158,6 +158,7 @@ pub fn restore_undo(state: &mut State, instruction: &Instruction) -> Result<usiz
             }
         },
         Err(e) => {
+            error!(target: "app::quetzal", "Error restoring from undo state: {}", e);
             store_result(state, instruction, 0)?;
             Ok(instruction.next_address())
         }

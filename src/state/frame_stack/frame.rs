@@ -165,7 +165,7 @@ impl Frame {
 
     pub fn set_variable_indirect(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
         if variable == 0 {
-            self.pop();
+            self.pop()?;
             self.push(value);
             Ok(())
         } else if variable <= self.local_variables().len() as u8 {
@@ -191,13 +191,6 @@ impl Frame {
         result: Option<StoreResult>,
         return_address: usize,
     ) -> Result<Frame, RuntimeError> {
-        // let version = header::field_byte(memory, HeaderField::Version)?;
-        // let initial_pc = if version < 5 {
-        //     address + 1 + (var_count as usize * 2)
-        // } else {
-        //     address + 1
-        // };
-
         let mut local_variables = local_variables.clone();
 
         for i in 0..arguments.len() {

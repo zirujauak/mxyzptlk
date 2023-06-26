@@ -89,12 +89,12 @@ impl TryFrom<&State> for IFhd {
     fn try_from(value: &State) -> Result<Self, Self::Error> {
         debug!(target: "app::quetzal", "Building IFhd chunk from state");
 
-        let release_number = header::field_word(value.memory(), HeaderField::Release)?;
+        let release_number = header::field_word(value, HeaderField::Release)?;
         let mut serial_number = Vec::new();
         for i in 0..6 {
             serial_number.push(value.read_byte(HeaderField::Serial as usize + i)?);
         }
-        let checksum = header::field_word(value.memory(), HeaderField::Checksum)?;
+        let checksum = header::field_word(value, HeaderField::Checksum)?;
 
         let ifhd = IFhd::new(release_number, &serial_number, checksum, 0);
         debug!(target: "app::quetzal", "IFhd: {}", ifhd);

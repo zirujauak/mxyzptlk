@@ -68,8 +68,8 @@ impl State {
         sounds: Option<Sounds>,
         name: &str,
     ) -> Result<State, RuntimeError> {
-        let version = header::field_byte(&memory, HeaderField::Version)?;
-        let static_mark = header::field_word(&memory, HeaderField::StaticMark)? as usize;
+        let version = memory.read_byte(HeaderField::Version as usize)?;
+        let static_mark = memory.read_word(HeaderField::StaticMark as usize)? as usize;
         let mut dynamic = Vec::new();
         for i in 0..static_mark {
             dynamic.push(memory.read_byte(i)?);
@@ -92,7 +92,7 @@ impl State {
                 _ => Screen::new_v5(config)?,
             };
             let frame_stack =
-                FrameStack::new(header::field_word(&memory, HeaderField::InitialPC)? as usize);
+                FrameStack::new(memory.read_word(HeaderField::InitialPC as usize)? as usize);
 
             Ok(State {
                 name: name.to_string(),
@@ -119,60 +119,48 @@ impl State {
     pub fn initialize(&mut self) -> Result<(), RuntimeError> {
         // Set V3 Flags 1
         if self.version < 4 {
-            header::clear_flag1(&mut self.memory, Flags1v3::StatusLineNotAvailable as u8)?;
-            header::set_flag1(&mut self.memory, Flags1v3::ScreenSplitAvailable as u8)?;
-            header::clear_flag1(&mut self.memory, Flags1v3::VariablePitchDefault as u8)?;
+            header::clear_flag1(self, Flags1v3::StatusLineNotAvailable as u8)?;
+            header::set_flag1(self, Flags1v3::ScreenSplitAvailable as u8)?;
+            header::clear_flag1(self, Flags1v3::VariablePitchDefault as u8)?;
         }
 
         // Set V4+ Flags 1
         if self.version > 3 {
             header::set_byte(
-                &mut self.memory,
+                self,
                 HeaderField::DefaultBackground,
                 self.screen.default_colors().1 as u8,
             )?;
             header::set_byte(
-                &mut self.memory,
+                self,
                 HeaderField::DefaultForeground,
                 self.screen.default_colors().0 as u8,
             )?;
+            header::set_byte(self, HeaderField::ScreenLines, self.screen.rows() as u8)?;
             header::set_byte(
-                &mut self.memory,
-                HeaderField::ScreenLines,
-                self.screen.rows() as u8,
-            )?;
-            header::set_byte(
-                &mut self.memory,
+                self,
                 HeaderField::ScreenColumns,
                 self.screen.columns() as u8,
             )?;
 
-            header::set_flag1(&mut self.memory, Flags1v4::SoundEffectsAvailable as u8)?;
+            header::set_flag1(self, Flags1v4::SoundEffectsAvailable as u8)?;
         }
 
         // Set V5+ Flags 1
         if self.version > 4 {
-            header::set_word(
-                &mut self.memory,
-                HeaderField::ScreenHeight,
-                self.screen.rows() as u16,
-            )?;
-            header::set_word(
-                &mut self.memory,
-                HeaderField::ScreenWidth,
-                self.screen.columns() as u16,
-            )?;
-            header::set_byte(&mut self.memory, HeaderField::FontWidth, 1)?;
-            header::set_byte(&mut self.memory, HeaderField::FontHeight, 1)?;
-            header::clear_flag1(&mut self.memory, Flags1v4::PicturesAvailable as u8)?;
-            header::set_flag1(&mut self.memory, Flags1v4::ColoursAvailable as u8)?;
-            header::set_flag1(&mut self.memory, Flags1v4::BoldfaceAvailable as u8)?;
-            header::set_flag1(&mut self.memory, Flags1v4::ItalicAvailable as u8)?;
-            header::set_flag1(&mut self.memory, Flags1v4::FixedSpaceAvailable as u8)?;
-            header::set_flag1(&mut self.memory, Flags1v4::TimedInputAvailable as u8)?;
+            header::set_word(self, HeaderField::ScreenHeight, self.screen.rows() as u16)?;
+            header::set_word(self, HeaderField::ScreenWidth, self.screen.columns() as u16)?;
+            header::set_byte(self, HeaderField::FontWidth, 1)?;
+            header::set_byte(self, HeaderField::FontHeight, 1)?;
+            header::clear_flag1(self, Flags1v4::PicturesAvailable as u8)?;
+            header::set_flag1(self, Flags1v4::ColoursAvailable as u8)?;
+            header::set_flag1(self, Flags1v4::BoldfaceAvailable as u8)?;
+            header::set_flag1(self, Flags1v4::ItalicAvailable as u8)?;
+            header::set_flag1(self, Flags1v4::FixedSpaceAvailable as u8)?;
+            header::set_flag1(self, Flags1v4::TimedInputAvailable as u8)?;
             //header::clear_flag2(&mut self.memory, Flags2::RequestMouse)?;
             // Graphics font 3 support is crap atm
-            header::clear_flag2(&mut self.memory, Flags2::RequestPictures)?;
+            header::clear_flag2(self, Flags2::RequestPictures)?;
         }
 
         // Interpreter # and version
@@ -223,8 +211,8 @@ impl State {
 
     pub fn checksum(&self) -> Result<u16, RuntimeError> {
         let mut checksum = 0 as u16;
-        let size = header::field_word(self.memory(), HeaderField::FileLength)? as usize
-            * match header::field_byte(self.memory(), HeaderField::Version)? {
+        let size = header::field_word(self, HeaderField::FileLength)? as usize
+            * match self.version {
                 1 | 2 | 3 => 2,
                 4 | 5 => 4,
                 6 | 7 | 8 => 8,
@@ -301,14 +289,13 @@ impl State {
 
     // Variables
     fn global_variable_address(&self, variable: u8) -> Result<usize, RuntimeError> {
-        let table = header::field_word(self.memory(), HeaderField::GlobalTable)? as usize;
+        let table = header::field_word(self, HeaderField::GlobalTable)? as usize;
         let index = (variable as usize - 16) * 2;
         Ok(table + index)
     }
     pub fn variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
         if variable < 16 {
-            self.frame_stack
-                .local_variable(variable)
+            self.frame_stack.local_variable(variable)
         } else {
             let address = self.global_variable_address(variable)?;
             self.read_word(address)
@@ -326,8 +313,7 @@ impl State {
 
     pub fn set_variable(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
         if variable < 16 {
-        self.frame_stack
-            .set_local_variable(variable, value)
+            self.frame_stack.set_local_variable(variable, value)
         } else {
             let address = self.global_variable_address(variable)?;
             self.write_word(address, value)
@@ -336,7 +322,8 @@ impl State {
 
     pub fn set_variable_indirect(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
         if variable < 16 {
-            self.frame_stack.set_local_variable_indirect(variable, value)
+            self.frame_stack
+                .set_local_variable_indirect(variable, value)
         } else {
             let address = self.global_variable_address(variable)?;
             self.write_word(address, value)
@@ -416,7 +403,7 @@ impl State {
         self.input_interrupt_print = false;
         let (initial_pc, local_variables) = self.routine_header(address)?;
         self.frame_stack
-            .input_interrupt( address, initial_pc, local_variables, return_address)?;
+            .input_interrupt(address, initial_pc, local_variables, return_address)?;
         Ok(initial_pc)
     }
 
@@ -425,10 +412,18 @@ impl State {
             debug!(target: "app::sound", "Sound interrupt routine firing @ ${:06x}", address);
             self.sound_interrupt = None;
             let (initial_pc, local_variables) = self.routine_header(address)?;
-            self.frame_stack.sound_interrupt(address, initial_pc, local_variables, return_address)?;
+            self.frame_stack.sound_interrupt(
+                address,
+                initial_pc,
+                local_variables,
+                return_address,
+            )?;
             Ok(initial_pc)
         } else {
-            Err(RuntimeError::new(ErrorCode::System, "No sound interrupt routine".to_string()))
+            Err(RuntimeError::new(
+                ErrorCode::System,
+                "No sound interrupt routine".to_string(),
+            ))
         }
     }
 
@@ -478,7 +473,7 @@ impl State {
                 if let None = self.stream_2 {
                     self.stream_2 = Some(self.prompt_and_create("Transcript file: ", "txt")?);
                 }
-                header::set_flag2(&mut self.memory, Flags2::Transcripting)?;
+                header::set_flag2(self, Flags2::Transcripting)?;
             } else if stream == 3 {
                 self.stream_3.push(Stream3 {
                     table: table.unwrap(),
@@ -487,7 +482,7 @@ impl State {
             }
             self.output_streams = self.output_streams | mask;
         } else if stream == -2 {
-            header::clear_flag2(&mut self.memory, Flags2::Transcripting)?;
+            header::clear_flag2(self, Flags2::Transcripting)?;
         } else if stream == -3 {
             let stream3 = self.stream_3.pop().unwrap();
             let len = stream3.buffer.len();
@@ -583,7 +578,7 @@ impl State {
     }
 
     pub fn status_line(&mut self) -> Result<(), RuntimeError> {
-        let status_type = header::flag1(self.memory(), Flags1v3::StatusLineType as u8)?;
+        let status_type = header::flag1(self, Flags1v3::StatusLineType as u8)?;
         let object = self.variable(16)? as usize;
         let mut left = text::from_vec(self, &property::short_name(self, object)?)?;
 
@@ -705,12 +700,12 @@ impl State {
                 if c == 253 || c == 254 {
                     info!(target: "app::input", "Storing mouse coordinates {},{}", key.column().unwrap(), key.row().unwrap());
                     header::set_extension(
-                        &mut self.memory,
+                        self,
                         1,
                         key.column().expect("Mouse click with no column data"),
                     )?;
                     header::set_extension(
-                        &mut self.memory,
+                        self,
                         2,
                         key.row().expect("Mouse click with no row data"),
                     )?;
@@ -783,12 +778,12 @@ impl State {
                     if terminators.contains(&key) || (terminators.contains(&255) && (key > 128)) {
                         if key == 254 || key == 253 {
                             header::set_extension(
-                                &mut self.memory,
+                                self,
                                 1,
                                 e.column().expect("Mouse click with no column data"),
                             )?;
                             header::set_extension(
-                                &mut self.memory,
+                                self,
                                 2,
                                 e.row().expect("Mouse click with no row data"),
                             )?;
@@ -975,7 +970,7 @@ impl State {
         self.write_byte(0x10, self.read_byte(0x10)? | f1)?;
         self.initialize()?;
         self.frame_stack =
-            FrameStack::new(header::field_word(&self.memory(), HeaderField::InitialPC)? as usize);
+            FrameStack::new(header::field_word(self, HeaderField::InitialPC)? as usize);
 
         Ok(self.frame_stack.pc()?)
     }

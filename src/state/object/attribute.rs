@@ -1,7 +1,5 @@
 use crate::state::State;
 use crate::error::*;
-use crate::state::header;
-use crate::state::header::*;
 
 use super::object_address;
 
@@ -14,7 +12,7 @@ pub fn value(
     let offset = attribute as usize / 8;
     let address = object_address + offset;
     let mask = 1 << (7 - (attribute % 8));
-    let max = match header::field_byte(state.memory(), HeaderField::Version)? {
+    let max = match state.version {
         3 => 32,
         _ => 48
     };
@@ -36,7 +34,7 @@ pub fn set(
     let offset = attribute as usize / 8;
     let address = object_address + offset;
     let mask = 1 << (7 - (attribute % 8));
-    let max = match header::field_byte(state.memory(), HeaderField::Version)? {
+    let max = match state.version {
         3 => 32,
         _ => 48
     };
@@ -58,7 +56,7 @@ pub fn clear(
     let offset = attribute as usize / 8;
     let address = object_address + offset;
     let mask: u8 = 1 << 7 - (attribute % 8);
-    let max = match header::field_byte(state.memory(), HeaderField::Version)? {
+    let max = match state.version {
         3 => 32,
         _ => 48
     };

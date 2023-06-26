@@ -1,5 +1,4 @@
 use crate::error::*;
-use crate::state::header;
 use crate::state::header::*;
 use crate::state::instruction::*;
 use crate::state::memory::*;
@@ -202,10 +201,10 @@ fn branch_condition(
 
 fn branch(
     memory: &Memory,
+    version: u8,
     opcode: &Opcode,
     address: usize,
 ) -> Result<(usize, Option<Branch>), RuntimeError> {
-    let version = header::field_byte(memory, HeaderField::Version)?;
     match opcode.form {
         OpcodeForm::Ext => match opcode.instruction() {
             0x06 | 0x18 | 0x1b => branch_condition(memory, address),
@@ -241,7 +240,7 @@ fn branch(
     }
 }
 
-fn opcode(memory: &Memory, mut address: usize) -> Result<(usize, Opcode), RuntimeError> {
+fn opcode(memory: &Memory, version: u8, mut address: usize) -> Result<(usize, Opcode), RuntimeError> {
     let mut opcode = memory.read_byte(address)?;
     let extended = opcode == 0xBE;
     address = address + 1;
@@ -288,7 +287,7 @@ fn opcode(memory: &Memory, mut address: usize) -> Result<(usize, Opcode), Runtim
     Ok((
         address,
         Opcode::new(
-            header::field_byte(memory, HeaderField::Version)?,
+            version,
             opcode,
             instruction,
             form,
@@ -298,13 +297,13 @@ fn opcode(memory: &Memory, mut address: usize) -> Result<(usize, Opcode), Runtim
 }
 
 pub fn decode_instruction(memory: &Memory, address: usize) -> Result<Instruction, RuntimeError> {
-    let version = header::field_byte(memory, HeaderField::Version)?;
-    let (offset, opcode) = opcode(memory, address)?;
+    let version = memory.read_byte(HeaderField::Version as usize)?;
+    let (offset, opcode) = opcode(memory, version, address)?;
 
     let (offset, operand_types) = operand_types(memory, &opcode, offset)?;
     let (offset, operands) = operands(memory, &operand_types, offset)?;
     let (offset, store) = result_variable(memory, &opcode, version, offset)?;
-    let (offset, branch) = branch(memory, &opcode, offset)?;
+    let (offset, branch) = branch(memory, version, &opcode, offset)?;
 
     let mut bytes = Vec::new();
     for i in address..offset {

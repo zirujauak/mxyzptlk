@@ -38,7 +38,7 @@ const ALPHABET_V3: [[char; 26]; 3] = [
 /// * `i` - Abbreviation table index (0 - 31)
 fn abbreviation(state: &State, abbrev_table: u8, index: u8) -> Result<Vec<u16>, RuntimeError> {
     let abbreviation_table =
-        header::field_word(state.memory(), HeaderField::AbbreviationsTable)? as usize;
+        header::field_word(state, HeaderField::AbbreviationsTable)? as usize;
     let entry = (64 * (abbrev_table - 1)) + (index * 2);
     let word_addr = state.read_word(abbreviation_table + entry as usize)? as usize;
     as_text(state, word_addr * 2)
@@ -320,7 +320,6 @@ pub fn from_dictionary(
 
 fn find_word(
     state: &mut State,
-    version: u8,
     dictionary: usize,
     parse_buffer: usize,
     flag: bool,
@@ -330,7 +329,7 @@ fn find_word(
     word: &Vec<char>,
 ) -> Result<(usize, usize), RuntimeError> {
     let entry = from_dictionary(state, dictionary, word)?;
-    let offset = if version < 5 { 1 } else { 2 };
+    let offset = if state.version < 5 { 1 } else { 2 };
 
     info!(target: "app::input", "LEXICAL ANALYSIS: {:?} => {:04x}", word, entry);
     let parse_address = parse_buffer + 2 + (4 * parse_index);
@@ -380,7 +379,6 @@ fn store_parsed_entry(
 
 pub fn parse_text(
     state: &mut State,
-    version: u8,
     text_buffer: usize,
     parse_buffer: usize,
     dictionary: usize,
@@ -394,7 +392,7 @@ pub fn parse_text(
     let mut words: usize = 0;
     let mut data = Vec::new();
 
-    if version < 5 {
+    if state.version < 5 {
         // Buffer is 0 terminated
         let mut i = 1;
         loop {
@@ -428,7 +426,6 @@ pub fn parse_text(
             if word.len() > 0 {
                 (word_count, words) = find_word(
                     state,
-                    version,
                     dictionary,
                     parse_buffer,
                     flag,
@@ -444,7 +441,6 @@ pub fn parse_text(
                 let sep = vec![c];
                 (word_count, words) = find_word(
                     state,
-                    version,
                     dictionary,
                     parse_buffer,
                     flag,
@@ -461,7 +457,6 @@ pub fn parse_text(
             if word.len() > 0 {
                 (word_count, words) = find_word(
                     state,
-                    version,
                     dictionary,
                     parse_buffer,
                     flag,
@@ -482,7 +477,6 @@ pub fn parse_text(
     if word.len() > 0 && word_count < max_words {
         (_, words) = find_word(
             state,
-            version,
             dictionary,
             parse_buffer,
             flag,
