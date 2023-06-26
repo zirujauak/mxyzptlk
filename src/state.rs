@@ -366,32 +366,25 @@ impl State {
         result: Option<StoreResult>,
         return_address: usize,
     ) -> Result<usize, RuntimeError> {
-        let (initial_pc, local_variables) = self.routine_header(address)?;
-        // // Decode routine header
-        // let variable_count = self.memory().read_byte(address)? as usize;
-        // let mut local_variables = vec![0 as u16; variable_count];
+        // Call to address 0 results in FALSE
+        if address == 0 {
+            if let Some(r) = result {
+                self.set_variable(r.variable(), 0)?;
+            }
+            Ok(return_address)
+        } else {
+            let (initial_pc, local_variables) = self.routine_header(address)?;
+            self.frame_stack.call_routine(
+                address,
+                initial_pc,
+                arguments,
+                local_variables,
+                result,
+                return_address,
+            )?;
 
-        // let initial_pc = if self.version < 5 {
-        //     for i in 0..variable_count {
-        //         let a = address + 1 + (i * 2);
-        //         local_variables[i] = self.memory().read_word(a)?;
-        //     }
-
-        //     address + 1 + (variable_count * 2)
-        // } else {
-        //     address + 1
-        // };
-
-        self.frame_stack.call_routine(
-            address,
-            initial_pc,
-            arguments,
-            local_variables,
-            result,
-            return_address,
-        )?;
-
-        Ok(initial_pc)
+            Ok(initial_pc)
+        }
     }
 
     pub fn read_interrupt(
