@@ -9,84 +9,84 @@ appenders:
     path: "blorb.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
   frame:
     kind: file
     path: "frame.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
+
+  header:
+    kind: file
+    path: "header.log"
+    append: false
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
   instruction:
     kind: file
     path: "instruction.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
   input:
     kind: file
     path: "input.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
   memory:
     kind: file
     path: "memory.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
   object:
     kind: file
     path: "object.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
   quetzal:
     kind: file
     path: "quetzal.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
   sound:
     kind: file
     path: "sound.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
   stack:
     kind: file
     path: "stack.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
   variable:
     kind: file
     path: "variable.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]: {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
   trace:
     kind: file
     path: "trace.log"
     append: false
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{X(instruction_count)}]:{f}/{L} - {m}{n}"
-
-  transcript:
-    kind: file
-    path: "transcript.log"
-    append: false
-    encoder:
-      pattern: "{m}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]:{f}/{L} - {m}{n}"
 
 root:
   level: trace
@@ -104,6 +104,12 @@ loggers:
     level: info
     appenders:
       - frame
+    additive: false
+
+  app::header:
+    level: debug
+    appenders:
+      - header
     additive: false
 
   app::input:
@@ -158,10 +164,4 @@ loggers:
     level: trace
     appenders:
       - trace
-    additive: false
-    
-  app::transcript:
-    level: info
-    appenders:
-      - transcript
     additive: false

@@ -65,6 +65,7 @@ fn main() {
     let name: Vec<&str> = filename.split(".").collect();
     let name = name[0].to_string();
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
+    log_mdc::insert("instruction_count", format!("{:8x}", 0));
     info!(target: "app::blorb", "Start blorb log for '{}'", name);
     info!(target: "app::frame", "Start frame log for '{}'", name);
     info!(target: "app::input", "Start input log for '{}'", name);
@@ -74,9 +75,7 @@ fn main() {
     info!(target: "app::quetzal", "Start quetzal log for '{}'", name);
     info!(target: "app::stack", "Start stack log for '{}'", name);
     info!(target: "app::trace", "Start trace log for '{}'", name);
-    info!(target: "app::transcript", "Start transcript log for '{}'", name);
     info!(target: "app::variable", "Start variable log for '{}'", name);
-    log_mdc::insert("instruction_count", format!("{:8x}", 0));
 
     let config_file = File::open("config.yml");
     let config = if let Ok(f) = config_file {
