@@ -1,4 +1,6 @@
-use crate::{error::*, zmachine::State};
+use crate::error::RuntimeError;
+
+use super::State;
 
 pub enum HeaderField {
     Version = 0x00,
@@ -44,24 +46,24 @@ pub enum Flags1v3 {
 
 pub enum Flags1v4 {
     // V4+ flags
-    ColoursAvailable = 0x01,       // bit 0
-    PicturesAvailable = 0x02,      // bit 1
-    BoldfaceAvailable = 0x04,      // bit 2
-    ItalicAvailable = 0x08,        // bit 3
-    FixedSpaceAvailable = 0x10,    // bit 4
-    SoundEffectsAvailable = 0x20,  // bit 5
-    TimedInputAvailable = 0x80,    // bit 7
+    ColoursAvailable = 0x01,      // bit 0
+    PicturesAvailable = 0x02,     // bit 1
+    BoldfaceAvailable = 0x04,     // bit 2
+    ItalicAvailable = 0x08,       // bit 3
+    FixedSpaceAvailable = 0x10,   // bit 4
+    SoundEffectsAvailable = 0x20, // bit 5
+    TimedInputAvailable = 0x80,   // bit 7
 }
 
 #[derive(Debug)]
 pub enum Flags2 {
-    Transcripting = 0x0001,        // bit 0
-    ForceFixedPitch = 0x0002,      // bit 1
-    RequestPictures = 0x0008,      // bit 3
-    RequestUndo = 0x0010,          // bit 4
-    RequestMouse = 0x0020,         // bit 5
-    RequestColours = 0x0040,       // bit 6
-    RequestSoundEffects = 0x0080,  // bit 7
+    Transcripting = 0x0001,       // bit 0
+    ForceFixedPitch = 0x0002,     // bit 1
+    RequestPictures = 0x0008,     // bit 3
+    RequestUndo = 0x0010,         // bit 4
+    RequestMouse = 0x0020,        // bit 5
+    RequestColours = 0x0040,      // bit 6
+    RequestSoundEffects = 0x0080, // bit 7
 }
 
 pub fn field_byte(state: &State, field: HeaderField) -> Result<u8, RuntimeError> {
@@ -72,19 +74,11 @@ pub fn field_word(state: &State, field: HeaderField) -> Result<u16, RuntimeError
     state.read_word(field as usize)
 }
 
-pub fn set_byte(
-    state: &mut State,
-    field: HeaderField,
-    value: u8,
-) -> Result<(), RuntimeError> {
+pub fn set_byte(state: &mut State, field: HeaderField, value: u8) -> Result<(), RuntimeError> {
     state.write_byte(field as usize, value)
 }
 
-pub fn set_word(
-    state: &mut State,
-    field: HeaderField,
-    value: u16,
-) -> Result<(), RuntimeError> {
+pub fn set_word(state: &mut State, field: HeaderField, value: u16) -> Result<(), RuntimeError> {
     state.write_word(field as usize, value)
 }
 
@@ -144,7 +138,6 @@ pub fn set_extension(state: &mut State, index: usize, value: u16) -> Result<(), 
         if table_size >= index {
             state.write_word(extension_table_address + (index * 2), value)?;
         }
-
     }
 
     Ok(())

@@ -3,9 +3,8 @@
 
 use crate::error::*;
 use crate::zmachine::state::header::*;
-use crate::zmachine::instruction::*;
 use crate::zmachine::state::memory::Memory;
-use crate::zmachine::State;
+use crate::zmachine::{instruction::*, ZMachine};
 
 mod processor_0op;
 mod processor_1op;
@@ -13,18 +12,21 @@ mod processor_2op;
 mod processor_ext;
 mod processor_var;
 
-fn operand_value(state: &mut State, operand: &Operand) -> Result<u16, RuntimeError> {
+fn operand_value(zmachine: &mut ZMachine, operand: &Operand) -> Result<u16, RuntimeError> {
     match operand.operand_type() {
         OperandType::SmallConstant | OperandType::LargeConstant => Ok(operand.value()),
-        OperandType::Variable => state.variable(operand.value() as u8),
+        OperandType::Variable => zmachine.state.variable(operand.value() as u8),
     }
 }
 
-fn operand_values(state: &mut State, instruction: &Instruction) -> Result<Vec<u16>, RuntimeError> {
+fn operand_values(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<Vec<u16>, RuntimeError> {
     let mut v = Vec::new();
     let mut s = "Operands: ".to_string();
     for o in instruction.operands() {
-        let value = operand_value(state, &o);
+        let value = operand_value(zmachine, &o);
         match value {
             Ok(val) => {
                 match o.operand_type() {
@@ -42,7 +44,7 @@ fn operand_values(state: &mut State, instruction: &Instruction) -> Result<Vec<u1
 }
 
 fn branch(
-    state: &mut State,
+    zmachine: &mut ZMachine,
     instruction: &Instruction,
     condition: bool,
 ) -> Result<usize, RuntimeError> {
@@ -50,8 +52,8 @@ fn branch(
         Some(b) => {
             if condition == b.condition() {
                 match b.branch_address {
-                    0 => state.return_routine(0), // return false
-                    1 => state.return_routine(1), // return true,
+                    0 => zmachine.state.return_routine(0), // return false
+                    1 => zmachine.state.return_routine(1), // return true,
                     _ => Ok(b.branch_address()),
                 }
             } else {
@@ -63,19 +65,19 @@ fn branch(
 }
 
 fn store_result(
-    state: &mut State,
+    zmachine: &mut ZMachine,
     instruction: &Instruction,
     value: u16,
 ) -> Result<(), RuntimeError> {
     trace!(target: "app::trace", "Storing {} to {:?}", value, instruction.store());
     match instruction.store() {
-        Some(s) => state.set_variable(s.variable, value),
+        Some(s) => zmachine.state.set_variable(s.variable, value),
         None => Ok(()),
     }
 }
 
 fn call_fn(
-    state: &mut State,
+    zmachine: &mut ZMachine,
     address: usize,
     return_addr: usize,
     arguments: &Vec<u16>,
@@ -84,7 +86,7 @@ fn call_fn(
     match address {
         0 | 1 => {
             match result {
-                Some(r) => match state.set_variable(r.variable, address as u16) {
+                Some(r) => match zmachine.state.set_variable(r.variable, address as u16) {
                     Ok(_) => (),
                     Err(e) => return Err(e),
                 },
@@ -93,7 +95,9 @@ fn call_fn(
 
             Ok(return_addr)
         }
-        _ => state.call_routine(address, arguments, result, return_addr),
+        _ => zmachine
+            .state
+            .call_routine(address, arguments, result, return_addr),
     }
 }
 
@@ -128,7 +132,7 @@ fn packed_string_address(memory: &Memory, address: u16) -> Result<usize, Runtime
     }
 }
 
-pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
+pub fn dispatch(state: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     info!(target: "app::instruction", "{}", instruction);
     match instruction.opcode().form() {
         OpcodeForm::Ext => match instruction.opcode().instruction() {
@@ -176,7 +180,7 @@ pub fn dispatch(state: &mut State, instruction: &Instruction) -> Result<usize, R
                 0x7 => processor_0op::restart(state, instruction),
                 0x8 => processor_0op::ret_popped(state, instruction),
                 0x9 => {
-                    if state.version < 5 {
+                    if state.version() < 5 {
                         processor_0op::pop(state, instruction)
                     } else {
                         processor_0op::catch(state, instruction)

@@ -1,11 +1,10 @@
-use crate::error::*;
-use crate::zmachine::State;
+use crate::{error::*, zmachine::state::{State, header::{self, HeaderField}}};
 
-use super::*;
+use super::object_address;
 
 fn property_table_address(state: &State, object: usize) -> Result<usize, RuntimeError> {
     let object_address = object_address(state, object)?;
-    let offset = match state.version {
+    let offset = match state.version() {
         3 => 7,
         _ => 12,
     };
@@ -20,7 +19,7 @@ fn address(state: &State, object: usize, property: u8) -> Result<usize, RuntimeE
     let mut property_address = property_table_address + 1 + (header_size * 2);
     let mut size_byte = state.read_byte(property_address)?;
     while size_byte != 0 {
-        if state.version == 3 {
+        if state.version() == 3 {
             let prop_num = size_byte & 0x1F;
             let prop_size = (size_byte as usize / 32) + 1;
             if prop_num == property {
@@ -65,7 +64,7 @@ fn address(state: &State, object: usize, property: u8) -> Result<usize, RuntimeE
 
 fn size(state: &State, property_address: usize) -> Result<usize, RuntimeError> {
     let size_byte = state.read_byte(property_address)?;
-    match state.version {
+    match state.version() {
         3 => Ok((size_byte as usize / 32) + 1),
         _ => match size_byte & 0xc0 {
             0x40 => Ok(2),
@@ -83,7 +82,7 @@ fn size(state: &State, property_address: usize) -> Result<usize, RuntimeError> {
 }
 
 fn data_address(state: &State, property_address: usize) -> Result<usize, RuntimeError> {
-    match state.version {
+    match state.version() {
         3 => Ok(property_address + 1),
         _ => {
             let b = state.read_byte(property_address)?;
@@ -114,7 +113,7 @@ pub fn property_length(state: &State, property_data_address: usize) -> Result<us
         Ok(0)
     } else {
         let size_byte = state.read_byte(property_data_address - 1)?;
-        match state.version {
+        match state.version() {
             1 | 2 | 3 => size(state, property_data_address - 1),
             4 | 5 | 6 | 7 | 8 => {
                 if size_byte & 0x80 == 0x80 {
@@ -171,7 +170,7 @@ pub fn next_property(state: &State, object: usize, property: u8) -> Result<u8, R
         let prop_table = property_table_address(state, object)?;
         let header_size = state.read_byte(prop_table)? as usize;
         let p1 = state.read_byte(prop_table + 1 + (header_size * 2))?;
-        if state.version < 4 {
+        if state.version() < 4 {
             Ok(p1 & 0x1f)
         } else {
             Ok(p1 & 0x3f)
@@ -184,7 +183,7 @@ pub fn next_property(state: &State, object: usize, property: u8) -> Result<u8, R
             let prop_len = size(state, prop_addr)?;
             let next_prop =
                 state.read_byte(property_data_address(state, object, property)? + prop_len)?;
-            if state.version < 4 {
+            if state.version() < 4 {
                 Ok(next_prop & 0x1f)
             } else {
                 Ok(next_prop & 0x3f)
@@ -207,7 +206,7 @@ pub fn set_property(
         ))
     } else {
         let property_size = size(state, property_address)?;
-        let property_data = match state.version {
+        let property_data = match state.version() {
             3 => property_address + 1,
             _ => {
                 let b = state.read_byte(property_address)?;

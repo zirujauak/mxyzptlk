@@ -1,71 +1,100 @@
-use super::*;
-use crate::zmachine::object;
-use crate::zmachine::object::property;
-use crate::zmachine::text;
-use crate::zmachine::State;
+use crate::{
+    error::{ErrorCode, RuntimeError},
+    zmachine::{
+        instruction::Instruction,
+        object::{
+            self, child, parent,
+            property::{property_length, short_name},
+            set_child, set_parent, set_sibling, sibling,
+        },
+        text::{as_text, from_vec},
+        ZMachine,
+    },
+};
 
-pub fn jz(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    branch(state, instruction, operands[0] == 0)
+use super::{branch, operand_values, packed_routine_address, packed_string_address, store_result};
+
+pub fn jz(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    branch(zmachine, instruction, operands[0] == 0)
 }
 
-pub fn get_sibling(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let sibling = object::sibling(state, operands[0] as usize)?;
-    store_result(state, instruction, sibling as u16)?;
-    branch(state, instruction, sibling != 0)
+pub fn get_sibling(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let sibling = object::sibling(&zmachine.state, operands[0] as usize)?;
+    store_result(zmachine, instruction, sibling as u16)?;
+    branch(zmachine, instruction, sibling != 0)
 }
 
-pub fn get_child(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let child = object::child(state, operands[0] as usize)?;
-    store_result(state, instruction, child as u16)?;
-    branch(state, instruction, child != 0)
+pub fn get_child(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let child = object::child(&zmachine.state, operands[0] as usize)?;
+    store_result(zmachine, instruction, child as u16)?;
+    branch(zmachine, instruction, child != 0)
 }
 
-pub fn get_parent(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let parent = object::parent(state, operands[0] as usize)?;
-    store_result(state, instruction, parent as u16)?;
+pub fn get_parent(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let parent = object::parent(&zmachine.state, operands[0] as usize)?;
+    store_result(zmachine, instruction, parent as u16)?;
     Ok(instruction.next_address())
 }
 
-pub fn get_prop_len(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let len = property::property_length(state, operands[0] as usize)?;
-    store_result(state, instruction, len as u16)?;
+pub fn get_prop_len(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let len = property_length(&zmachine.state, operands[0] as usize)?;
+    store_result(zmachine, instruction, len as u16)?;
     Ok(instruction.next_address())
 }
 
-pub fn inc(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let val = state.peek_variable(operands[0] as u8)?;
+pub fn inc(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let val = zmachine.state.peek_variable(operands[0] as u8)?;
     let new_val = i16::overflowing_add(val as i16, 1);
-    state.set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
+    zmachine
+        .state
+        .set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
     Ok(instruction.next_address())
 }
 
-pub fn dec(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let val = state.peek_variable(operands[0] as u8)?;
+pub fn dec(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let val = zmachine.state.peek_variable(operands[0] as u8)?;
     let new_val = i16::overflowing_sub(val as i16, 1);
-    state.set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
+    zmachine
+        .state
+        .set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
     Ok(instruction.next_address())
 }
 
-pub fn print_addr(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let text = text::as_text(state, operands[0] as usize)?;
+pub fn print_addr(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let text = as_text(&zmachine.state, operands[0] as usize)?;
 
-    state.print(&text)?;
+    zmachine.print(&text)?;
     Ok(instruction.next_address())
 }
 
-pub fn call_1s(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let address = packed_routine_address(state.memory(), operands[0])?;
+pub fn call_1s(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let address = packed_routine_address(zmachine.state.memory(), operands[0])?;
 
-    state.call_routine(
+    zmachine.call_routine(
         address,
         &vec![],
         instruction.store,
@@ -73,20 +102,23 @@ pub fn call_1s(state: &mut State, instruction: &Instruction) -> Result<usize, Ru
     )
 }
 
-pub fn remove_obj(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
+pub fn remove_obj(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
     let object = operands[0] as usize;
     if object > 0 {
-        let parent = object::parent(state, object)?;
+        let parent = parent(&zmachine.state, object)?;
         if parent != 0 {
-            let parent_child = object::child(state, parent)?;
+            let parent_child = child(&zmachine.state, parent)?;
             if parent_child == object {
-                let sibling = object::sibling(state, object)?;
-                object::set_child(state, parent, sibling)?;
+                let sibling = sibling(&zmachine.state, object)?;
+                set_child(&mut zmachine.state, parent, sibling)?;
             } else {
                 let mut sibling = parent_child;
-                while sibling != 0 && object::sibling(state, sibling)? != object {
-                    sibling = object::sibling(state, sibling)?;
+                while sibling != 0 && object::sibling(&zmachine.state, sibling)? != object {
+                    sibling = object::sibling(&zmachine.state, sibling)?;
                 }
 
                 if sibling == 0 {
@@ -96,62 +128,73 @@ pub fn remove_obj(state: &mut State, instruction: &Instruction) -> Result<usize,
                     ));
                 }
 
-                object::set_sibling(state, sibling, object::sibling(state, object)?)?;
+                let o = object::sibling(&zmachine.state, object)?;
+                set_sibling(
+                    &mut zmachine.state,
+                    sibling,
+                    o,
+                )?;
             }
 
-            object::set_parent(state, object, 0)?;
-            object::set_sibling(state, object, 0)?;
+            set_parent(&mut zmachine.state, object, 0)?;
+            set_sibling(&mut zmachine.state, object, 0)?;
         }
     }
 
     Ok(instruction.next_address())
 }
 
-pub fn print_obj(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let ztext = property::short_name(state, operands[0] as usize)?;
-    let text = text::from_vec(state, &ztext)?;
-    state.print(&text)?;
+pub fn print_obj(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let ztext = short_name(&zmachine.state, operands[0] as usize)?;
+    let text = from_vec(&zmachine.state, &ztext)?;
+    zmachine.print(&text)?;
     // context.print_string(text);
     Ok(instruction.next_address())
 }
 
-pub fn ret(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    state.return_routine(operands[0])
+pub fn ret(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    zmachine.return_routine(operands[0])
 }
 
-pub fn jump(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
+pub fn jump(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
     let address = (instruction.next_address() as isize) + (operands[0] as i16) as isize - 2;
     Ok(address as usize)
 }
 
-pub fn print_paddr(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let address = packed_string_address(state.memory(), operands[0])?;
-    let text = text::as_text(state, address)?;
-    state.print(&text)?;
+pub fn print_paddr(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let address = packed_string_address(zmachine.state.memory(), operands[0])?;
+    let text = as_text(&zmachine.state, address)?;
+    zmachine.print(&text)?;
     // context.print_string(text);
     Ok(instruction.next_address())
 }
 
-pub fn load(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let value = state.peek_variable(operands[0] as u8)?;
-    store_result(state, instruction, value)?;
+pub fn load(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let value = zmachine.state.peek_variable(operands[0] as u8)?;
+    store_result(zmachine, instruction, value)?;
     Ok(instruction.next_address())
 }
 
-pub fn not(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
+pub fn not(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
     let value = !operands[0];
-    store_result(state, instruction, value)?;
+    store_result(zmachine, instruction, value)?;
     Ok(instruction.next_address())
 }
 
-pub fn call_1n(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let address = packed_routine_address(state.memory(), operands[0])?;
-    state.call_routine(address, &vec![], None, instruction.next_address())
+pub fn call_1n(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let address = packed_routine_address(zmachine.state.memory(), operands[0])?;
+    zmachine.call_routine(address, &vec![], None, instruction.next_address())
 }

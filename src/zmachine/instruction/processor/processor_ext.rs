@@ -1,80 +1,80 @@
 use super::*;
 
-pub fn save(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
+pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
     if operands.len() > 0 {
         Err(RuntimeError::new(
             ErrorCode::UnimplementedInstruction,
             "SAVE table not implemented".to_string(),
         ))
     } else {
-        let save_data = state.prepare_save(instruction.store().unwrap().address)?;
-        match state.prompt_and_write("Save to: ", "ifzs", &save_data) {
+        let save_data = zmachine.state.save(instruction.store().unwrap().address)?;
+        match zmachine.prompt_and_write("Save to: ", "ifzs", &save_data) {
             Ok(_) => {
-                store_result(state, instruction, 1)?;
+                store_result(zmachine, instruction, 1)?;
             }
             Err(e) => {
-                state.print(
+                zmachine.print(
                     &format!("Error writing: {}\r", e)
                         .chars()
                         .map(|c| c as u16)
                         .collect(),
                 )?;
-                store_result(state, instruction, 0)?;
+                store_result(zmachine, instruction, 0)?;
             }
         }
         Ok(instruction.next_address())
     }
 }
 
-pub fn restore(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
+pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
     if operands.len() > 0 {
         Err(RuntimeError::new(
             ErrorCode::UnimplementedInstruction,
             "RESTORE table not implemented".to_string(),
         ))
     } else {
-        match state.prompt_and_read("Restore from: ", "ifzs") {
-            Ok(save_data) => match state.restore(save_data) {
+        match zmachine.prompt_and_read("Restore from: ", "ifzs") {
+            Ok(save_data) => match zmachine.state.restore(save_data) {
                 Ok(address) => match address {
                     Some(a) => {
-                        let i = decoder::decode_instruction(state.memory(), a - 3)?;
-                        store_result(state, &i, 2)?;
+                        let i = decoder::decode_instruction(zmachine.state.memory(), a - 3)?;
+                        store_result(zmachine, &i, 2)?;
                         Ok(i.next_address())
                     }
                     None => {
-                        store_result(state, instruction, 0)?;
+                        store_result(zmachine, instruction, 0)?;
                         Ok(instruction.next_address())
                     }
                 },
                 Err(e) => {
-                    state.print(
+                    zmachine.print(
                         &format!("Error restoring: {}\r", e)
                             .chars()
                             .map(|c| c as u16)
                             .collect(),
                     )?;
-                    store_result(state, instruction, 0)?;
+                    store_result(zmachine, instruction, 0)?;
                     Ok(instruction.next_address())
                 }
             },
             Err(e) => {
-                state.print(
+                zmachine.print(
                     &format!("Error reading: {}\r", e)
                         .chars()
                         .map(|c| c as u16)
                         .collect(),
                 )?;
-                store_result(state, instruction, 0)?;
+                store_result(zmachine, instruction, 0)?;
                 Ok(instruction.next_address())
             }
         }
     }
 }
 
-pub fn log_shift(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
+pub fn log_shift(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
     let value = operands[0];
     let places = operands[1] as i16;
     let new_value = if places < 0 && places > -16 {
@@ -88,12 +88,12 @@ pub fn log_shift(state: &mut State, instruction: &Instruction) -> Result<usize, 
         0
     };
 
-    store_result(state, instruction, new_value)?;
+    store_result(zmachine, instruction, new_value)?;
     Ok(instruction.next_address())
 }
 
-pub fn art_shift(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
+pub fn art_shift(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
     let value = operands[0] as i16;
     let places = operands[1] as i16;
     let new_value = if places < 0 && places > -16 {
@@ -107,14 +107,14 @@ pub fn art_shift(state: &mut State, instruction: &Instruction) -> Result<usize, 
         0
     };
 
-    store_result(state, instruction, new_value as u16)?;
+    store_result(zmachine, instruction, new_value as u16)?;
     Ok(instruction.next_address())
 }
 
-pub fn set_font(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let operands = operand_values(state, instruction)?;
-    let result = state.set_font(operands[0])?;
-    store_result(state, instruction, result)?;
+pub fn set_font(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let result = zmachine.set_font(operands[0])?;
+    store_result(zmachine, instruction, result)?;
     Ok(instruction.next_address())
 }
 
@@ -138,28 +138,28 @@ pub fn set_font(state: &mut State, instruction: &Instruction) -> Result<usize, R
 //     todo!()
 // }
 
-pub fn save_undo(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    state.save_undo(instruction)?;
-    store_result(state, instruction, 1)?;
+pub fn save_undo(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    zmachine.state.save_undo(instruction.store().unwrap().address())?;
+    store_result(zmachine, instruction, 1)?;
     Ok(instruction.next_address())
 }
 
-pub fn restore_undo(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    match state.restore_undo() {
+pub fn restore_undo(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    match zmachine.state.restore_undo(instruction.store().unwrap().address()) {
         Ok(pc) => match pc {
             Some(address) => {
-                let i = decoder::decode_instruction(state.memory(), address - 3)?;
-                store_result(state, &i, 2)?;
+                let i = decoder::decode_instruction(zmachine.state.memory(), address - 3)?;
+                store_result(zmachine, &i, 2)?;
                 Ok(i.next_address())
             }
             None => {
-                store_result(state, instruction, 0)?;
+                store_result(zmachine, instruction, 0)?;
                 Ok(instruction.next_address())
             }
         },
         Err(e) => {
-            error!(target: "app::quetzal", "Error restoring from undo state: {}", e);
-            store_result(state, instruction, 0)?;
+            error!(target: "app::quetzal", "Error restoring from undo zmachine: {}", e);
+            store_result(zmachine, instruction, 0)?;
             Ok(instruction.next_address())
         }
     }

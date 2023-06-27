@@ -18,7 +18,7 @@ use crate::config::Config;
 use crate::log::*;
 use iff::blorb::Blorb;
 use zmachine::sound::Sounds;
-use zmachine::State;
+use zmachine::ZMachine;
 use zmachine::state::memory::Memory;
 
 fn open_blorb(name: &str) -> Option<Sounds> {
@@ -98,27 +98,22 @@ fn main() {
 
     match File::open(filename) {
         Ok(mut f) => {
-            let mut buffer = Vec::new();
-            match f.read_to_end(&mut buffer) {
-                Ok(_) => {
-                    let memory = Memory::new(&buffer);
+            match Memory::try_from(&mut f) {
+                Ok(memory) => {
                     let blorb = open_blorb(&name);
-                    let mut state =
-                        State::new(memory, config, blorb, &name).expect("Error creating state");
-                    if let Err(e) = state.initialize() {
-                        panic!("{}", e);
-                    }
+                    let mut zmachine =
+                        ZMachine::new(memory, config, blorb, &name).expect("Error creating state");
 
                     trace!(target: "app::trace", "Begin execution");
-                    if let Err(r) = state.run() {
+                    if let Err(r) = zmachine.run() {
                         let error: Vec<_> = format!("\r{}\rPress any key to exit", r)
                             .as_bytes()
                             .iter()
                             .map(|x| *x as u16)
                             .collect();
-                        let _ = state.print(&error);
-                        let _ = state.read_key(0);
-                        let _ = state.quit();
+                        let _ = zmachine.print(&error);
+                        let _ = zmachine.read_key(0);
+                        let _ = zmachine.quit();
                         panic!("{}", r)
                     }
                 }

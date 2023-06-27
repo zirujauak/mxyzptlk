@@ -1,5 +1,4 @@
-use crate::zmachine::State;
-use crate::error::*;
+use crate::{error::*, zmachine::state::State};
 
 use super::object_address;
 
@@ -12,7 +11,7 @@ pub fn value(
     let offset = attribute as usize / 8;
     let address = object_address + offset;
     let mask = 1 << (7 - (attribute % 8));
-    let max = match state.version {
+    let max = match state.version() {
         3 => 32,
         _ => 48
     };
@@ -34,7 +33,7 @@ pub fn set(
     let offset = attribute as usize / 8;
     let address = object_address + offset;
     let mask = 1 << (7 - (attribute % 8));
-    let max = match state.version {
+    let max = match state.version() {
         3 => 32,
         _ => 48
     };
@@ -56,7 +55,7 @@ pub fn clear(
     let offset = attribute as usize / 8;
     let address = object_address + offset;
     let mask: u8 = 1 << 7 - (attribute % 8);
-    let max = match state.version {
+    let max = match state.version() {
         3 => 32,
         _ => 48
     };

@@ -1,7 +1,6 @@
 use crate::error::*;
-use crate::zmachine::State;
 
-use super::state::header::{self, HeaderField};
+use super::state::{header::{self, HeaderField}, State};
 
 const ALPHABET_V3: [[char; 26]; 3] = [
     [
@@ -52,19 +51,20 @@ fn abbreviation(state: &State, abbrev_table: u8, index: u8) -> Result<Vec<u16>, 
 /// * `v` - Version (1-8)
 /// * `a` - Address of the ZSCII-encoded string
 pub fn as_text(state: &State, address: usize) -> Result<Vec<u16>, RuntimeError> {
-    let mut d = Vec::new();
-    // If the last word read has bit 15 set, then we're done reading
-    while match d.last() {
-        Some(x) => *x,
-        _ => 0,
-    } & 0x8000
-        == 0
-    {
-        let w = state.memory().read_word(address + (d.len() * 2))?;
-        d.push(w);
-    }
+    let text = state.string_literal(address)?;
+    // let mut d = Vec::new();
+    // // If the last word read has bit 15 set, then we're done reading
+    // while match d.last() {
+    //     Some(x) => *x,
+    //     _ => 0,
+    // } & 0x8000
+    //     == 0
+    // {
+    //     let w = state.memory().read_word(address + (d.len() * 2))?;
+    //     d.push(w);
+    // }
 
-    from_vec(state, &d)
+    from_vec(state, &text)
 }
 
 /// Decode a vector of ZSCII words to a string
@@ -75,7 +75,7 @@ pub fn as_text(state: &State, address: usize) -> Result<Vec<u16>, RuntimeError> 
 /// * `v` - Version (1-8)
 /// * `z` - Vector of ZSCII-encoded words
 pub fn from_vec(state: &State, ztext: &Vec<u16>) -> Result<Vec<u16>, RuntimeError> {
-    let mut alphabet_shift = 0;
+    let mut alphabet_shift: usize = 0;
     let mut s = Vec::new();
     let mut i = 0;
 
@@ -286,7 +286,7 @@ pub fn from_dictionary(
     let separator_count = state.read_byte(dictionary_address)? as usize;
     let entry_size = state.read_byte(dictionary_address + separator_count + 1)? as usize;
     let entry_count = state.read_word(dictionary_address + separator_count + 2)? as i16;
-    let word_count = if state.memory().read_byte(0)? < 4 {
+    let word_count = if state.version() < 4 {
         2
     } else {
         3
@@ -329,7 +329,7 @@ fn find_word(
     word: &Vec<char>,
 ) -> Result<(usize, usize), RuntimeError> {
     let entry = from_dictionary(state, dictionary, word)?;
-    let offset = if state.version < 5 { 1 } else { 2 };
+    let offset = if state.version() < 5 { 1 } else { 2 };
 
     info!(target: "app::input", "LEXICAL ANALYSIS: {:?} => {:04x}", word, entry);
     let parse_address = parse_buffer + 2 + (4 * parse_index);
@@ -392,7 +392,7 @@ pub fn parse_text(
     let mut words: usize = 0;
     let mut data = Vec::new();
 
-    if state.version < 5 {
+    if state.version() < 5 {
         // Buffer is 0 terminated
         let mut i = 1;
         loop {
