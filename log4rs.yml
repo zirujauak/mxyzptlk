@@ -101,7 +101,7 @@ loggers:
     additive: false
 
   app::frame:
-    level: info
+    level: debug
     appenders:
       - frame
     additive: false
