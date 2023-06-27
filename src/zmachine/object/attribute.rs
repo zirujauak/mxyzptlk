@@ -1,4 +1,4 @@
-use crate::state::State;
+use crate::zmachine::State;
 use crate::error::*;
 
 use super::object_address;

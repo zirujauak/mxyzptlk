@@ -1,8 +1,8 @@
 use super::*;
-use crate::state::object;
-use crate::state::object::property;
-use crate::state::text;
-use crate::state::State;
+use crate::zmachine::object;
+use crate::zmachine::object::property;
+use crate::zmachine::text;
+use crate::zmachine::State;
 
 pub fn jz(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;

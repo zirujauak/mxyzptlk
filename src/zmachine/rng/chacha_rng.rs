@@ -2,7 +2,7 @@ use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
-use crate::state::rng::*;
+use crate::zmachine::rng::*;
 
 pub struct ChaChaRng {
     mode: Mode,

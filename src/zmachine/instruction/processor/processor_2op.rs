@@ -1,9 +1,9 @@
 use super::*;
 use crate::error::RuntimeError;
-use crate::state::object;
-use crate::state::object::attribute;
-use crate::state::object::property;
-use crate::state::State;
+use crate::zmachine::object;
+use crate::zmachine::object::attribute;
+use crate::zmachine::object::property;
+use crate::zmachine::State;
 
 pub fn je(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;

@@ -1,7 +1,7 @@
 use crate::error::*;
-use crate::state::header;
-use crate::state::header::*;
-use crate::state::State;
+use crate::zmachine::State;
+
+use super::state::header::{self, HeaderField};
 
 const ALPHABET_V3: [[char; 26]; 3] = [
     [

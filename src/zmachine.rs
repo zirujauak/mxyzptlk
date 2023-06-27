@@ -1,15 +1,14 @@
 mod files;
 mod frame;
-pub mod header;
 mod input;
 mod instruction;
-pub mod memory;
 mod object;
 mod rng;
 mod save_restore;
 mod screen;
 pub mod sound;
 mod text;
+pub mod state;
 
 use std::fs;
 use std::fs::File;
@@ -24,17 +23,24 @@ use crate::config::Config;
 use crate::error::*;
 use crate::iff::quetzal::ifhd::IFhd;
 use crate::iff::quetzal::Quetzal;
-use header::*;
-use instruction::*;
-use memory::*;
-use object::property;
-use rng::chacha_rng::*;
+use rng::chacha_rng::ChaChaRng;
 use rng::RNG;
 use screen::buffer::CellStyle;
 use screen::*;
 
 use self::frame::Frame;
+use self::instruction::Instruction;
+use self::instruction::StoreResult;
+use self::instruction::decoder;
+use self::instruction::processor;
+use self::object::property;
 use self::sound::Sounds;
+use self::state::header;
+use self::state::header::Flags1v3;
+use self::state::header::Flags1v4;
+use self::state::header::Flags2;
+use self::state::header::HeaderField;
+use self::state::memory::Memory;
 
 pub struct Stream3 {
     table: usize,

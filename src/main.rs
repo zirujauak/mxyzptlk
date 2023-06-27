@@ -11,15 +11,15 @@ use std::path::Path;
 pub mod config;
 pub mod error;
 pub mod iff;
-pub mod state;
+pub mod zmachine;
 
 use crate::config::Config;
 //use crate::iff::Chunk;
 use crate::log::*;
 use iff::blorb::Blorb;
-use state::memory::*;
-use state::sound::Sounds;
-use state::State;
+use zmachine::sound::Sounds;
+use zmachine::State;
+use zmachine::state::memory::Memory;
 
 fn open_blorb(name: &str) -> Option<Sounds> {
     let filename = format!("{}.blorb", name);

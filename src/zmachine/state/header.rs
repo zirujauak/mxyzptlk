@@ -1,6 +1,4 @@
-use crate::error::*;
-
-use super::State;
+use crate::{error::*, zmachine::State};
 
 pub enum HeaderField {
     Version = 0x00,

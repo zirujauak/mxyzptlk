@@ -5,13 +5,10 @@ use crate::{
         ifhd::IFhd,
         stks::{StackFrame, Stks},
         Quetzal,
-    },
+    }, zmachine::state::header::{self, HeaderField},
 };
 
-use super::{
-    header::{self, HeaderField},
-    State,
-};
+use super::State;
 
 pub fn compress(memory: &Vec<u8>, dynamic: &Vec<u8>) -> Vec<u8> {
     let mut save_data: Vec<u8> = Vec::new();

@@ -2,11 +2,11 @@ use easycurses::Color;
 use easycurses::ColorPair;
 use easycurses::*;
 
-use crate::state::screen;
-use crate::state::screen::InputEvent;
-use crate::state::screen::Style;
-use crate::state::screen::Terminal;
-use crate::state::screen::buffer::CellStyle;
+use crate::zmachine::screen;
+use crate::zmachine::screen::InputEvent;
+use crate::zmachine::screen::Style;
+use crate::zmachine::screen::Terminal;
+use crate::zmachine::screen::buffer::CellStyle;
 
 pub struct ECTerminal {
     easycurses: EasyCurses,

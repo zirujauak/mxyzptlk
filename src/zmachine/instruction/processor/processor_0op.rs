@@ -1,6 +1,8 @@
 use super::*;
-use crate::state::text;
-use crate::state::State;
+use crate::zmachine::state::header;
+use crate::zmachine::state::header::HeaderField;
+use crate::zmachine::text;
+use crate::zmachine::State;
 
 pub fn rtrue(state: &mut State, _instruction: &Instruction) -> Result<usize, RuntimeError> {
     state.return_routine(1)

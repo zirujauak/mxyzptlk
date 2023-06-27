@@ -2,11 +2,10 @@
 // use crate::executor::context::{error::ContextError, header, Context};
 
 use crate::error::*;
-use crate::state::header;
-use crate::state::header::*;
-use crate::state::instruction::*;
-use crate::state::memory::Memory;
-use crate::state::State;
+use crate::zmachine::state::header::*;
+use crate::zmachine::instruction::*;
+use crate::zmachine::state::memory::Memory;
+use crate::zmachine::State;
 
 mod processor_0op;
 mod processor_1op;

@@ -1,5 +1,5 @@
 use super::*;
-use crate::state::{object::property, text, screen::Interrupt};
+use crate::zmachine::{object::property, text, screen::Interrupt, state::header::{self, HeaderField}};
 
 pub fn call_vs(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(state, instruction)?;
@@ -561,7 +561,12 @@ pub fn print_table(state: &mut State, instruction: &Instruction) -> Result<usize
 
     let origin = state.cursor()?;
     for i in 0..height as usize {
-        state.set_cursor(origin.0 + i as u16, origin.1)?;
+        if origin.0 as u32 + i as u32 > state.screen().rows() {
+            state.new_line()?;
+            state.set_cursor(state.screen().rows() as u16, origin.1)?;
+        } else {
+            state.set_cursor(origin.0 + i as u16, origin.1)?;
+        }
         for j in 0..width {
             let offset = i * (width + skip);
             state.print(&vec![state.read_byte(table + offset + j)? as u16])?;
