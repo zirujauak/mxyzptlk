@@ -83,20 +83,20 @@ pub fn decompress(cmem: &CMem, dynamic: &Vec<u8>) -> Vec<u8> {
     data
 }
 
-impl TryFrom<&State> for IFhd {
+impl TryFrom<(&State, usize)> for IFhd {
     type Error = RuntimeError;
 
-    fn try_from(value: &State) -> Result<Self, Self::Error> {
+    fn try_from((state, pc): (&State, usize)) -> Result<Self, Self::Error> {
         debug!(target: "app::quetzal", "Building IFhd chunk from state");
 
-        let release_number = header::field_word(value, HeaderField::Release)?;
+        let release_number = header::field_word(state, HeaderField::Release)?;
         let mut serial_number = Vec::new();
         for i in 0..6 {
-            serial_number.push(value.read_byte(HeaderField::Serial as usize + i)?);
+            serial_number.push(state.read_byte(HeaderField::Serial as usize + i)?);
         }
-        let checksum = header::field_word(value, HeaderField::Checksum)?;
+        let checksum = header::field_word(state, HeaderField::Checksum)?;
 
-        let ifhd = IFhd::new(release_number, &serial_number, checksum, 0);
+        let ifhd = IFhd::new(release_number, &serial_number, checksum, (pc as u32) & 0xFFFFFF);
         debug!(target: "app::quetzal", "IFhd: {}", ifhd);
         Ok(ifhd)
     }
@@ -108,7 +108,7 @@ impl TryFrom<&State> for Stks {
     fn try_from(value: &State) -> Result<Self, Self::Error> {
         debug!(target: "app::quetzal", "Building Stks chunk from state");
         let mut frames = Vec::new();
-        for f in value.frame_stack().frames() {
+        for f in &value.frames {
             // Flags: 0b000rvvvv
             //  r = 1 if the frame routine does not store a result
             //  vvvv = the number of local variables (0 - 15)
@@ -149,8 +149,7 @@ impl TryFrom<&State> for Stks {
 }
 
 pub fn quetzal(state: &State, pc: usize) -> Result<Quetzal, RuntimeError> {
-    let mut ifhd = IFhd::try_from(state)?;
-    ifhd.set_pc(pc as u32 & 0xFFFFFF);
+    let ifhd = IFhd::try_from((state, pc))?;
     let cmem = CMem::try_from(state)?;
     let stks = Stks::try_from(state)?;
 

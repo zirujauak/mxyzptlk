@@ -145,7 +145,7 @@ pub fn read(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
         if let Some(_) = state.sound_interrupt {
             return state.call_sound_interrupt(instruction.address());
         } else {
-            return state.read_interrupt(routine, instruction.address());
+            return state.call_read_interrupt(routine, instruction.address());
         }
     }
 
@@ -239,8 +239,11 @@ pub fn pull(state: &mut State, instruction: &Instruction) -> Result<usize, Runti
     let operands = operand_values(state, instruction)?;
     let value = state.variable(0)?;
 
+    // If pulling to the stack, need to remove what was underneath the
+    // value pulled before pushing it back.  This effectively discards
+    // the second value in the stack.
     if operands[0] == 0 {
-        state.frame_stack.current_frame_mut()?.pop()?;
+        state.current_frame_mut()?.local_variable(0)?;
     }
 
     state.set_variable(operands[0] as u8, value)?;
@@ -400,7 +403,7 @@ pub fn read_char(state: &mut State, instruction: &Instruction) -> Result<usize, 
         None => {
             if let Some(i) = key.interrupt() {
                 match i {
-                    Interrupt::ReadTimeout => state.read_interrupt(routine, instruction.address()),
+                    Interrupt::ReadTimeout => state.call_read_interrupt(routine, instruction.address()),
                     Interrupt::Sound => state.call_sound_interrupt(instruction.address()),
                 }
             } else {
@@ -577,6 +580,6 @@ pub fn check_arg_count(
     branch(
         state,
         instruction,
-        state.frame_stack().current_frame()?.argument_count() >= operands[0] as u8,
+        state.current_frame()?.argument_count() >= operands[0] as u8,
     )
 }

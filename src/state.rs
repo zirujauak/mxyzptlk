@@ -1,5 +1,5 @@
 mod files;
-mod frame_stack;
+mod frame;
 pub mod header;
 mod input;
 mod instruction;
@@ -24,7 +24,6 @@ use crate::config::Config;
 use crate::error::*;
 use crate::iff::quetzal::ifhd::IFhd;
 use crate::iff::quetzal::Quetzal;
-use frame_stack::*;
 use header::*;
 use instruction::*;
 use memory::*;
@@ -34,6 +33,7 @@ use rng::RNG;
 use screen::buffer::CellStyle;
 use screen::*;
 
+use self::frame::Frame;
 use self::sound::Sounds;
 
 pub struct Stream3 {
@@ -48,7 +48,7 @@ pub struct State {
     dynamic: Vec<u8>,
     static_mark: usize,
     screen: Screen,
-    frame_stack: FrameStack,
+    frames: Vec<Frame>,
     rng: Box<dyn RNG>,
     output_streams: u8,
     stream_2: Option<File>,
@@ -91,8 +91,6 @@ impl State {
                 4 => Screen::new_v4(config)?,
                 _ => Screen::new_v5(config)?,
             };
-            let frame_stack =
-                FrameStack::new(memory.read_word(HeaderField::InitialPC as usize)? as usize);
 
             Ok(State {
                 name: name.to_string(),
@@ -101,7 +99,7 @@ impl State {
                 dynamic,
                 static_mark: static_mark,
                 screen,
-                frame_stack,
+                frames: Vec::new(),
                 rng: Box::new(rng),
                 output_streams: 0x1,
                 stream_2: None,
@@ -171,7 +169,12 @@ impl State {
         self.write_byte(0x32, 1)?;
         self.write_byte(0x33, 0)?;
 
-        //self.screen.reset();
+        if self.frames.is_empty() {
+            let pc = header::field_word(self, HeaderField::InitialPC)? as usize;
+            let f = Frame::new(pc, pc, &vec![], 0, &vec![], None, 0);
+            self.frames.clear();
+            self.frames.push(f);
+        }
 
         Ok(())
     }
@@ -180,8 +183,30 @@ impl State {
         &self.memory
     }
 
-    pub fn frame_stack(&self) -> &FrameStack {
-        &self.frame_stack
+    pub fn frames(&self) -> usize {
+        self.frames.len()
+    }
+    
+    pub fn current_frame(&self) -> Result<&Frame, RuntimeError> {
+        if let Some(frame) = self.frames.last() {
+            Ok(frame)
+        } else {
+            Err(RuntimeError::new(
+                ErrorCode::StackUnderflow,
+                format!("No runtime frame"),
+            ))
+        }
+    }
+
+    pub fn current_frame_mut(&mut self) -> Result<&mut Frame, RuntimeError> {
+        if let Some(frame) = self.frames.last_mut() {
+            Ok(frame)
+        } else {
+            Err(RuntimeError::new(
+                ErrorCode::StackUnderflow,
+                format!("No runtime frame"),
+            ))
+        }
     }
 
     pub fn dynamic(&self) -> &Vec<u8> {
@@ -293,9 +318,10 @@ impl State {
         let index = (variable as usize - 16) * 2;
         Ok(table + index)
     }
+
     pub fn variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
         if variable < 16 {
-            self.frame_stack.local_variable(variable)
+            self.current_frame_mut()?.local_variable(variable)
         } else {
             let address = self.global_variable_address(variable)?;
             self.read_word(address)
@@ -304,7 +330,7 @@ impl State {
 
     pub fn peek_variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
         if variable < 16 {
-            self.frame_stack.peek_local_variable(variable)
+            self.current_frame()?.peek_local_variable(variable)
         } else {
             let address = self.global_variable_address(variable)?;
             self.read_word(address)
@@ -313,7 +339,8 @@ impl State {
 
     pub fn set_variable(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
         if variable < 16 {
-            self.frame_stack.set_local_variable(variable, value)
+            self.current_frame_mut()?
+                .set_local_variable(variable, value)
         } else {
             let address = self.global_variable_address(variable)?;
             self.write_word(address, value)
@@ -322,7 +349,7 @@ impl State {
 
     pub fn set_variable_indirect(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
         if variable < 16 {
-            self.frame_stack
+            self.current_frame_mut()?
                 .set_local_variable_indirect(variable, value)
         } else {
             let address = self.global_variable_address(variable)?;
@@ -336,8 +363,7 @@ impl State {
     }
 
     pub fn push(&mut self, value: u16) -> Result<(), RuntimeError> {
-        self.frame_stack.set_local_variable(0, value)
-        // Ok(self.frame_stack.current_frame_mut()?.push(value))
+        self.current_frame_mut()?.set_local_variable(0, value)
     }
 
     // Routines
@@ -374,7 +400,7 @@ impl State {
             Ok(return_address)
         } else {
             let (initial_pc, local_variables) = self.routine_header(address)?;
-            self.frame_stack.call_routine(
+            let frame = Frame::call_routine(
                 address,
                 initial_pc,
                 arguments,
@@ -382,12 +408,13 @@ impl State {
                 result,
                 return_address,
             )?;
+            self.frames.push(frame);
 
             Ok(initial_pc)
         }
     }
 
-    pub fn read_interrupt(
+    pub fn call_read_interrupt(
         &mut self,
         address: usize,
         return_address: usize,
@@ -395,8 +422,16 @@ impl State {
         self.input_interrupt = None;
         self.input_interrupt_print = false;
         let (initial_pc, local_variables) = self.routine_header(address)?;
-        self.frame_stack
-            .input_interrupt(address, initial_pc, local_variables, return_address)?;
+        let mut frame = Frame::call_routine(
+            address,
+            initial_pc,
+            &vec![],
+            local_variables,
+            None,
+            return_address,
+        )?;
+        frame.set_input_interrupt(true);
+        self.frames.push(frame);
         Ok(initial_pc)
     }
 
@@ -405,12 +440,15 @@ impl State {
             debug!(target: "app::sound", "Sound interrupt routine firing @ ${:06x}", address);
             self.sound_interrupt = None;
             let (initial_pc, local_variables) = self.routine_header(address)?;
-            self.frame_stack.sound_interrupt(
+            let frame = Frame::call_routine(
                 address,
                 initial_pc,
+                &vec![],
                 local_variables,
+                None,
                 return_address,
             )?;
+            self.frames.push(frame);
             Ok(initial_pc)
         } else {
             Err(RuntimeError::new(
@@ -421,26 +459,30 @@ impl State {
     }
 
     pub fn return_routine(&mut self, value: u16) -> Result<usize, RuntimeError> {
-        if self.frame_stack.current_frame()?.input_interrupt() {
+        if self.current_frame()?.input_interrupt() {
             self.input_interrupt = Some(value);
         }
 
-        let result = self.frame_stack.return_routine()?;
-        match result {
-            Some(r) => self.set_variable(r.variable(), value)?,
-            None => (),
+        if let Some(f) = self.frames.pop() {
+            let n = self.current_frame_mut()?;
+            n.set_pc(f.return_address());
+            debug!(target: "app::frame", "Return to ${:06x} -> {:?}", f.return_address(), f.result());
+            match f.result() {
+                Some(r) => self.set_variable(r.variable(), value)?,
+                None => (),
+            }
         }
-
-        self.frame_stack.pc()
+        
+        Ok(self.current_frame()?.pc())
     }
 
     pub fn throw(&mut self, depth: u16, result: u16) -> Result<usize, RuntimeError> {
-        self.frame_stack.frames_mut().truncate(depth as usize);
+        self.frames.truncate(depth as usize);
         self.return_routine(result)
     }
 
     pub fn set_pc(&mut self, pc: usize) -> Result<(), RuntimeError> {
-        self.frame_stack.current_frame_mut()?.set_pc(pc);
+        self.current_frame_mut()?.set_pc(pc);
         Ok(())
     }
 
@@ -543,7 +585,7 @@ impl State {
             }
         }
 
-        if self.frame_stack.current_frame()?.input_interrupt() {
+        if self.current_frame()?.input_interrupt() {
             self.input_interrupt_print = true;
         }
 
@@ -876,7 +918,7 @@ impl State {
     pub fn restore(&mut self, save_data: Vec<u8>) -> Result<Option<usize>, RuntimeError> {
         let quetzal = Quetzal::try_from(save_data)?;
         // &(*self) ... ick
-        let ifhd = IFhd::try_from(&(*self))?;
+        let ifhd = IFhd::try_from((&(*self),0))?;
         if &ifhd != quetzal.ifhd() {
             error!(target: "app::quetzal", "Save file is not valid for the running story: {} != {}", quetzal.ifhd(), ifhd);
             self.print(
@@ -888,8 +930,8 @@ impl State {
             Ok(None)
         } else {
             // Rebuild frame stack
-            let fs = FrameStack::from_stks(quetzal.stks())?;
-            self.frame_stack = fs;
+            let fs: Vec<Frame> = Vec::from(quetzal.stks());
+            self.frames = fs;
 
             // Rebuild dynamic memory, preserving the contents of FLAGS2
             let flags2 = self.read_word(0x10)?;
@@ -961,11 +1003,10 @@ impl State {
             self.write_byte(i, b)?;
         }
         self.write_byte(0x10, self.read_byte(0x10)? | f1)?;
+        self.frames.clear();
         self.initialize()?;
-        self.frame_stack =
-            FrameStack::new(header::field_word(self, HeaderField::InitialPC)? as usize);
 
-        Ok(self.frame_stack.pc()?)
+        Ok(self.current_frame()?.pc())
     }
 
     pub fn quit(&mut self) -> Result<(), RuntimeError> {
@@ -1042,7 +1083,7 @@ impl State {
         let mut n = 1;
         loop {
             log_mdc::insert("instruction_count", format!("{:8x}", n));
-            let pc = self.frame_stack.pc()?;
+            let pc = self.current_frame()?.pc();
             let instruction = decoder::decode_instruction(&self.memory, pc)?;
             let pc = processor::dispatch(self, &instruction)?;
             if pc == 0 {

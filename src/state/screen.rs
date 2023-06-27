@@ -31,7 +31,7 @@ pub enum Style {
 #[derive(Debug)]
 pub enum Interrupt {
     ReadTimeout,
-    Sound
+    Sound,
 }
 
 #[derive(Debug)]
@@ -39,7 +39,7 @@ pub struct InputEvent {
     zchar: Option<u16>,
     row: Option<u16>,
     column: Option<u16>,
-    interrupt: Option<Interrupt>
+    interrupt: Option<Interrupt>,
 }
 
 impl InputEvent {
@@ -271,11 +271,12 @@ impl Screen {
     }
 
     pub fn move_cursor(&mut self, row: u32, column: u32) {
-        // Cursor can only be set in the upper window
-        if self.selected_window == 1 {
+        if self.selected_window == 0 {
+            self.cursor_0 = (row, column);
+        } else {
             self.cursor_1 = Some((row, column));
-            self.terminal.move_cursor((row, column));
         }
+        self.terminal.move_cursor((row, column));
     }
 
     fn map_color(&self, color: u8, current: Color, default: Color) -> Result<Color, RuntimeError> {

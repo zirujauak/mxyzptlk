@@ -1,4 +1,5 @@
 use crate::error::*;
+use crate::iff::quetzal::stks::{StackFrame, Stks};
 use crate::state::instruction::StoreResult;
 
 #[derive(Debug)]
@@ -12,6 +13,35 @@ pub struct Frame {
     return_address: usize,
     input_interrupt: bool,
     sound_interrupt: bool,
+}
+
+impl From<&StackFrame> for Frame {
+    fn from(value: &StackFrame) -> Self {
+        let result = if value.flags() & 0x10 == 0x00 {
+            Some(StoreResult::new(0, value.result_variable()))
+        } else {
+            None
+        };
+        Frame::new(
+            0,
+            0,
+            value.local_variables(),
+            value.flags() & 0xF,
+            value.stack(),
+            result,
+            value.return_address() as usize,
+        )
+    }
+}
+
+impl From<&Stks> for Vec<Frame> {
+    fn from(value: &Stks) -> Self {
+        let mut v = Vec::new();
+        for sf in value.stks() {
+            v.push(Frame::from(sf))
+        }
+        v
+    }
 }
 
 impl Frame {
@@ -81,24 +111,30 @@ impl Frame {
         self.sound_interrupt = v;
     }
 
-    pub fn pop(&mut self) -> Result<u16,RuntimeError> {
+    pub fn pop(&mut self) -> Result<u16, RuntimeError> {
         if let Some(v) = self.stack.pop() {
             info!(target: "app::stack", "Pop {:04x} [{}]", v, self.stack.len());
             Ok(v)
         } else {
-            Err(RuntimeError::new(ErrorCode::StackUnderflow, format!("Poppped an empty stack")))
+            Err(RuntimeError::new(
+                ErrorCode::StackUnderflow,
+                format!("Poppped an empty stack"),
+            ))
         }
     }
 
-    pub fn peek(&self) -> Result<u16,RuntimeError> {
+    pub fn peek(&self) -> Result<u16, RuntimeError> {
         if let Some(v) = self.stack.last() {
             Ok(*v)
         } else {
-            Err(RuntimeError::new(ErrorCode::StackUnderflow, format!("Peeked an empty stack")))
+            Err(RuntimeError::new(
+                ErrorCode::StackUnderflow,
+                format!("Peeked an empty stack"),
+            ))
         }
     }
 
-    pub fn push(&mut self, value: u16)  {
+    pub fn push(&mut self, value: u16) {
         self.stack.push(value);
         info!(target: "app::stack", "Push {:04x} [{}]", value, self.stack.len());
     }
@@ -111,7 +147,7 @@ impl Frame {
         self.return_address
     }
 
-    pub fn variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
+    pub fn local_variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
         if variable == 0 {
             self.pop()
         } else if variable <= self.local_variables.len() as u8 {
@@ -128,7 +164,7 @@ impl Frame {
         }
     }
 
-    pub fn peek_variable(&self, variable: u8) -> Result<u16, RuntimeError> {
+    pub fn peek_local_variable(&self, variable: u8) -> Result<u16, RuntimeError> {
         if variable == 0 {
             self.peek()
         } else if variable <= self.local_variables().len() as u8 {
@@ -144,7 +180,7 @@ impl Frame {
             ))
         }
     }
-    pub fn set_variable(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
+    pub fn set_local_variable(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
         if variable == 0 {
             self.push(value);
             Ok(())
@@ -163,7 +199,11 @@ impl Frame {
         }
     }
 
-    pub fn set_variable_indirect(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
+    pub fn set_local_variable_indirect(
+        &mut self,
+        variable: u8,
+        value: u16,
+    ) -> Result<(), RuntimeError> {
         if variable == 0 {
             self.pop()?;
             self.push(value);
@@ -206,7 +246,7 @@ impl Frame {
             arguments.len() as u8,
             &Vec::new(),
             result,
-            return_address
+            return_address,
         ))
     }
 }

@@ -148,17 +148,17 @@ pub fn restart(state: &mut State, _instruction: &Instruction) -> Result<usize, R
 }
 
 pub fn ret_popped(state: &mut State, _instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let value = state.frame_stack.current_frame_mut()?.pop()?;
+    let value = state.variable(0)?;
     state.return_routine(value)
 }
 
 pub fn pop(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    state.frame_stack.current_frame_mut()?.pop()?;
+    state.variable(0)?;
     Ok(instruction.next_address())
 }
 
 pub fn catch(state: &mut State, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let depth = state.frame_stack.frames().len();
+    let depth = state.frames();
     store_result(state, instruction, depth as u16)?;
     Ok(instruction.next_address())
 }
