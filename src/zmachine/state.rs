@@ -21,6 +21,8 @@ use super::instruction::StoreResult;
 mod frame;
 pub mod header;
 pub mod memory;
+pub mod object;
+pub mod text;
 
 #[derive(Debug)]
 pub enum InterruptType {
@@ -260,7 +262,7 @@ impl State {
     ) -> Result<(), RuntimeError> {
         // Clear any pending interrupt
         self.interrupt = None;
-        
+
         // Set V3 Flags 1
         if self.version < 4 {
             header::clear_flag1(self, Flags1v3::StatusLineNotAvailable as u8)?;
@@ -415,6 +417,16 @@ impl State {
     }
 
     // Helper functions to read potentially "unreadable" memory
+    pub fn instruction(&self, address: usize) -> Vec<u8> {
+        // An instruction may be up to 23 bytes long, excluding literal strings
+        // Opcode: up to 2 bytes
+        // Operand types: up to 2 bytes
+        // Operands: up to 16 bytes
+        // Store variable: up to 1 byte
+        // Branch offset: up to 2 bytes
+        self.memory().slice(address, 23)
+    }
+
     fn routine_header(&self, address: usize) -> Result<(usize, Vec<u16>), RuntimeError> {
         let variable_count = self.memory.read_byte(address)? as usize;
         let mut local_variables = vec![0 as u16; variable_count];
@@ -442,6 +454,38 @@ impl State {
             if w & 0x8000 == 0x8000 {
                 return Ok(d);
             }
+        }
+    }
+
+    pub fn packed_routine_address(&self, address: u16) -> Result<usize, RuntimeError> {
+        match self.version {
+            1 | 2 | 3 => Ok(address as usize * 2),
+            4 | 5 => Ok(address as usize * 4),
+            7 => Ok((address as usize * 4)
+                + (self
+                    .memory
+                    .read_word(HeaderField::RoutinesOffset as usize)? as usize
+                    * 8)),
+            8 => Ok(address as usize * 8),
+            _ => Err(RuntimeError::new(
+                ErrorCode::UnsupportedVersion,
+                format!("Unsupported version: {}", self.version),
+            )),
+        }
+    }
+
+    pub fn packed_string_address(&self, address: u16) -> Result<usize, RuntimeError> {
+        match self.version {
+            1 | 2 | 3 => Ok(address as usize * 2),
+            4 | 5 => Ok(address as usize * 4),
+            7 => Ok((address as usize * 4)
+                + (self.memory.read_word(HeaderField::StringsOffset as usize)? as usize * 8)),
+            8 => Ok(address as usize * 8),
+            // TODO: error
+            _ => Err(RuntimeError::new(
+                ErrorCode::UnsupportedVersion,
+                format!("Unsupported version: {}", self.version),
+            )),
         }
     }
 
@@ -578,7 +622,7 @@ impl State {
                         None => (),
                     },
                     _ => {}
-                }
+                },
             }
 
             Ok(self.current_frame()?.pc())
@@ -692,7 +736,7 @@ impl State {
         Ok(())
     }
 
-    pub fn restore_undo(&mut self, pc: usize) -> Result<Option<usize>, RuntimeError> {
+    pub fn restore_undo(&mut self) -> Result<Option<usize>, RuntimeError> {
         if let Some(quetzal) = self.undo_stack.pop() {
             debug!(target: "app::quetzal", "Restoring undo state");
             //trace!(target: "app::quetzal", "{}", quetzal);

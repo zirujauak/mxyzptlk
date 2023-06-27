@@ -1,13 +1,11 @@
 mod files;
 mod input;
 mod instruction;
-mod object;
 mod rng;
 // mod save_restore;
 mod screen;
 pub mod sound;
 pub mod state;
-mod text;
 
 use std::fs;
 use std::fs::File;
@@ -27,14 +25,14 @@ use screen::*;
 
 use self::instruction::decoder;
 use self::instruction::processor;
-use self::instruction::StoreResult;
-use self::object::property;
 use self::sound::Sounds;
 use self::state::header;
 use self::state::header::Flags1v3;
 use self::state::header::Flags2;
 use self::state::header::HeaderField;
 use self::state::memory::Memory;
+use self::state::object::property;
+use self::state::text;
 use self::state::State;
 
 pub struct Stream3 {
@@ -389,36 +387,36 @@ impl ZMachine {
     //     Ok((initial_pc, local_variables))
     // }
 
-    pub fn call_routine(
-        &mut self,
-        address: usize,
-        arguments: &Vec<u16>,
-        result: Option<StoreResult>,
-        return_address: usize,
-    ) -> Result<usize, RuntimeError> {
-        self.state
-            .call_routine(address, arguments, result, return_address)
-    }
+    // pub fn call_routine(
+    //     &mut self,
+    //     address: usize,
+    //     arguments: &Vec<u16>,
+    //     result: Option<StoreResult>,
+    //     return_address: usize,
+    // ) -> Result<usize, RuntimeError> {
+    //     self.state
+    //         .call_routine(address, arguments, result, return_address)
+    // }
 
-    pub fn call_read_interrupt(
-        &mut self,
-        address: usize,
-        return_address: usize,
-    ) -> Result<usize, RuntimeError> {
-        self.state.call_read_interrupt(address, return_address)
-    }
+    // pub fn call_read_interrupt(
+    //     &mut self,
+    //     address: usize,
+    //     return_address: usize,
+    // ) -> Result<usize, RuntimeError> {
+    //     self.state.call_read_interrupt(address, return_address)
+    // }
 
-    pub fn call_sound_interrupt(&mut self, return_address: usize) -> Result<usize, RuntimeError> {
-        self.state.call_sound_interrupt(return_address)
-    }
+    // pub fn call_sound_interrupt(&mut self, return_address: usize) -> Result<usize, RuntimeError> {
+    //     self.state.call_sound_interrupt(return_address)
+    // }
 
-    pub fn return_routine(&mut self, value: u16) -> Result<usize, RuntimeError> {
-        self.state.return_routine(value)
-    }
+    // pub fn return_routine(&mut self, value: u16) -> Result<usize, RuntimeError> {
+    //     self.state.return_routine(value)
+    // }
 
-    pub fn throw(&mut self, depth: u16, result: u16) -> Result<usize, RuntimeError> {
-        self.state.throw(depth, result)
-    }
+    // pub fn throw(&mut self, depth: u16, result: u16) -> Result<usize, RuntimeError> {
+    //     self.state.throw(depth, result)
+    // }
 
     // pub fn set_pc(&mut self, pc: usize) -> Result<(), RuntimeError> {
     //     self.current_frame_mut()?.set_pc(pc);
@@ -1048,7 +1046,7 @@ impl ZMachine {
         loop {
             log_mdc::insert("instruction_count", format!("{:8x}", n));
             let pc = self.state.current_frame()?.pc();
-            let instruction = decoder::decode_instruction(self.state.memory(), pc)?;
+            let instruction = decoder::decode_instruction(self.state(), pc)?;
             let pc = processor::dispatch(self, &instruction)?;
             if pc == 0 {
                 return Ok(());
@@ -1061,13 +1059,13 @@ impl ZMachine {
                         if let Some(sounds) = self.sounds.as_mut() {
                             info!(target: "app::sound", "Check for sound: {}", sounds.is_playing());
                             if !sounds.is_playing() {
-                                let pc = self.call_sound_interrupt(pc)?;
+                                let pc = self.state_mut().call_sound_interrupt(pc)?;
                                 self.state.set_pc(pc)?;
                             } else {
                                 self.state.set_pc(pc)?;
                             }
                         }
-                    },
+                    }
                     _ => {}
                 }
             } else {

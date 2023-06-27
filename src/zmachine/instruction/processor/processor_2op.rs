@@ -1,9 +1,6 @@
 use super::*;
 use crate::error::RuntimeError;
-use crate::zmachine::object;
-use crate::zmachine::object::attribute;
-use crate::zmachine::object::parent;
-use crate::zmachine::object::property;
+use crate::zmachine::state::object::{self, *};
 use crate::zmachine::ZMachine;
 
 pub fn je(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
@@ -314,24 +311,31 @@ pub fn modulus(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
 pub fn call_2s(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
-    let address = packed_routine_address(zmachine.state.memory(), operands[0])?;
+    let address = zmachine.state().packed_routine_address(operands[0])?;
     let arguments = vec![operands[1]];
 
-    zmachine.call_routine(
+    call_fn(
+        zmachine,
         address,
-        &arguments,
-        instruction.store,
         instruction.next_address(),
+        &arguments,
+        instruction.store().copied(),
     )
 }
 
 pub fn call_2n(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
-    let address = packed_routine_address(zmachine.state.memory(), operands[0])?;
+    let address = zmachine.state().packed_routine_address(operands[0])?;
     let arguments = vec![operands[1]];
 
-    zmachine.call_routine(address, &arguments, None, instruction.next_address())
+    call_fn(
+        zmachine,
+        address,
+        instruction.next_address(),
+        &arguments,
+        None,
+    )
 }
 
 pub fn set_colour(
@@ -349,5 +353,5 @@ pub fn throw(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize
     let result = operands[0];
     let depth = operands[1];
 
-    zmachine.throw(depth, result)
+    zmachine.state_mut().throw(depth, result)
 }

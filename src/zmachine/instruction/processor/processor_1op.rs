@@ -2,17 +2,13 @@ use crate::{
     error::{ErrorCode, RuntimeError},
     zmachine::{
         instruction::Instruction,
-        object::{
-            self, child, parent,
-            property::{property_length, short_name},
-            set_child, set_parent, set_sibling, sibling,
-        },
+        state::object::{self, property::*, *},
         text::{as_text, from_vec},
         ZMachine,
     },
 };
 
-use super::{branch, operand_values, packed_routine_address, packed_string_address, store_result};
+use super::{branch, operand_values, store_result};
 
 pub fn jz(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
@@ -92,9 +88,9 @@ pub fn print_addr(
 
 pub fn call_1s(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let address = packed_routine_address(zmachine.state.memory(), operands[0])?;
+    let address = zmachine.state().packed_routine_address(operands[0])?;
 
-    zmachine.call_routine(
+    zmachine.state_mut().call_routine(
         address,
         &vec![],
         instruction.store,
@@ -129,11 +125,7 @@ pub fn remove_obj(
                 }
 
                 let o = object::sibling(&zmachine.state, object)?;
-                set_sibling(
-                    &mut zmachine.state,
-                    sibling,
-                    o,
-                )?;
+                set_sibling(&mut zmachine.state, sibling, o)?;
             }
 
             set_parent(&mut zmachine.state, object, 0)?;
@@ -158,7 +150,8 @@ pub fn print_obj(
 
 pub fn ret(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.return_routine(operands[0])
+    
+    zmachine.state_mut().return_routine(operands[0])
 }
 
 pub fn jump(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
@@ -172,7 +165,7 @@ pub fn print_paddr(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let address = packed_string_address(zmachine.state.memory(), operands[0])?;
+    let address = zmachine.state().packed_string_address(operands[0])?;
     let text = as_text(&zmachine.state, address)?;
     zmachine.print(&text)?;
     // context.print_string(text);
@@ -195,6 +188,6 @@ pub fn not(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, 
 
 pub fn call_1n(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let address = packed_routine_address(zmachine.state.memory(), operands[0])?;
-    zmachine.call_routine(address, &vec![], None, instruction.next_address())
+    let address = zmachine.state().packed_routine_address(operands[0])?;
+    zmachine.state_mut().call_routine(address, &vec![], None, instruction.next_address())
 }

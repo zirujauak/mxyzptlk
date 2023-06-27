@@ -1,6 +1,6 @@
 use crate::error::*;
 
-use super::state::{
+use super::{
     header::{self, HeaderField},
     State,
 };

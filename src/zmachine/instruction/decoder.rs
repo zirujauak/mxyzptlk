@@ -1,7 +1,6 @@
 use crate::error::*;
-use crate::zmachine::state::header::*;
 use crate::zmachine::instruction::*;
-use crate::zmachine::state::memory::Memory;
+use crate::zmachine::state::{memory, State};
 
 fn operand_type(type_byte: u8, operand_index: u8) -> Option<OperandType> {
     // Types are packed in the byte: 00112233
@@ -26,9 +25,9 @@ fn long_operand_type(opcode: u8, index: u8) -> OperandType {
 }
 
 fn operand_types(
-    memory: &Memory,
+    bytes: &Vec<u8>,
     opcode: &Opcode,
-    mut address: usize,
+    mut offset: usize,
 ) -> Result<(usize, Vec<OperandType>), RuntimeError> {
     let mut types = Vec::new();
     match opcode.form() {
@@ -42,8 +41,8 @@ fn operand_types(
             types.push(long_operand_type(opcode.opcode(), 1));
         }
         OpcodeForm::Var | OpcodeForm::Ext => {
-            let b = memory.read_byte(address)?;
-            address = address + 1;
+            let b = bytes[offset];
+            offset = offset + 1;
             for i in 0..4 {
                 match operand_type(b, i) {
                     Some(t) => types.push(t),
@@ -52,8 +51,8 @@ fn operand_types(
             }
             // 2VAR opcodes have another byte of operand types
             if opcode.opcode() == 0xEC || opcode.opcode() == 0xFA {
-                let b = memory.read_byte(address)?;
-                address = address + 1;
+                let b = bytes[offset];
+                offset = offset + 1;
                 for i in 0..4 {
                     match operand_type(b, i) {
                         Some(t) => types.push(t),
@@ -64,45 +63,48 @@ fn operand_types(
         }
     }
 
-    Ok((address, types))
+    Ok((offset, types))
 }
 
 fn operands(
-    memory: &Memory,
+    bytes: &Vec<u8>,
     operand_types: &Vec<OperandType>,
-    mut address: usize,
+    mut offset: usize,
 ) -> Result<(usize, Vec<Operand>), RuntimeError> {
     let mut operands = Vec::new();
 
     for optype in operand_types {
         match optype {
             OperandType::LargeConstant => {
-                operands.push(Operand::new(*optype, memory.read_word(address)?));
-                address = address + 2;
+                operands.push(Operand::new(
+                    *optype,
+                    memory::word_value(bytes[offset], bytes[offset + 1]),
+                ));
+                offset = offset + 2;
             }
             OperandType::SmallConstant | OperandType::Variable => {
-                operands.push(Operand::new(*optype, memory.read_byte(address)? as u16));
-                address = address + 1;
+                operands.push(Operand::new(*optype, bytes[offset] as u16));
+                offset = offset + 1;
             }
         }
     }
 
-    Ok((address, operands))
+    Ok((offset, operands))
 }
 
 fn result_variable(
-    memory: &Memory,
+    address: usize,
+    bytes: &Vec<u8>,
     opcode: &Opcode,
     version: u8,
-    address: usize,
+    offset: usize,
 ) -> Result<(usize, Option<StoreResult>), RuntimeError> {
     match opcode.form() {
         OpcodeForm::Ext => match opcode.opcode() {
-            0x00 | 0x01 | 0x02 | 0x03 | 0x04 | 0x09 | 0x0a => Ok((
-                address + 1,
-                Some(StoreResult::new(address, memory.read_byte(address)?)),
-            )),
-            _ => Ok((address, None)),
+            0x00 | 0x01 | 0x02 | 0x03 | 0x04 | 0x09 | 0x0a => {
+                Ok((offset + 1, Some(StoreResult::new(address, bytes[offset]))))
+            }
+            _ => Ok((offset, None)),
         },
         _ => match opcode.opcode() {
             // Always store, regardless of version
@@ -113,44 +115,34 @@ fn result_variable(
             | 0x76 | 0xd6 | 0x17 | 0x37 | 0x57 | 0x77 | 0xd7 | 0x18 | 0x38 | 0x58 | 0x78 | 0xd8
             | 0x19 | 0x39 | 0x59 | 0x79 | 0xd9 | 0x81 | 0x91 | 0xa1 | 0x82 | 0x92 | 0xa2 | 0x83
             | 0x93 | 0xa3 | 0x84 | 0x94 | 0xa4 | 0x88 | 0x98 | 0xa8 | 0x8e | 0x9e | 0xae | 0xe0
-            | 0xe7 | 0xeC | 0xf6 | 0xf7 | 0xf8 => Ok((
-                address + 1,
-                Some(StoreResult::new(address, memory.read_byte(address)?)),
-            )),
+            | 0xe7 | 0xeC | 0xf6 | 0xf7 | 0xf8 => {
+                Ok((offset + 1, Some(StoreResult::new(address, bytes[offset]))))
+            }
             // Version < 5
             0xbf => {
                 if version < 5 {
-                    return Ok((
-                        address + 1,
-                        Some(StoreResult::new(address, memory.read_byte(address)?)),
-                    ));
+                    return Ok((offset + 1, Some(StoreResult::new(address, bytes[offset]))));
                 } else {
-                    return Ok((address, None));
+                    return Ok((offset, None));
                 }
             }
             // Version 4
             0xb5 | 0xb6 => {
                 if version == 4 {
-                    return Ok((
-                        address + 1,
-                        Some(StoreResult::new(address, memory.read_byte(address)?)),
-                    ));
+                    return Ok((offset + 1, Some(StoreResult::new(address, bytes[offset]))));
                 } else {
-                    return Ok((address, None));
+                    return Ok((offset, None));
                 }
             }
             // Version > 4
             0xb9 | 0xe4 => {
                 if version > 4 {
-                    return Ok((
-                        address + 1,
-                        Some(StoreResult::new(address, memory.read_byte(address)?)),
-                    ));
+                    return Ok((offset + 1, Some(StoreResult::new(address, bytes[offset]))));
                 } else {
-                    return Ok((address, None));
+                    return Ok((offset, None));
                 }
             }
-            _ => Ok((address, None)),
+            _ => Ok((offset, None)),
         },
     }
 }
@@ -164,35 +156,35 @@ fn branch_address(address: usize, offset: i16) -> usize {
 }
 
 fn branch_condition(
-    memory: &Memory,
     address: usize,
+    bytes: &Vec<u8>,
+    offset: usize,
 ) -> Result<(usize, Option<Branch>), RuntimeError> {
-    let b = memory.read_byte(address)?;
+    let b = bytes[offset];
     let condition = b & 0x80 == 0x80;
     match b & 0x40 {
         0x40 => {
-            let offset = b & 0x3f;
+            let b_offset = b & 0x3f;
             Ok((
-                address + 1,
+                offset + 1,
                 Some(Branch::new(
-                    address,
+                    address + offset,
                     condition,
-                    branch_address(address + 1 - 2, offset as i16),
+                    branch_address(address - 1, b_offset as i16),
                 )),
             ))
         }
         _ => {
-            let mut offset =
-                ((b as u16 & 0x3f) << 8) | (memory.read_byte(address + 1)? as u16) & 0xFF;
-            if offset & 0x2000 == 0x2000 {
-                offset = offset | 0xC000;
+            let mut b_offset = ((b as u16 & 0x3f) << 8) | (bytes[offset + 1] as u16) & 0xFF;
+            if b_offset & 0x2000 == 0x2000 {
+                b_offset = b_offset | 0xC000;
             }
             Ok((
-                address + 2,
+                offset + 2,
                 Some(Branch::new(
-                    address,
+                    address + offset,
                     condition,
-                    branch_address(address + 2 - 2, offset as i16),
+                    branch_address(address, b_offset as i16),
                 )),
             ))
         }
@@ -200,53 +192,58 @@ fn branch_condition(
 }
 
 fn branch(
-    memory: &Memory,
+    address: usize,
+    bytes: &Vec<u8>,
     version: u8,
     opcode: &Opcode,
-    address: usize,
+    offset: usize,
 ) -> Result<(usize, Option<Branch>), RuntimeError> {
     match opcode.form {
         OpcodeForm::Ext => match opcode.instruction() {
-            0x06 | 0x18 | 0x1b => branch_condition(memory, address),
-            _ => Ok((address, None)),
+            0x06 | 0x18 | 0x1b => branch_condition(address, bytes, offset),
+            _ => Ok((offset, None)),
         },
         _ => match opcode.operand_count() {
             OperandCount::_0OP => match opcode.instruction() {
-                0x0d | 0x0f => branch_condition(memory, address),
+                0x0d | 0x0f => branch_condition(address, bytes, offset),
                 0x05 | 0x06 => {
                     if version < 4 {
-                        branch_condition(memory, address)
+                        branch_condition(address, bytes, offset)
                     } else {
-                        Ok((address, None))
+                        Ok((offset, None))
                     }
                 }
-                _ => Ok((address, None)),
+                _ => Ok((offset, None)),
             },
             OperandCount::_1OP => match opcode.instruction() {
-                0x00 | 0x01 | 0x02 => branch_condition(memory, address),
-                _ => Ok((address, None)),
+                0x00 | 0x01 | 0x02 => branch_condition(address, bytes, offset),
+                _ => Ok((offset, None)),
             },
             OperandCount::_2OP => match opcode.instruction() {
                 0x01 | 0x02 | 0x03 | 0x04 | 0x05 | 0x06 | 0x07 | 0x0a => {
-                    branch_condition(memory, address)
+                    branch_condition(address, bytes, offset)
                 }
-                _ => Ok((address, None)),
+                _ => Ok((offset, None)),
             },
             OperandCount::_VAR => match opcode.instruction() {
-                0x17 | 0x1F => branch_condition(memory, address),
-                _ => Ok((address, None)),
+                0x17 | 0x1F => branch_condition(address, bytes, offset),
+                _ => Ok((offset, None)),
             },
         },
     }
 }
 
-fn opcode(memory: &Memory, version: u8, mut address: usize) -> Result<(usize, Opcode), RuntimeError> {
-    let mut opcode = memory.read_byte(address)?;
+fn opcode(
+    bytes: &Vec<u8>,
+    version: u8,
+    mut offset: usize,
+) -> Result<(usize, Opcode), RuntimeError> {
+    let mut opcode = bytes[offset];
     let extended = opcode == 0xBE;
-    address = address + 1;
+    offset = offset + 1;
     if extended {
-        opcode = memory.read_byte(address)?;
-        address = address + 1;
+        opcode = bytes[offset];
+        offset = offset + 1;
     }
 
     let form = if extended {
@@ -285,32 +282,27 @@ fn opcode(memory: &Memory, version: u8, mut address: usize) -> Result<(usize, Op
     };
 
     Ok((
-        address,
-        Opcode::new(
-            version,
-            opcode,
-            instruction,
-            form,
-            operand_count,
-        ),
+        offset,
+        Opcode::new(version, opcode, instruction, form, operand_count),
     ))
 }
 
-pub fn decode_instruction(memory: &Memory, address: usize) -> Result<Instruction, RuntimeError> {
-    let version = memory.read_byte(HeaderField::Version as usize)?;
-    let (offset, opcode) = opcode(memory, version, address)?;
+pub fn decode_instruction(state: &State, address: usize) -> Result<Instruction, RuntimeError> {
+    let version = state.version();
+    let bytes = state.instruction(address);
+    let (offset, opcode) = opcode(&bytes, version, 0)?;
 
-    let (offset, operand_types) = operand_types(memory, &opcode, offset)?;
-    let (offset, operands) = operands(memory, &operand_types, offset)?;
-    let (offset, store) = result_variable(memory, &opcode, version, offset)?;
-    let (offset, branch) = branch(memory, version, &opcode, offset)?;
-
-    let mut bytes = Vec::new();
-    for i in address..offset {
-        bytes.push(memory.read_byte(i)?)
-    }
+    let (offset, operand_types) = operand_types(&bytes, &opcode, offset)?;
+    let (offset, operands) = operands(&bytes, &operand_types, offset)?;
+    let (offset, store) = result_variable(address + offset, &bytes, &opcode, version, offset)?;
+    let (offset, branch) = branch(address + offset, &bytes, version, &opcode, offset)?;
 
     Ok(Instruction::new(
-        address, opcode, operands, store, branch, offset,
+        address,
+        opcode,
+        operands,
+        store,
+        branch,
+        address + offset,
     ))
 }

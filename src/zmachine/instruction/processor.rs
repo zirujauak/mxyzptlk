@@ -2,8 +2,6 @@
 // use crate::executor::context::{error::ContextError, header, Context};
 
 use crate::error::*;
-use crate::zmachine::state::header::*;
-use crate::zmachine::state::memory::Memory;
 use crate::zmachine::{instruction::*, ZMachine};
 
 mod processor_0op;
@@ -98,37 +96,6 @@ fn call_fn(
         _ => zmachine
             .state
             .call_routine(address, arguments, result, return_addr),
-    }
-}
-
-fn packed_routine_address(memory: &Memory, address: u16) -> Result<usize, RuntimeError> {
-    let version = memory.read_byte(HeaderField::Version as usize)?;
-    match version {
-        1 | 2 | 3 => Ok(address as usize * 2),
-        4 | 5 => Ok(address as usize * 4),
-        7 => Ok((address as usize * 4)
-            + (memory.read_word(HeaderField::RoutinesOffset as usize)? as usize * 8)),
-        8 => Ok(address as usize * 8),
-        _ => Err(RuntimeError::new(
-            ErrorCode::UnsupportedVersion,
-            format!("Unsupported version: {}", version),
-        )),
-    }
-}
-
-fn packed_string_address(memory: &Memory, address: u16) -> Result<usize, RuntimeError> {
-    let version = memory.read_byte(HeaderField::Version as usize)?;
-    match version {
-        1 | 2 | 3 => Ok(address as usize * 2),
-        4 | 5 => Ok(address as usize * 4),
-        7 => Ok((address as usize * 4)
-            + (memory.read_word(HeaderField::StringsOffset as usize)? as usize * 8)),
-        8 => Ok(address as usize * 8),
-        // TODO: error
-        _ => Err(RuntimeError::new(
-            ErrorCode::UnsupportedVersion,
-            format!("Unsupported version: {}", version),
-        )),
     }
 }
 

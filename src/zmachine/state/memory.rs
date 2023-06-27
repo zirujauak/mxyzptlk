@@ -54,6 +54,11 @@ impl Memory {
         self.map.len()
     }
 
+    pub fn slice(&self, start: usize, length: usize) -> Vec<u8> {
+        let end = usize::min(start + length, self.map.len());
+        self.map[start..end].to_vec()
+    }
+
     pub fn checksum(&self) -> Result<u16, RuntimeError> {
         let mut checksum = 0 as u16;
         let size = self.read_word(HeaderField::FileLength as usize)? as usize

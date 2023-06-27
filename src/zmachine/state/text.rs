@@ -1,6 +1,9 @@
 use crate::error::*;
 
-use super::state::{header::{self, HeaderField}, State};
+use super::{
+    header::{self, HeaderField},
+    State,
+};
 
 const ALPHABET_V3: [[char; 26]; 3] = [
     [
@@ -36,8 +39,7 @@ const ALPHABET_V3: [[char; 26]; 3] = [
 /// * `t` - Abbreviation table (0 - 2)
 /// * `i` - Abbreviation table index (0 - 31)
 fn abbreviation(state: &State, abbrev_table: u8, index: u8) -> Result<Vec<u16>, RuntimeError> {
-    let abbreviation_table =
-        header::field_word(state, HeaderField::AbbreviationsTable)? as usize;
+    let abbreviation_table = header::field_word(state, HeaderField::AbbreviationsTable)? as usize;
     let entry = (64 * (abbrev_table - 1)) + (index * 2);
     let word_addr = state.read_word(abbreviation_table + entry as usize)? as usize;
     as_text(state, word_addr * 2)
@@ -252,7 +254,7 @@ pub fn encode_text(word: &Vec<u16>, words: usize) -> Vec<u16> {
         zchars.append(&mut find_char(word[i]));
     }
 
-    // Truncate or pad characters 
+    // Truncate or pad characters
     if zchars.len() > words * 3 {
         zchars.truncate(words * 3);
     } else {
@@ -282,15 +284,10 @@ pub fn from_dictionary(
     dictionary_address: usize,
     word: &Vec<char>,
 ) -> Result<usize, RuntimeError> {
-    //let dictionary_address = header::field_word(state.memory(), HeaderField::Dictionary)? as usize;
     let separator_count = state.read_byte(dictionary_address)? as usize;
     let entry_size = state.read_byte(dictionary_address + separator_count + 1)? as usize;
     let entry_count = state.read_word(dictionary_address + separator_count + 2)? as i16;
-    let word_count = if state.version() < 4 {
-        2
-    } else {
-        3
-    };
+    let word_count = if state.version() < 4 { 2 } else { 3 };
 
     info!(target: "app::input", "LEXICAL ANALYSIS: dictionary @ {:04x}, {} separators, {} entries of size {}", dictionary_address, separator_count, entry_count, entry_size);
 

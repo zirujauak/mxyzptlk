@@ -39,7 +39,7 @@ pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
             Ok(save_data) => match zmachine.state.restore(save_data) {
                 Ok(address) => match address {
                     Some(a) => {
-                        let i = decoder::decode_instruction(zmachine.state.memory(), a - 3)?;
+                        let i = decoder::decode_instruction(zmachine.state(), a - 3)?;
                         store_result(zmachine, &i, 2)?;
                         Ok(i.next_address())
                     }
@@ -145,10 +145,10 @@ pub fn save_undo(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<u
 }
 
 pub fn restore_undo(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    match zmachine.state.restore_undo(instruction.store().unwrap().address()) {
+    match zmachine.state.restore_undo() {
         Ok(pc) => match pc {
             Some(address) => {
-                let i = decoder::decode_instruction(zmachine.state.memory(), address - 3)?;
+                let i = decoder::decode_instruction(zmachine.state(), address - 3)?;
                 store_result(zmachine, &i, 2)?;
                 Ok(i.next_address())
             }
