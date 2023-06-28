@@ -13,7 +13,7 @@ mod processor_var;
 fn operand_value(zmachine: &mut ZMachine, operand: &Operand) -> Result<u16, RuntimeError> {
     match operand.operand_type() {
         OperandType::SmallConstant | OperandType::LargeConstant => Ok(operand.value()),
-        OperandType::Variable => zmachine.state.variable(operand.value() as u8),
+        OperandType::Variable => zmachine.variable(operand.value() as u8),
     }
 }
 

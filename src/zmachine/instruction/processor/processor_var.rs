@@ -31,7 +31,7 @@ pub fn call_vs(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
 pub fn storew(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let address = operands[0] as isize + (operands[1] as i16 * 2) as isize;
-    zmachine.state.write_word(address as usize, operands[2])?;
+    zmachine.write_word(address as usize, operands[2])?;
     Ok(instruction.next_address())
 }
 
@@ -63,7 +63,7 @@ fn terminators(zmachine: &ZMachine) -> Result<Vec<u16>, RuntimeError> {
         let mut table_addr =
             header::field_word(&zmachine.state, HeaderField::TerminatorTable)? as usize;
         loop {
-            let b = zmachine.state.read_byte(table_addr)?;
+            let b = zmachine.read_byte(table_addr)?;
             if b == 0 {
                 break;
             } else if (b >= 129 && b <= 154) || b >= 252 {
@@ -97,7 +97,7 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
                 Some(v) => {
                     zmachine.state.clear_interrupt();
                     if v == 1 {
-                        zmachine.state.write_byte(text_buffer + 1, 0)?;
+                        zmachine.write_byte(text_buffer + 1, 0)?;
                         store_result(zmachine, &instruction, 0)?;
                         return Ok(instruction.next_address());
                     }
@@ -122,9 +122,9 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
     info!(target: "app::input", "READ: text buffer ${:04x} / parse buffer ${:04x}", text_buffer, parse);
 
     let len = if zmachine.version < 5 {
-        zmachine.state.read_byte(text_buffer)? - 1
+        zmachine.read_byte(text_buffer)? - 1
     } else {
-        zmachine.state.read_byte(text_buffer)?
+        zmachine.read_byte(text_buffer)?
     } as usize;
 
     let timeout = if operands.len() > 2 { operands[2] } else { 0 };
@@ -141,9 +141,9 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
         zmachine.status_line()?;
     } else if zmachine.version > 4 {
         // text buffer may contain existing input
-        let existing_len = zmachine.state.read_byte(text_buffer + 1)? as usize;
+        let existing_len = zmachine.read_byte(text_buffer + 1)? as usize;
         for i in 0..existing_len {
-            existing_input.push(zmachine.state.read_byte(text_buffer + 2 + i)? as u16);
+            existing_input.push(zmachine.read_byte(text_buffer + 2 + i)? as u16);
         }
         if zmachine.input_interrupt_print {
             zmachine.print(&existing_input)?;
@@ -215,11 +215,11 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
                 .write_byte(text_buffer + 1 + i, to_lower_case(input_buffer[i]))?;
         }
         // Terminated by a 0
-        zmachine.state.write_byte(text_buffer + 1 + end, 0)?;
+        zmachine.write_byte(text_buffer + 1 + end, 0)?;
     } else {
         info!(target: "app::input", "READ: write input buffer to ${:04x}", text_buffer + 2);
         // Store the buffer length
-        zmachine.state.write_byte(text_buffer + 1, end as u8)?;
+        zmachine.write_byte(text_buffer + 1, end as u8)?;
         for i in 0..end {
             zmachine
                 .state
@@ -290,22 +290,23 @@ pub fn random(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usiz
 
 pub fn push(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.state.push(operands[0])?;
+    zmachine.push(operands[0])?;
     Ok(instruction.next_address())
 }
 
 pub fn pull(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let value = zmachine.state.variable(0)?;
+    let value = zmachine.variable(0)?;
 
     // If pulling to the stack, need to remove what was underneath the
     // value pulled before pushing it back.  This effectively discards
     // the second value in the stack.
     if operands[0] == 0 {
-        zmachine.state.current_frame_mut()?.local_variable(0)?;
+        zmachine.variable(0)?;
+        // zmachine.state.current_frame_mut()?.local_variable(0)?;
     }
 
-    zmachine.state.set_variable(operands[0] as u8, value)?;
+    zmachine.set_variable(operands[0] as u8, value)?;
     Ok(instruction.next_address())
 }
 
@@ -314,7 +315,7 @@ pub fn split_window(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.split_window(operands[0])?;
+    zmachine.io.split_window(operands[0])?;
 
     Ok(instruction.next_address())
 }
@@ -324,7 +325,7 @@ pub fn set_window(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.set_window(operands[0])?;
+    zmachine.io.set_window(operands[0])?;
 
     Ok(instruction.next_address())
 }
@@ -348,7 +349,7 @@ pub fn erase_window(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.erase_window(operands[0] as i16)?;
+    zmachine.io.erase_window(operands[0] as i16)?;
     Ok(instruction.next_address())
 }
 
@@ -362,7 +363,7 @@ pub fn set_cursor(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.set_cursor(operands[0], operands[1])?;
+    zmachine.io.set_cursor(operands[0], operands[1])?;
     Ok(instruction.next_address())
 }
 
@@ -371,7 +372,7 @@ pub fn set_text_style(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.set_text_style(operands[0])?;
+    zmachine.io.set_text_style(operands[0])?;
     Ok(instruction.next_address())
 }
 
@@ -380,7 +381,7 @@ pub fn buffer_mode(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.buffer_mode(operands[0])?;
+    zmachine.io.buffer_mode(operands[0])?;
     Ok(instruction.next_address())
 }
 
@@ -415,11 +416,7 @@ pub fn sound_effect(
     let operands: Vec<u16> = operand_values(zmachine, instruction)?;
     let number = operands[0];
     match number {
-        1 => zmachine.beep()?,
-        2 => {
-            zmachine.beep()?;
-            zmachine.beep()?
-        }
+        1 | 2 => zmachine.io.beep()?,
         _ => {
             let effect = operands[1];
             match effect {
@@ -544,9 +541,9 @@ pub fn scan_table(
     for i in 0..len {
         let address = operands[1] as usize + (i * entry_size);
         let value = if scan == 2 {
-            zmachine.state.read_word(address)?
+            zmachine.read_word(address)?
         } else {
-            zmachine.state.read_byte(address)? as u16
+            zmachine.read_byte(address)? as u16
         };
 
         if value == operands[0] {
@@ -634,7 +631,7 @@ pub fn encode_text(
 
     let mut zchars = Vec::new();
     for i in 0..length {
-        zchars.push(zmachine.state.read_byte(text_buffer + from + i)? as u16);
+        zchars.push(zmachine.read_byte(text_buffer + from + i)? as u16);
     }
 
     let encoded_text = text::encode_text(&zchars, 3);
@@ -661,20 +658,20 @@ pub fn copy_table(
 
     if dst == 0 {
         for i in 0..len as usize {
-            zmachine.state.write_byte(src + i, 0)?;
+            zmachine.write_byte(src + i, 0)?;
         }
     } else {
         if len > 0 && dst > src && dst < src + len as usize {
             for i in (0..len as usize).rev() {
                 zmachine
                     .state
-                    .write_byte(dst + i, zmachine.state.read_byte(src + i)?)?;
+                    .write_byte(dst + i, zmachine.read_byte(src + i)?)?;
             }
         } else {
             for i in 0..len.abs() as usize {
                 zmachine
                     .state
-                    .write_byte(dst + i, zmachine.state.read_byte(src + i)?)?;
+                    .write_byte(dst + i, zmachine.read_byte(src + i)?)?;
             }
         }
     }
@@ -692,18 +689,18 @@ pub fn print_table(
     let height = if operands.len() > 2 { operands[2] } else { 1 };
     let skip = if operands.len() > 3 { operands[3] } else { 0 } as usize;
 
-    let origin = zmachine.cursor()?;
+    let origin = zmachine.io.cursor()?;
     for i in 0..height as usize {
         if origin.0 + i as u16 > zmachine.rows() {
             zmachine.new_line()?;
-            zmachine.set_cursor(zmachine.rows() as u16, origin.1)?;
+            zmachine.io.set_cursor(zmachine.rows() as u16, origin.1)?;
         } else {
-            zmachine.set_cursor(origin.0 + i as u16, origin.1)?;
+            zmachine.io.set_cursor(origin.0 + i as u16, origin.1)?;
         }
         let mut text = Vec::new();
         for j in 0..width {
             let offset = i * (width + skip);
-            text.push(zmachine.state.read_byte(table + offset + j)? as u16);
+            text.push(zmachine.read_byte(table + offset + j)? as u16);
         }
         zmachine.print(&text)?;
     }

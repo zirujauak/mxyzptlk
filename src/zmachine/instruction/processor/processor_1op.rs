@@ -57,7 +57,7 @@ pub fn get_prop_len(
 
 pub fn inc(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let val = zmachine.state.peek_variable(operands[0] as u8)?;
+    let val = zmachine.peek_variable(operands[0] as u8)?;
     let new_val = i16::overflowing_add(val as i16, 1);
     zmachine
         .state
@@ -67,7 +67,7 @@ pub fn inc(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, 
 
 pub fn dec(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let val = zmachine.state.peek_variable(operands[0] as u8)?;
+    let val = zmachine.peek_variable(operands[0] as u8)?;
     let new_val = i16::overflowing_sub(val as i16, 1);
     zmachine
         .state
@@ -165,7 +165,7 @@ pub fn print_paddr(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let address = zmachine.state().packed_string_address(operands[0])?;
+    let address = zmachine.state.packed_string_address(operands[0])?;
     let text = as_text(&zmachine.state, address)?;
     zmachine.print(&text)?;
     // context.print_string(text);
@@ -174,7 +174,7 @@ pub fn print_paddr(
 
 pub fn load(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let value = zmachine.state.peek_variable(operands[0] as u8)?;
+    let value = zmachine.peek_variable(operands[0] as u8)?;
     store_result(zmachine, instruction, value)?;
     Ok(instruction.next_address())
 }

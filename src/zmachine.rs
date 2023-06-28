@@ -41,7 +41,6 @@ pub struct ZMachine {
     state: State,
     io: IO,
     rng: Box<dyn RNG>,
-    output_streams: u8,
     input_interrupt: Option<u16>,
     input_interrupt_print: bool,
     sounds: Option<Sounds>,
@@ -78,7 +77,6 @@ impl ZMachine {
             state,
             io,
             rng: Box::new(rng),
-            output_streams: 0x1,
             input_interrupt: None,
             input_interrupt_print: false,
             sounds,
@@ -98,6 +96,63 @@ impl ZMachine {
         &mut self.state
     }
 
+    // Runtime state
+    pub fn read_byte(&self, address: usize) -> Result<u8, RuntimeError> {
+        self.state.read_byte(address)
+    }
+
+    pub fn read_word(&self, address: usize) -> Result<u16, RuntimeError> {
+        self.state.read_word(address)
+    }
+
+    fn update_transcript_bit(&mut self, old: u16, new: u16) -> Result<(), RuntimeError> {
+        if old & 0x1 != new & 0x1 {
+            if new & 0x1 == 0x1 {
+                self.io.enable_output_stream(2, None)
+            } else {
+                self.io.disable_output_stream(&mut self.state, 2)
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn write_byte(&mut self, address: usize, value: u8) -> Result<(), RuntimeError> {
+        // Check if the transcript bit is being changed in Flags 2
+        if address == 0x11 {
+            self.update_transcript_bit(self.state.read_byte(0x11)? as u16, value as u16)?
+        }
+        self.state.write_byte(address, value)
+    }
+
+    pub fn write_word(&mut self, address: usize, value: u16) -> Result<(), RuntimeError> {
+        // Check if the transcript bit is being set in Flags 2
+        if address == 0x10 {
+            self.update_transcript_bit(self.state.read_word(0x10)?, value)?
+        }
+        self.state.write_word(address, value)
+    }
+
+    pub fn variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
+        self.state.variable(variable)
+    }
+
+    pub fn peek_variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
+        self.state.peek_variable(variable)
+    }
+
+    pub fn set_variable(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
+        self.state.set_variable(variable, value)
+    }
+
+    pub fn set_variable_indirect(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
+        self.state.set_variable_indirect(variable, value)
+    }
+
+    pub fn push(&mut self, value: u16) -> Result<(), RuntimeError> {
+        self.state.push(value)
+    }
+    
     // RNG
     pub fn random(&mut self, range: u16) -> u16 {
         let v = self.rng.random(range);
@@ -141,17 +196,17 @@ impl ZMachine {
         Ok(())
     }
 
-    pub fn split_window(&mut self, lines: u16) -> Result<(), RuntimeError> {
-        self.io.split_window(lines)
-    }
+    // pub fn split_window(&mut self, lines: u16) -> Result<(), RuntimeError> {
+    //     self.io.split_window(lines)
+    // }
 
-    pub fn set_window(&mut self, window: u16) -> Result<(), RuntimeError> {
-        self.io.set_window(window)
-    }
+    // pub fn set_window(&mut self, window: u16) -> Result<(), RuntimeError> {
+    //     self.io.set_window(window)
+    // }
 
-    pub fn erase_window(&mut self, window: i16) -> Result<(), RuntimeError> {
-        self.io.erase_window(window)
-    }
+    // pub fn erase_window(&mut self, window: i16) -> Result<(), RuntimeError> {
+    //     self.io.erase_window(window)
+    // }
 
     pub fn status_line(&mut self) -> Result<(), RuntimeError> {
         let status_type = header::flag1(&self.state, Flags1v3::StatusLineType as u8)?;
@@ -178,55 +233,35 @@ impl ZMachine {
         };
 
         self.io.status_line(&mut left, &mut right)
-        // let width = self.screen.columns() as usize;
-        // let available_for_left = width - right.len() - 1;
-        // if left.len() > available_for_left {
-        //     left.truncate(available_for_left - 4);
-        //     left.push('.' as u16);
-        //     left.push('.' as u16);
-        //     left.push('.' as u16);
-        // }
-
-        // let mut spaces = vec![0x20 as u16; width - left.len() - right.len() - 1];
-        // let mut status_line = vec![0x20 as u16];
-        // status_line.append(&mut left);
-        // status_line.append(&mut spaces);
-        // status_line.append(&mut right);
-        // let mut style = CellStyle::new();
-        // style.set(Style::Reverse as u8);
-
-        // self.screen.print_at(&status_line, (1, 1), &style);
-        // self.screen.reset_cursor();
-        // Ok(())
     }
 
-    pub fn set_font(&mut self, font: u16) -> Result<u16, RuntimeError> {
-        self.io.set_font(font)
-    }
+    // pub fn set_font(&mut self, font: u16) -> Result<u16, RuntimeError> {
+    //     self.io.set_font(font)
+    // }
 
-    pub fn set_text_style(&mut self, style: u16) -> Result<(), RuntimeError> {
-        self.io.set_text_style(style)
-    }
+    // pub fn set_text_style(&mut self, style: u16) -> Result<(), RuntimeError> {
+    //     self.io.set_text_style(style)
+    // }
 
-    pub fn cursor(&mut self) -> Result<(u16, u16), RuntimeError> {
-        self.io.cursor()
-    }
+    // pub fn cursor(&mut self) -> Result<(u16, u16), RuntimeError> {
+    //     self.io.cursor()
+    // }
 
-    pub fn set_cursor(&mut self, row: u16, column: u16) -> Result<(), RuntimeError> {
-        self.io.set_cursor(row, column)
-    }
+    // pub fn set_cursor(&mut self, row: u16, column: u16) -> Result<(), RuntimeError> {
+    //     self.io.set_cursor(row, column)
+    // }
 
-    pub fn buffer_mode(&mut self, mode: u16) -> Result<(), RuntimeError> {
-        self.io.buffer_mode(mode)
-    }
+    // pub fn buffer_mode(&mut self, mode: u16) -> Result<(), RuntimeError> {
+    //     self.io.buffer_mode(mode)
+    // }
 
-    pub fn beep(&mut self) -> Result<(), RuntimeError> {
-        self.io.beep()
-    }
+    // pub fn beep(&mut self) -> Result<(), RuntimeError> {
+    //     self.io.beep()
+    // }
 
-    pub fn set_colors(&mut self, foreground: u16, background: u16) -> Result<(), RuntimeError> {
-        self.io.set_colors(foreground, background)
-    }
+    // pub fn set_colors(&mut self, foreground: u16, background: u16) -> Result<(), RuntimeError> {
+    //     self.io.set_colors(foreground, background)
+    // }
 
     // Input
     pub fn read_key(&mut self, timeout: u16) -> Result<InputEvent, RuntimeError> {
@@ -340,14 +375,6 @@ impl ZMachine {
                     }
                     _ => {}
                 }
-                // if let Some(sounds) = self.sounds.as_mut() {
-                //     info!(target: "app::input", "Sound playing? {}", sounds.is_playing());
-                //     if !sounds.is_playing() {
-                //         info!(target: "app::input", "Sound interrupt firing");
-                //         self.input_interrupt = None;
-                //         return Ok(input_buffer);
-                //     }
-                // }
             }
 
             let now = SystemTime::now()
@@ -466,105 +493,6 @@ impl ZMachine {
         }
     }
 
-    // pub fn prepare_save(&self, pc: usize) -> Result<Vec<u8>, RuntimeError> {
-    //     let quetzal = save_restore::quetzal(self, pc)?;
-    //     Ok(Vec::from(quetzal))
-    // }
-
-    // pub fn restore(&mut self, save_data: Vec<u8>) -> Result<Option<usize>, RuntimeError> {
-    //     let quetzal = Quetzal::try_from(save_data)?;
-    //     // &(*self) ... ick
-    //     let ifhd = IFhd::try_from((&(*self),0))?;
-    //     if &ifhd != quetzal.ifhd() {
-    //         error!(target: "app::quetzal", "Save file is not valid for the running story: {} != {}", quetzal.ifhd(), ifhd);
-    //         self.print(
-    //             &"Save was not created using the running story file\r"
-    //                 .chars()
-    //                 .map(|c| c as u16)
-    //                 .collect(),
-    //         )?;
-    //         Ok(None)
-    //     } else {
-    //         // Rebuild frame stack
-    //         let fs: Vec<Frame> = Vec::from(quetzal.stks());
-    //         self.frames = fs;
-
-    //         // Rebuild dynamic memory, preserving the contents of FLAGS2
-    //         let flags2 = self.read_word(0x10)?;
-    //         if let Some(umem) = quetzal.umem() {
-    //             for i in 0..umem.data().len() {
-    //                 self.memory.write_byte(i, umem.data()[i])?;
-    //             }
-    //         } else if let Some(cmem) = quetzal.cmem() {
-    //             let data = save_restore::decompress(cmem, self.dynamic());
-    //             for i in 0..data.len() {
-    //                 self.memory.write_byte(i, data[i])?;
-    //             }
-    //         }
-
-    //         // Re-initialize header
-    //         self.initialize()?;
-
-    //         // Restore FLAGS2
-    //         self.memory.write_word(0x10, flags2)?;
-
-    //         // Reset output stream 3
-    //         self.stream_3 = Vec::new();
-
-    //         Ok(Some(quetzal.ifhd().pc() as usize))
-    //     }
-    // }
-
-    // pub fn save_undo(&mut self, instruction: &Instruction) -> Result<(), RuntimeError> {
-    //     // let q = Quetzal::from_state(&self, instruction.store().unwrap().address());
-    //     if let Some(r) = instruction.store() {
-    //         debug!(target: "app::quetzal", "Saving undo state");
-    //         match save_restore::quetzal(self, r.address()) {
-    //             Ok(quetzal) => {
-    //                 self.undo_stack.push(quetzal);
-    //                 self.undo_stack.truncate(10);
-    //                 Ok(())
-    //             }
-    //             Err(e) => {
-    //                 error!(target: "app::quetzal", "Error saving undo state: {}", e);
-    //                 Err(RuntimeError::new(
-    //                     ErrorCode::Save,
-    //                     format!("Error saving undo state: {}", e),
-    //                 ))
-    //             }
-    //         }
-    //     } else {
-    //         error!(target: "app::quetzal", "SAVE_UNDO should be a store instruction");
-    //         Err(RuntimeError::new(
-    //             ErrorCode::Save,
-    //             "SAVE_UNDO should be a store instruction".to_string(),
-    //         ))
-    //     }
-    // }
-
-    // pub fn restore_undo(&mut self) -> Result<Option<usize>, RuntimeError> {
-    //     if let Some(q) = self.undo_stack.pop() {
-    //         debug!(target: "app::quetzal", "Restoting undo state");
-    //         self.restore(Vec::from(q))
-    //     } else {
-    //         debug!(target: "app::quetzal", "No undo state to restore");
-    //         Ok(None)
-    //     }
-    // }
-
-    // pub fn restart(&mut self) -> Result<usize, RuntimeError> {
-    //     let f1 = self.read_byte(0x10)? & 0x3;
-    //     for i in 0..self.dynamic.len() {
-    //         let b = self.dynamic[i];
-    //         self.write_byte(i, b)?;
-    //     }
-    //     self.write_byte(0x10, self.read_byte(0x10)? | f1)?;
-    //     self.frames.clear();
-    //     self.initialize()?;
-
-    //     Ok(self.current_frame()?.pc())
-    // }
-
     pub fn quit(&mut self) -> Result<(), RuntimeError> {
         self.print(
             &"Press any key to exit"
@@ -581,19 +509,7 @@ impl ZMachine {
 
     pub fn new_line(&mut self) -> Result<(), RuntimeError> {
         self.io.new_line()
-        // if self.output_streams & 0x5 == 0x1 {
-        //     self.screen.new_line();
-        //     if self.output_streams & 0x2 == 0x2 {
-        //         self.transcript(&vec![0x0a as u16].to_vec())?;
-        //     }
-        // }
-
-        // Ok(())
     }
-
-    // pub fn flush_screen(&mut self) -> Result<(), RuntimeError> {
-    //     self.screen.flush_buffer()
-    // }
 
     pub fn backspace(&mut self) -> Result<(), RuntimeError> {
         self.io.backspace()

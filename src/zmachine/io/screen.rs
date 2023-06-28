@@ -521,12 +521,6 @@ impl Screen {
         }
     }
 
-    pub fn print_word(&mut self, word: &Vec<u16>) {
-        for c in word {
-            self.print_char(*c);
-        }
-    }
-
     pub fn print(&mut self, text: &Vec<u16>) {
         for c in text {
             self.print_char(*c);

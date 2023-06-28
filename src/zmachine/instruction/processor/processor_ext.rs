@@ -113,7 +113,7 @@ pub fn art_shift(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<u
 
 pub fn set_font(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let result = zmachine.set_font(operands[0])?;
+    let result = zmachine.io.set_font(operands[0])?;
     store_result(zmachine, instruction, result)?;
     Ok(instruction.next_address())
 }

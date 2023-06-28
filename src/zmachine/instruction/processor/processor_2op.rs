@@ -34,7 +34,7 @@ pub fn jg(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, R
 
 pub fn dec_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let val = zmachine.state.peek_variable(operands[0] as u8)? as i16;
+    let val = zmachine.peek_variable(operands[0] as u8)? as i16;
     let new_val = i16::overflowing_sub(val, 1);
     zmachine
         .state
@@ -44,7 +44,7 @@ pub fn dec_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
 
 pub fn inc_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let val = zmachine.state.peek_variable(operands[0] as u8)? as i16;
+    let val = zmachine.peek_variable(operands[0] as u8)? as i16;
     let new_val = i16::overflowing_add(val, 1);
     zmachine
         .state
@@ -105,7 +105,7 @@ pub fn loadb(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize
     store_result(
         zmachine,
         instruction,
-        zmachine.state.read_byte(address)? as u16,
+        zmachine.read_byte(address)? as u16,
     )?;
     Ok(instruction.next_address())
 }
@@ -343,7 +343,7 @@ pub fn set_colour(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.set_colors(operands[0], operands[1])?;
+    zmachine.io.set_colors(operands[0], operands[1])?;
     Ok(instruction.next_address())
 }
 
