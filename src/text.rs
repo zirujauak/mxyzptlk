@@ -1,9 +1,4 @@
-use crate::error::*;
-
-use super::{
-    header::{self, HeaderField},
-    State,
-};
+use crate::{error::*, zmachine::{ZMachine, state::header::HeaderField}};
 
 const ALPHABET_V3: [[char; 26]; 3] = [
     [
@@ -38,11 +33,15 @@ const ALPHABET_V3: [[char; 26]; 3] = [
 /// * `v` - Version (1-8)
 /// * `t` - Abbreviation table (0 - 2)
 /// * `i` - Abbreviation table index (0 - 31)
-fn abbreviation(state: &State, abbrev_table: u8, index: u8) -> Result<Vec<u16>, RuntimeError> {
-    let abbreviation_table = header::field_word(state, HeaderField::AbbreviationsTable)? as usize;
+fn abbreviation(
+    zmachine: &ZMachine,
+    abbrev_table: u8,
+    index: u8,
+) -> Result<Vec<u16>, RuntimeError> {
+    let abbreviation_table = zmachine.header_word(HeaderField::AbbreviationsTable)? as usize;
     let entry = (64 * (abbrev_table - 1)) + (index * 2);
-    let word_addr = state.read_word(abbreviation_table + entry as usize)? as usize;
-    as_text(state, word_addr * 2)
+    let word_addr = zmachine.read_word(abbreviation_table + entry as usize)? as usize;
+    as_text(zmachine, word_addr * 2)
 }
 
 /// Read ZSCII from an address and decode it to a string
@@ -52,8 +51,8 @@ fn abbreviation(state: &State, abbrev_table: u8, index: u8) -> Result<Vec<u16>, 
 /// * `m` - Memory map
 /// * `v` - Version (1-8)
 /// * `a` - Address of the ZSCII-encoded string
-pub fn as_text(state: &State, address: usize) -> Result<Vec<u16>, RuntimeError> {
-    let text = state.string_literal(address)?;
+pub fn as_text(zmachine: &ZMachine, address: usize) -> Result<Vec<u16>, RuntimeError> {
+    let text = zmachine.string_literal(address)?;
     // let mut d = Vec::new();
     // // If the last word read has bit 15 set, then we're done reading
     // while match d.last() {
@@ -62,11 +61,11 @@ pub fn as_text(state: &State, address: usize) -> Result<Vec<u16>, RuntimeError> 
     // } & 0x8000
     //     == 0
     // {
-    //     let w = state.memory().read_word(address + (d.len() * 2))?;
+    //     let w = zmachine.memory().read_word(address + (d.len() * 2))?;
     //     d.push(w);
     // }
 
-    from_vec(state, &text)
+    from_vec(zmachine, &text)
 }
 
 /// Decode a vector of ZSCII words to a string
@@ -76,7 +75,7 @@ pub fn as_text(state: &State, address: usize) -> Result<Vec<u16>, RuntimeError> 
 /// * `m` - Memory map
 /// * `v` - Version (1-8)
 /// * `z` - Vector of ZSCII-encoded words
-pub fn from_vec(state: &State, ztext: &Vec<u16>) -> Result<Vec<u16>, RuntimeError> {
+pub fn from_vec(zmachine: &ZMachine, ztext: &Vec<u16>) -> Result<Vec<u16>, RuntimeError> {
     let mut alphabet_shift: usize = 0;
     let mut s = Vec::new();
     let mut i = 0;
@@ -93,7 +92,7 @@ pub fn from_vec(state: &State, ztext: &Vec<u16>) -> Result<Vec<u16>, RuntimeErro
 
         for b in [b1, b2, b3] {
             if abbrev > 0 {
-                let mut abbreviation = abbreviation(state, abbrev, b)?;
+                let mut abbreviation = abbreviation(zmachine, abbrev, b)?;
                 s.append(&mut abbreviation);
                 abbrev = 0;
             } else if zscii_read1 {
@@ -130,11 +129,14 @@ pub fn from_vec(state: &State, ztext: &Vec<u16>) -> Result<Vec<u16>, RuntimeErro
     Ok(s)
 }
 
-pub fn separators(state: &State, dictionary_address: usize) -> Result<Vec<char>, RuntimeError> {
-    let separator_count = state.read_byte(dictionary_address)?;
+pub fn separators(
+    zmachine: &ZMachine,
+    dictionary_address: usize,
+) -> Result<Vec<char>, RuntimeError> {
+    let separator_count = zmachine.read_byte(dictionary_address)?;
     let mut sep = Vec::new();
     for i in 1..=separator_count as usize {
-        let c = state.read_byte(dictionary_address + i)? as char;
+        let c = zmachine.read_byte(dictionary_address + i)? as char;
         sep.push(c);
     }
 
@@ -165,7 +167,7 @@ fn as_word(z1: u16, z2: u16, z3: u16) -> u16 {
 }
 
 fn search_entry(
-    state: &State,
+    zmachine: &ZMachine,
     address: usize,
     entry_count: usize,
     entry_size: usize,
@@ -184,7 +186,7 @@ fn search_entry(
     'outer: loop {
         let addr = address + (pivot * entry_size);
         for i in 0..word.len() {
-            let w = state.read_word(addr + (i * 2))?;
+            let w = zmachine.read_word(addr + (i * 2))?;
             if w > word[i] {
                 if pivot == min {
                     break 'outer;
@@ -222,7 +224,7 @@ fn search_entry(
 }
 
 fn scan_entry(
-    state: &State,
+    zmachine: &ZMachine,
     address: usize,
     entry_count: usize,
     entry_size: usize,
@@ -233,7 +235,7 @@ fn scan_entry(
     'outer: for i in 0..entry_count {
         let entry_address = address + (i * entry_size as usize);
         for j in 0..word_count {
-            let ew = state.read_word(entry_address + (j * 2))?;
+            let ew = zmachine.read_word(entry_address + (j * 2))?;
             if ew != words[j] {
                 continue 'outer;
             }
@@ -280,14 +282,14 @@ pub fn encode_text(word: &Vec<u16>, words: usize) -> Vec<u16> {
 }
 
 pub fn from_dictionary(
-    state: &State,
+    zmachine: &ZMachine,
     dictionary_address: usize,
     word: &Vec<char>,
 ) -> Result<usize, RuntimeError> {
-    let separator_count = state.read_byte(dictionary_address)? as usize;
-    let entry_size = state.read_byte(dictionary_address + separator_count + 1)? as usize;
-    let entry_count = state.read_word(dictionary_address + separator_count + 2)? as i16;
-    let word_count = if state.version() < 4 { 2 } else { 3 };
+    let separator_count = zmachine.read_byte(dictionary_address)? as usize;
+    let entry_size = zmachine.read_byte(dictionary_address + separator_count + 1)? as usize;
+    let entry_count = zmachine.read_word(dictionary_address + separator_count + 2)? as i16;
+    let word_count = if zmachine.version() < 4 { 2 } else { 3 };
 
     info!(target: "app::input", "LEXICAL ANALYSIS: dictionary @ {:04x}, {} separators, {} entries of size {}", dictionary_address, separator_count, entry_count, entry_size);
 
@@ -298,7 +300,7 @@ pub fn from_dictionary(
 
     if entry_count > 0 {
         search_entry(
-            state,
+            zmachine,
             dictionary_address + separator_count + 4,
             entry_count as usize,
             entry_size,
@@ -306,7 +308,7 @@ pub fn from_dictionary(
         )
     } else {
         scan_entry(
-            state,
+            zmachine,
             dictionary_address + separator_count + 4,
             (entry_count * -1) as usize,
             entry_size,
@@ -316,7 +318,7 @@ pub fn from_dictionary(
 }
 
 fn find_word(
-    state: &mut State,
+    zmachine: &mut ZMachine,
     dictionary: usize,
     parse_buffer: usize,
     flag: bool,
@@ -325,14 +327,14 @@ fn find_word(
     word_start: usize,
     word: &Vec<char>,
 ) -> Result<(usize, usize), RuntimeError> {
-    let entry = from_dictionary(state, dictionary, word)?;
-    let offset = if state.version() < 5 { 1 } else { 2 };
+    let entry = from_dictionary(zmachine, dictionary, word)?;
+    let offset = if zmachine.version() < 5 { 1 } else { 2 };
 
     info!(target: "app::input", "LEXICAL ANALYSIS: {:?} => {:04x}", word, entry);
     let parse_address = parse_buffer + 2 + (4 * parse_index);
     if !flag {
         store_parsed_entry(
-            state,
+            zmachine,
             &word,
             word_start + offset,
             parse_address,
@@ -341,10 +343,10 @@ fn find_word(
         info!(target: "app::input", "LEXICAL ANALYSIS: store to parse buffer {:04x}", parse_address);
         Ok((parse_index + 1, word_count + 1))
     } else if entry > 0 {
-        let e = state.read_word(parse_address)?;
+        let e = zmachine.read_word(parse_address)?;
         if e == 0 {
             store_parsed_entry(
-                state,
+                zmachine,
                 &word,
                 word_start + offset,
                 parse_address,
@@ -361,39 +363,39 @@ fn find_word(
 }
 
 fn store_parsed_entry(
-    state: &mut State,
+    zmachine: &mut ZMachine,
     word: &Vec<char>,
     word_start: usize,
     entry_address: usize,
     entry: u16,
 ) -> Result<(), RuntimeError> {
     info!(target: "app::input", "LEXICAL_ANALYSIS: dictionary for {:?} => stored to ${:04x}: {:#04x}/{}/{}", word, entry_address, entry, word.len(), word_start);
-    state.write_word(entry_address, entry as u16)?;
-    state.write_byte(entry_address + 2, word.len() as u8)?;
-    state.write_byte(entry_address + 3, word_start as u8)?;
+    zmachine.write_word(entry_address, entry as u16)?;
+    zmachine.write_byte(entry_address + 2, word.len() as u8)?;
+    zmachine.write_byte(entry_address + 3, word_start as u8)?;
     Ok(())
 }
 
 pub fn parse_text(
-    state: &mut State,
+    zmachine: &mut ZMachine,
     text_buffer: usize,
     parse_buffer: usize,
     dictionary: usize,
     flag: bool,
 ) -> Result<(), RuntimeError> {
     info!(target: "app::input", "LEXICAL ANALYSIS: text @ {:04x}, parse @ {:04x}, dictionary @ {:04x}, skip {}", text_buffer, parse_buffer, dictionary, flag);
-    let separators = separators(state, dictionary)?;
+    let separators = separators(zmachine, dictionary)?;
     let mut word = Vec::new();
     let mut word_start: usize = 0;
     let mut word_count: usize = 0;
     let mut words: usize = 0;
     let mut data = Vec::new();
 
-    if state.version() < 5 {
+    if zmachine.version() < 5 {
         // Buffer is 0 terminated
         let mut i = 1;
         loop {
-            let b = state.read_byte(text_buffer + i)?;
+            let b = zmachine.read_byte(text_buffer + i)?;
             if b == 0 {
                 break;
             } else {
@@ -403,13 +405,13 @@ pub fn parse_text(
         }
     } else {
         // Buffer size is stored in the second byte
-        let n = state.read_byte(text_buffer + 1)? as usize;
+        let n = zmachine.read_byte(text_buffer + 1)? as usize;
         for i in 0..n {
-            data.push(state.read_byte(text_buffer + 2 + i)?);
+            data.push(zmachine.read_byte(text_buffer + 2 + i)?);
         }
     }
 
-    let max_words = state.read_byte(parse_buffer)? as usize;
+    let max_words = zmachine.read_byte(parse_buffer)? as usize;
 
     // let data = input_buffer[0..end].to_vec();
     for i in 0..data.len() {
@@ -422,7 +424,7 @@ pub fn parse_text(
             // Store the word
             if word.len() > 0 {
                 (word_count, words) = find_word(
-                    state,
+                    zmachine,
                     dictionary,
                     parse_buffer,
                     flag,
@@ -437,7 +439,7 @@ pub fn parse_text(
             if word_count < max_words {
                 let sep = vec![c];
                 (word_count, words) = find_word(
-                    state,
+                    zmachine,
                     dictionary,
                     parse_buffer,
                     flag,
@@ -453,7 +455,7 @@ pub fn parse_text(
             // Store the word but not the space
             if word.len() > 0 {
                 (word_count, words) = find_word(
-                    state,
+                    zmachine,
                     dictionary,
                     parse_buffer,
                     flag,
@@ -473,7 +475,7 @@ pub fn parse_text(
     // End of input, parse anything collected
     if word.len() > 0 && word_count < max_words {
         (_, words) = find_word(
-            state,
+            zmachine,
             dictionary,
             parse_buffer,
             flag,
@@ -487,7 +489,7 @@ pub fn parse_text(
     // If flag is true, then a previous analysis pass has already set the
     // correct parse buffer size
     if !flag {
-        state.write_byte(parse_buffer + 1, words as u8)?;
+        zmachine.write_byte(parse_buffer + 1, words as u8)?;
     }
 
     Ok(())

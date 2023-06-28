@@ -1,5 +1,8 @@
-use crate::{error::*, zmachine::state::{memory, State}};
 use super::*;
+use crate::{
+    error::*,
+    zmachine::{state::memory, ZMachine},
+};
 
 fn operand_type(type_byte: u8, operand_index: u8) -> Option<OperandType> {
     // Types are packed in the byte: 00112233
@@ -286,9 +289,12 @@ fn opcode(
     ))
 }
 
-pub fn decode_instruction(state: &State, address: usize) -> Result<Instruction, RuntimeError> {
-    let version = state.version();
-    let bytes = state.instruction(address);
+pub fn decode_instruction(
+    zmachine: &ZMachine,
+    address: usize,
+) -> Result<Instruction, RuntimeError> {
+    let version = zmachine.version();
+    let bytes = zmachine.instruction(address);
     let (offset, opcode) = opcode(&bytes, version, 0)?;
 
     let (offset, operand_types) = operand_types(&bytes, &opcode, offset)?;

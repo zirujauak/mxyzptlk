@@ -21,8 +21,6 @@ use crate::instruction::StoreResult;
 mod frame;
 pub mod header;
 pub mod memory;
-pub mod object;
-pub mod text;
 
 #[derive(Debug)]
 pub enum InterruptType {
@@ -158,7 +156,7 @@ impl TryFrom<&State> for Stks {
     fn try_from(value: &State) -> Result<Self, Self::Error> {
         debug!(target: "app::quetzal", "Building Stks chunk from state");
         let mut frames = Vec::new();
-        for f in value.frames() {
+        for f in &value.frames {
             // Flags: 0b000rvvvv
             //  r = 1 if the frame routine does not store a result
             //  vvvv = the number of local variables (0 - 15)
@@ -220,8 +218,12 @@ impl State {
         &self.memory
     }
 
-    pub fn frames(&self) -> &Vec<Frame> {
-        &self.frames
+    // pub fn frames(&self) -> &Vec<Frame> {
+    //     &self.frames
+    // }
+
+    pub fn frame_count(&self) -> usize {
+        self.frames.len()
     }
 
     pub fn interrupt(&self) -> Option<&Interrupt> {
@@ -232,7 +234,7 @@ impl State {
         self.interrupt = None;
     }
 
-    pub fn current_frame(&self) -> Result<&Frame, RuntimeError> {
+    fn current_frame(&self) -> Result<&Frame, RuntimeError> {
         if let Some(frame) = self.frames.last() {
             Ok(frame)
         } else {
@@ -243,7 +245,7 @@ impl State {
         }
     }
 
-    pub fn current_frame_mut(&mut self) -> Result<&mut Frame, RuntimeError> {
+    fn current_frame_mut(&mut self) -> Result<&mut Frame, RuntimeError> {
         if let Some(frame) = self.frames.last_mut() {
             Ok(frame)
         } else {
@@ -365,6 +367,10 @@ impl State {
                 ),
             ))
         }
+    }
+
+    pub fn checksum(&self) -> Result<u16, RuntimeError> {
+        self.memory.checksum()
     }
 
     // Variables
@@ -639,9 +645,17 @@ impl State {
         self.return_routine(result)
     }
 
+    pub fn pc(&self) -> Result<usize, RuntimeError> {
+        Ok(self.current_frame()?.pc())
+    }
+
     pub fn set_pc(&mut self, pc: usize) -> Result<(), RuntimeError> {
         self.current_frame_mut()?.set_pc(pc);
         Ok(())
+    }
+
+    pub fn argument_count(&self) -> Result<u8, RuntimeError> {
+        Ok(self.current_frame()?.argument_count())
     }
 
     // Save/Restore

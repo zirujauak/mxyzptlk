@@ -8,7 +8,7 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
             "SAVE table not implemented".to_string(),
         ))
     } else {
-        let save_data = zmachine.state().save(instruction.store().unwrap().address)?;
+        let save_data = zmachine.save(instruction.store().unwrap().address)?;
         match zmachine.prompt_and_write("Save to: ", "ifzs", &save_data) {
             Ok(_) => {
                 store_result(zmachine, instruction, 1)?;
@@ -36,10 +36,10 @@ pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
         ))
     } else {
         match zmachine.prompt_and_read("Restore from: ", "ifzs") {
-            Ok(save_data) => match zmachine.state_mut().restore(save_data) {
+            Ok(save_data) => match zmachine.restore(save_data) {
                 Ok(address) => match address {
                     Some(a) => {
-                        let i = decoder::decode_instruction(zmachine.state(), a - 3)?;
+                        let i = decoder::decode_instruction(zmachine, a - 3)?;
                         store_result(zmachine, &i, 2)?;
                         Ok(i.next_address())
                     }
@@ -73,7 +73,10 @@ pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
     }
 }
 
-pub fn log_shift(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+pub fn log_shift(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let value = operands[0];
     let places = operands[1] as i16;
@@ -92,7 +95,10 @@ pub fn log_shift(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<u
     Ok(instruction.next_address())
 }
 
-pub fn art_shift(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+pub fn art_shift(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let value = operands[0] as i16;
     let places = operands[1] as i16;
@@ -113,7 +119,7 @@ pub fn art_shift(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<u
 
 pub fn set_font(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let result = zmachine.io_mut().set_font(operands[0])?;
+    let result = zmachine.set_font(operands[0])?;
     store_result(zmachine, instruction, result)?;
     Ok(instruction.next_address())
 }
@@ -138,17 +144,23 @@ pub fn set_font(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
 //     todo!()
 // }
 
-pub fn save_undo(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    zmachine.state_mut().save_undo(instruction.store().unwrap().address())?;
+pub fn save_undo(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    zmachine.save_undo(instruction.store().unwrap().address())?;
     store_result(zmachine, instruction, 1)?;
     Ok(instruction.next_address())
 }
 
-pub fn restore_undo(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    match zmachine.state_mut().restore_undo() {
+pub fn restore_undo(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    match zmachine.restore_undo() {
         Ok(pc) => match pc {
             Some(address) => {
-                let i = decoder::decode_instruction(zmachine.state(), address - 3)?;
+                let i = decoder::decode_instruction(zmachine, address - 3)?;
                 store_result(zmachine, &i, 2)?;
                 Ok(i.next_address())
             }

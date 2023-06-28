@@ -3,20 +3,16 @@ use crate::{
     instruction::{processor::store_result, Instruction},
     zmachine::{
         io::screen::Interrupt,
-        state::{
-            header::{self, HeaderField},
-            object::property,
-            text, InterruptType,
-        },
+        state::{header::HeaderField, InterruptType},
         ZMachine,
-    },
+    }, object::property, text,
 };
 
 use super::{branch, call_fn, operand_values};
 
 pub fn call_vs(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let address = zmachine.state().packed_routine_address(operands[0])?;
+    let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = &operands[1..].to_vec();
 
     call_fn(
@@ -46,7 +42,7 @@ pub fn put_prop(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
     let operands = operand_values(zmachine, instruction)?;
 
     property::set_property(
-        zmachine.state_mut(),
+        zmachine,
         operands[0] as usize,
         operands[1] as u8,
         operands[2],
@@ -58,8 +54,7 @@ fn terminators(zmachine: &ZMachine) -> Result<Vec<u16>, RuntimeError> {
     let mut terminators = vec!['\r' as u16];
 
     if zmachine.version() > 4 {
-        let mut table_addr =
-            header::field_word(zmachine.state(), HeaderField::TerminatorTable)? as usize;
+        let mut table_addr = zmachine.header_word(HeaderField::TerminatorTable)? as usize;
         loop {
             let b = zmachine.read_byte(table_addr)?;
             if b == 0 {
@@ -127,7 +122,7 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
     let timeout = if operands.len() > 2 { operands[2] } else { 0 };
     let routine = if timeout > 0 && operands.len() > 2 {
-        zmachine.state().packed_routine_address(operands[3])?
+        zmachine.packed_routine_address(operands[3])?
     } else {
         0
     };
@@ -178,16 +173,12 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
         if let Some(i) = zmachine.interrupt() {
             match &i.interrupt_type() {
                 InterruptType::Sound => {
-                    return zmachine
-                        .state_mut()
-                        .call_sound_interrupt(instruction.address())
+                    return zmachine.call_sound_interrupt(instruction.address())
                 }
                 _ => {}
             }
         } else if routine > 0 {
-            return zmachine
-                .state_mut()
-                .call_read_interrupt(routine, instruction.address());
+            return zmachine.call_read_interrupt(routine, instruction.address());
         }
     }
 
@@ -218,8 +209,8 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
     // Lexical analysis
     if parse > 0 || zmachine.version() < 5 {
-        let dictionary = header::field_word(zmachine.state(), HeaderField::Dictionary)? as usize;
-        text::parse_text(zmachine.state_mut(), text_buffer, parse, dictionary, false)?;
+        let dictionary = zmachine.header_word(HeaderField::Dictionary)? as usize;
+        text::parse_text(zmachine, text_buffer, parse, dictionary, false)?;
     }
 
     if zmachine.version() > 4 {
@@ -304,7 +295,7 @@ pub fn split_window(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.io_mut().split_window(operands[0])?;
+    zmachine.split_window(operands[0])?;
 
     Ok(instruction.next_address())
 }
@@ -314,14 +305,14 @@ pub fn set_window(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.io_mut().set_window(operands[0])?;
+    zmachine.set_window(operands[0])?;
 
     Ok(instruction.next_address())
 }
 
 pub fn call_vs2(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let address = zmachine.state().packed_routine_address(operands[0])?;
+    let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = operands[1..operands.len()].to_vec();
 
     call_fn(
@@ -338,7 +329,7 @@ pub fn erase_window(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.io_mut().erase_window(operands[0] as i16)?;
+    zmachine.erase_window(operands[0] as i16)?;
     Ok(instruction.next_address())
 }
 
@@ -352,7 +343,7 @@ pub fn set_cursor(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.io_mut().set_cursor(operands[0], operands[1])?;
+    zmachine.set_cursor(operands[0], operands[1])?;
     Ok(instruction.next_address())
 }
 
@@ -361,7 +352,7 @@ pub fn set_text_style(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.io_mut().set_text_style(operands[0])?;
+    zmachine.set_text_style(operands[0])?;
     Ok(instruction.next_address())
 }
 
@@ -370,7 +361,7 @@ pub fn buffer_mode(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.io_mut().buffer_mode(operands[0])?;
+    zmachine.buffer_mode(operands[0])?;
     Ok(instruction.next_address())
 }
 
@@ -405,7 +396,7 @@ pub fn sound_effect(
     let operands: Vec<u16> = operand_values(zmachine, instruction)?;
     let number = operands[0];
     match number {
-        1 | 2 => zmachine.io_mut().beep()?,
+        1 | 2 => zmachine.beep()?,
         _ => {
             let effect = operands[1];
             match effect {
@@ -419,7 +410,7 @@ pub fn sound_effect(
                         (255, 1)
                     };
                     let routine = if operands.len() > 3 {
-                        Some(zmachine.state().packed_routine_address(operands[3])?)
+                        Some(zmachine.packed_routine_address(operands[3])?)
                     } else {
                         None
                     };
@@ -476,7 +467,7 @@ pub fn read_char(
 
     let timeout = if operands.len() > 1 { operands[1] } else { 0 };
     let routine = if timeout > 0 && operands.len() > 2 {
-        zmachine.state().packed_routine_address(operands[2])?
+        zmachine.packed_routine_address(operands[2])?
     } else {
         0
     };
@@ -490,12 +481,10 @@ pub fn read_char(
         None => {
             if let Some(i) = key.interrupt() {
                 match i {
-                    Interrupt::ReadTimeout => zmachine
-                        .state_mut()
-                        .call_read_interrupt(routine, instruction.address()),
-                    Interrupt::Sound => zmachine
-                        .state_mut()
-                        .call_sound_interrupt(instruction.address()),
+                    Interrupt::ReadTimeout => {
+                        zmachine.call_read_interrupt(routine, instruction.address())
+                    }
+                    Interrupt::Sound => zmachine.call_sound_interrupt(instruction.address()),
                 }
             } else {
                 Err(RuntimeError::new(
@@ -557,7 +546,7 @@ pub fn not(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, 
 
 pub fn call_vn(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let address = zmachine.state().packed_routine_address(operands[0])?;
+    let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = &operands[1..].to_vec();
 
     call_fn(
@@ -571,7 +560,7 @@ pub fn call_vn(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
 
 pub fn call_vn2(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let address = zmachine.state().packed_routine_address(operands[0])?;
+    let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = &operands[1..].to_vec();
 
     call_fn(
@@ -590,7 +579,7 @@ pub fn tokenise(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
     let dictionary = if operands.len() > 2 {
         operands[2] as usize
     } else {
-        header::field_word(zmachine.state(), HeaderField::Dictionary)? as usize
+        zmachine.header_word(HeaderField::Dictionary)? as usize
     };
     let flag = if operands.len() > 3 {
         operands[3] > 0
@@ -598,13 +587,7 @@ pub fn tokenise(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
         false
     };
 
-    text::parse_text(
-        zmachine.state_mut(),
-        text_buffer,
-        parse_buffer,
-        dictionary,
-        flag,
-    )?;
+    text::parse_text(zmachine, text_buffer, parse_buffer, dictionary, flag)?;
     Ok(instruction.next_address())
 }
 
@@ -672,14 +655,14 @@ pub fn print_table(
     let height = if operands.len() > 2 { operands[2] } else { 1 };
     let skip = if operands.len() > 3 { operands[3] } else { 0 } as usize;
 
-    let origin = zmachine.io_mut().cursor()?;
+    let origin = zmachine.cursor()?;
     let rows = zmachine.rows();
     for i in 0..height as usize {
         if origin.0 + i as u16 > zmachine.rows() {
             zmachine.new_line()?;
-            zmachine.io_mut().set_cursor(rows as u16, origin.1)?;
+            zmachine.set_cursor(rows as u16, origin.1)?;
         } else {
-            zmachine.io_mut().set_cursor(origin.0 + i as u16, origin.1)?;
+            zmachine.set_cursor(origin.0 + i as u16, origin.1)?;
         }
         let mut text = Vec::new();
         for j in 0..width {
@@ -701,6 +684,6 @@ pub fn check_arg_count(
     branch(
         zmachine,
         instruction,
-        zmachine.state().current_frame()?.argument_count() >= operands[0] as u8,
+        zmachine.argument_count()? >= operands[0] as u8,
     )
 }

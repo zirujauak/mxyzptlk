@@ -11,15 +11,18 @@ use std::path::Path;
 pub mod config;
 pub mod error;
 pub mod iff;
-pub mod zmachine;
 pub mod instruction;
+pub mod object;
+pub mod text;
+pub mod zmachine;
+
 use crate::config::Config;
 //use crate::iff::Chunk;
 use crate::log::*;
 use iff::blorb::Blorb;
 use zmachine::sound::Sounds;
-use zmachine::ZMachine;
 use zmachine::state::memory::Memory;
+use zmachine::ZMachine;
 
 fn open_blorb(name: &str) -> Option<Sounds> {
     let filename = format!("{}.blorb", name);
@@ -51,7 +54,7 @@ fn open_blorb(name: &str) -> Option<Sounds> {
             } else {
                 None
             }
-        },
+        }
         Err(e) => {
             error!(target: "app::blorb", "Error checking for {}: {}", &filename, e);
             None
@@ -97,31 +100,29 @@ fn main() {
     }));
 
     match File::open(filename) {
-        Ok(mut f) => {
-            match Memory::try_from(&mut f) {
-                Ok(memory) => {
-                    let blorb = open_blorb(&name);
-                    let mut zmachine =
-                        ZMachine::new(memory, config, blorb, &name).expect("Error creating state");
+        Ok(mut f) => match Memory::try_from(&mut f) {
+            Ok(memory) => {
+                let blorb = open_blorb(&name);
+                let mut zmachine =
+                    ZMachine::new(memory, config, blorb, &name).expect("Error creating state");
 
-                    trace!(target: "app::trace", "Begin execution");
-                    if let Err(r) = zmachine.run() {
-                        let error: Vec<_> = format!("\r{}\rPress any key to exit", r)
-                            .as_bytes()
-                            .iter()
-                            .map(|x| *x as u16)
-                            .collect();
-                        let _ = zmachine.print(&error);
-                        let _ = zmachine.read_key(0);
-                        let _ = zmachine.quit();
-                        panic!("{}", r)
-                    }
-                }
-                Err(e) => {
-                    panic!("Error reading file '{}': {}", filename, e);
+                trace!(target: "app::trace", "Begin execution");
+                if let Err(r) = zmachine.run() {
+                    let error: Vec<_> = format!("\r{}\rPress any key to exit", r)
+                        .as_bytes()
+                        .iter()
+                        .map(|x| *x as u16)
+                        .collect();
+                    let _ = zmachine.print(&error);
+                    let _ = zmachine.read_key(0);
+                    let _ = zmachine.quit();
+                    panic!("{}", r)
                 }
             }
-        }
+            Err(e) => {
+                panic!("Error reading file '{}': {}", filename, e);
+            }
+        },
         Err(e) => {
             panic!("Error opening '{}': {}", filename, e);
         }

@@ -1,23 +1,23 @@
 use crate::error::{ErrorCode, RuntimeError};
 use crate::instruction::{decoder, Instruction};
+use crate::text;
 use crate::zmachine::state::header::HeaderField;
-use crate::zmachine::state::{text, header};
 use crate::zmachine::ZMachine;
 
 use super::branch;
 use super::store_result;
 
 pub fn rtrue(zmachine: &mut ZMachine, _instruction: &Instruction) -> Result<usize, RuntimeError> {
-    zmachine.state_mut().return_routine(1)
+    zmachine.return_routine(1)
 }
 
 pub fn rfalse(zmachine: &mut ZMachine, _instruction: &Instruction) -> Result<usize, RuntimeError> {
-    zmachine.state_mut().return_routine(0)
+    zmachine.return_routine(0)
 }
 
 pub fn print(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let ztext = zmachine.state().string_literal(instruction.address() + 1)?;
-    let text = text::from_vec(&zmachine.state(), &ztext)?;
+    let ztext = zmachine.string_literal(instruction.address() + 1)?;
+    let text = text::from_vec(zmachine, &ztext)?;
     zmachine.print(&text)?;
     Ok(instruction.next_address() + (ztext.len() * 2))
 }
@@ -26,13 +26,13 @@ pub fn print_ret(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
-    let ztext = zmachine.state().string_literal(instruction.address + 1)?;
-    let text = text::from_vec(zmachine.state(), &ztext)?;
+    let ztext = zmachine.string_literal(instruction.address + 1)?;
+    let text = text::from_vec(zmachine, &ztext)?;
 
     zmachine.print(&text)?;
     zmachine.new_line()?;
 
-    zmachine.state_mut().return_routine(1)
+    zmachine.return_routine(1)
 }
 
 fn save_result(
@@ -71,7 +71,7 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
         }
     };
 
-    let save_data = zmachine.state().save(pc)?;
+    let save_data = zmachine.save(pc)?;
     match zmachine.prompt_and_write("Save to: ", "ifzs", &save_data) {
         Ok(_) => save_result(zmachine, instruction, true),
         Err(e) => {
@@ -89,11 +89,11 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     match zmachine.prompt_and_read("Restore from: ", "ifzs") {
         Ok(save_data) => {
-            match zmachine.state_mut().restore(save_data) {
+            match zmachine.restore(save_data) {
                 Ok(address) => {
                     match address {
                         Some(a) => {
-                            let i = decoder::decode_instruction(zmachine.state(), a - 1)?;
+                            let i = decoder::decode_instruction(zmachine, a - 1)?;
                             if zmachine.version() == 3 {
                                 // V3 is a branch
                                 branch(zmachine, &i, true)
@@ -140,21 +140,24 @@ pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
 }
 
 pub fn restart(zmachine: &mut ZMachine, _instruction: &Instruction) -> Result<usize, RuntimeError> {
-    zmachine.state_mut().restart()
+    zmachine.restart()
 }
 
-pub fn ret_popped(zmachine: &mut ZMachine, _instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let value = zmachine.state_mut().variable(0)?;
-    zmachine.state_mut().return_routine(value)
+pub fn ret_popped(
+    zmachine: &mut ZMachine,
+    _instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let value = zmachine.variable(0)?;
+    zmachine.return_routine(value)
 }
 
 pub fn pop(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    zmachine.state_mut().variable(0)?;
+    zmachine.variable(0)?;
     Ok(instruction.next_address())
 }
 
 pub fn catch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let depth = zmachine.state().frames().len();
+    let depth = zmachine.frame_count();
     store_result(zmachine, instruction, depth as u16)?;
     Ok(instruction.next_address())
 }
@@ -170,14 +173,17 @@ pub fn new_line(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
     Ok(instruction.next_address())
 }
 
-pub fn show_status(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+pub fn show_status(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
     zmachine.status_line()?;
     Ok(instruction.next_address())
 }
 
 pub fn verify(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    let expected = header::field_word(zmachine.state(), HeaderField::Checksum)?;
-    let checksum = zmachine.state().memory().checksum()?;
+    let expected = zmachine.header_word(HeaderField::Checksum)?;
+    let checksum = zmachine.checksum()?;
 
     branch(zmachine, instruction, expected == checksum)
 }
