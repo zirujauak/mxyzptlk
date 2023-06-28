@@ -82,13 +82,4 @@ impl Buffer {
         self.buffer.push(r);
         terminal.as_mut().scroll(top);
     }
-
-    // pub fn flush(&mut self) {
-    //     for i in 0..self.buffer.len() {
-    //         for j in 0..self.buffer[i].len() {
-    //             print!("{}", (self.buffer[i][j].zchar as u8) as char);
-    //         }
-    //         println!("");
-    //     }
-    // }
 }

@@ -330,36 +330,6 @@ impl Screen {
         self.selected_window = 0;
     }
 
-    // pub fn split_window(&mut self, lines: u32) {
-    //     let top = match self.status_line {
-    //         true => 2,
-    //         false => 1,
-    //     };
-    //     if lines == 0 {
-    //         self.window_0_top = top;
-    //         self.window_1_top = None;
-    //         self.window_1_bottom = None;
-    //         self.cursor_1 = None;
-    //     } else {
-    //         let bottom = top + lines - 1;
-    //         self.window_1_top = Some(top);
-    //         self.window_1_bottom = Some(bottom);
-    //         self.cursor_1 = Some((1, 1));
-    //         self.window_0_top = bottom + 1;
-    //         if self.cursor_0.0 < self.window_0_top {
-    //             self.cursor_0 = (self.window_0_top, self.cursor_0.1)
-    //         }
-    //         if self.version == 3 {
-    //             for i in self.window_1_top.unwrap()..self.window_1_bottom.unwrap() {
-    //                 for j in 1..self.columns {
-    //                     self.buffer
-    //                         .clear(&mut self.terminal, self.current_colors, (i, j));
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
     pub fn select_window(&mut self, window: u8) -> Result<(), RuntimeError> {
         self.lines_since_input = 0;
         if window == 0 {
