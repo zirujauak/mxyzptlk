@@ -1,7 +1,6 @@
 mod files;
 mod input;
-mod instruction;
-mod io;
+pub mod io;
 mod rng;
 // mod save_restore;
 pub mod sound;
@@ -18,14 +17,15 @@ use std::time::UNIX_EPOCH;
 
 use crate::config::Config;
 use crate::error::*;
+use crate::instruction::decoder;
+use crate::instruction::processor;
+use crate::instruction::StoreResult;
 use crate::zmachine::io::screen::Interrupt;
 use rng::chacha_rng::ChaChaRng;
 use rng::RNG;
 
-use self::instruction::decoder;
-use self::instruction::processor;
-use self::io::IO;
 use self::io::screen::InputEvent;
+use self::io::IO;
 use self::sound::Sounds;
 use self::state::header;
 use self::state::header::Flags1v3;
@@ -96,6 +96,26 @@ impl ZMachine {
         &mut self.state
     }
 
+    pub fn io(&mut self) -> &IO {
+        &self.io
+    }
+
+    pub fn io_mut(&mut self) -> &mut IO {
+        &mut self.io
+    }
+    
+    pub fn input_interrupt_print(&self) -> bool {
+        self.input_interrupt_print
+    }
+
+    pub fn clear_input_interrupt_print(&mut self) {
+        self.input_interrupt_print = false
+    }
+
+    pub fn set_input_interrupt_print(&mut self) {
+        self.input_interrupt_print = true
+    }
+
     // Runtime state
     pub fn read_byte(&self, address: usize) -> Result<u8, RuntimeError> {
         self.state.read_byte(address)
@@ -152,7 +172,141 @@ impl ZMachine {
     pub fn push(&mut self, value: u16) -> Result<(), RuntimeError> {
         self.state.push(value)
     }
-    
+
+    pub fn is_input_interrupt(&self) -> bool {
+        self.state.is_input_interrupt()
+    }
+
+    pub fn call_routine(
+        &mut self,
+        address: usize,
+        arguments: &Vec<u16>,
+        result: Option<StoreResult>,
+        return_address: usize,
+    ) -> Result<usize, RuntimeError> {
+        self.state
+            .call_routine(address, arguments, result, return_address)
+    }
+
+    pub fn call_read_interrupt(
+        &mut self,
+        address: usize,
+        return_address: usize,
+    ) -> Result<usize, RuntimeError> {
+        self.state.call_read_interrupt(address, return_address)
+        // if let Some(_) = self.interrupt {
+        //     Err(RuntimeError::new(
+        //         ErrorCode::System,
+        //         "Interrupt routine interrupted".to_string(),
+        //     ))
+        // } else {
+        //     debug!(target: "app::frame", "Read interrupt routine firing @ ${:06x}", address);
+        //     self.interrupt = Some(Interrupt::input(address));
+        //     let (initial_pc, local_variables) = self.routine_header(address)?;
+        //     let frame = Frame::call_routine(
+        //         address,
+        //         initial_pc,
+        //         &vec![],
+        //         local_variables,
+        //         None,
+        //         return_address,
+        //     )?;
+        //     self.frames.push(frame);
+        //     Ok(initial_pc)
+        // }
+    }
+
+    pub fn interrupt(&self) -> Option<&state::Interrupt> {
+        self.state.interrupt()
+    }
+
+    pub fn sound_interrupt(&mut self, address: usize) {
+        self.state.sound_interrupt(address);
+    }
+
+    pub fn clear_interrupt(&mut self) {
+        self.state.clear_interrupt()
+    }
+
+    pub fn call_sound_interrupt(&mut self, return_address: usize) -> Result<usize, RuntimeError> {
+        self.state.call_sound_interrupt(return_address)
+        // if let Some(i) = &self.interrupt {
+        //     match i.interrupt_type {
+        //         InterruptType::Sound => {
+        //             debug!(target: "app::frame", "Sound interrupt routine firing @ ${:06x}", i.address);
+        //             let (initial_pc, local_variables) = self.routine_header(i.address)?;
+        //             let frame = Frame::call_routine(
+        //                 i.address,
+        //                 initial_pc,
+        //                 &vec![],
+        //                 local_variables,
+        //                 None,
+        //                 return_address,
+        //             )?;
+        //             self.frames.push(frame);
+        //             self.interrupt = None;
+        //             Ok(initial_pc)
+        //         }
+        //         _ => Err(RuntimeError::new(
+        //             ErrorCode::System,
+        //             "Pending interrupt is not a sound interrupt".to_string(),
+        //         )),
+        //     }
+        // } else {
+        //     Err(RuntimeError::new(
+        //         ErrorCode::System,
+        //         "No pending interrupt".to_string(),
+        //     ))
+        // }
+    }
+
+    pub fn return_routine(&mut self, value: u16) -> Result<usize, RuntimeError> {
+        self.state.return_routine(value)
+        // if let Some(i) = self.interrupt.as_mut() {
+        //     match i.interrupt_type {
+        //         // For an input interrupt, stash the return value where the READ
+        //         // instruction can get it.
+        //         InterruptType::Input => {
+        //             debug!(target: "app::frame", "READ interrupt returned {}", value);
+        //             i.set_result(value);
+        //         }
+        //         // For a sound interrupt, do nothing ... it will get cleared when the
+        //         // interrupt is triggered
+        //         _ => {}
+        //     }
+        // }
+
+        // if let Some(f) = self.frames.pop() {
+        //     let n = self.current_frame_mut()?;
+        //     n.set_pc(f.return_address());
+        //     debug!(target: "app::frame", "Return to ${:06x} -> {:?}", f.return_address(), f.result());
+        //     match &self.interrupt {
+        //         None => match f.result() {
+        //             Some(r) => self.set_variable(r.variable(), value)?,
+        //             None => (),
+        //         },
+        //         Some(i) => match i.interrupt_type {
+        //             InterruptType::Sound => match f.result() {
+        //                 Some(r) => self.set_variable(r.variable(), value)?,
+        //                 None => (),
+        //             },
+        //             _ => {}
+        //         },
+        //     }
+
+        //     Ok(self.current_frame()?.pc())
+        // } else {
+        //     Err(RuntimeError::new(
+        //         ErrorCode::System,
+        //         "No frame to return to".to_string(),
+        //     ))
+        // }
+    }
+
+    pub fn throw(&mut self, depth: u16, result: u16) -> Result<usize, RuntimeError> {
+        self.state.throw(depth, result)
+    }
+
     // RNG
     pub fn random(&mut self, range: u16) -> u16 {
         let v = self.rng.random(range);
@@ -175,14 +329,18 @@ impl ZMachine {
     pub fn columns(&self) -> u16 {
         self.io.columns() as u16
     }
-    
+
     pub fn output_stream(&mut self, stream: i16, table: Option<usize>) -> Result<(), RuntimeError> {
         if stream > 0 {
             self.io.enable_output_stream(stream as u8, table)
         } else if stream < 0 {
-            self.io.disable_output_stream(&mut self.state, i16::abs(stream) as u8)
+            self.io
+                .disable_output_stream(&mut self.state, i16::abs(stream) as u8)
         } else {
-            Err(RuntimeError::new(ErrorCode::System, format!("Output stream {} is not valid: [-4..4]", stream)))
+            Err(RuntimeError::new(
+                ErrorCode::System,
+                format!("Output stream {} is not valid: [-4..4]", stream),
+            ))
         }
     }
 
@@ -584,7 +742,7 @@ impl ZMachine {
                             }
                         }
                     }
-                    _ => self.state.set_pc(pc)?
+                    _ => self.state.set_pc(pc)?,
                 }
             } else {
                 self.state.set_pc(pc)?;

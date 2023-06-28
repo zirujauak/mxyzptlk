@@ -12,7 +12,7 @@ pub mod config;
 pub mod error;
 pub mod iff;
 pub mod zmachine;
-
+pub mod instruction;
 use crate::config::Config;
 //use crate::iff::Chunk;
 use crate::log::*;

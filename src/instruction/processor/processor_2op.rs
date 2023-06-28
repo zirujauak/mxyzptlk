@@ -36,9 +36,7 @@ pub fn dec_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
     let operands = operand_values(zmachine, instruction)?;
     let val = zmachine.peek_variable(operands[0] as u8)? as i16;
     let new_val = i16::overflowing_sub(val, 1);
-    zmachine
-        .state
-        .set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
+    zmachine.set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
     branch(zmachine, instruction, new_val.0 < operands[1] as i16)
 }
 
@@ -46,9 +44,7 @@ pub fn inc_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
     let operands = operand_values(zmachine, instruction)?;
     let val = zmachine.peek_variable(operands[0] as u8)? as i16;
     let new_val = i16::overflowing_add(val, 1);
-    zmachine
-        .state
-        .set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
+    zmachine.set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
     branch(zmachine, instruction, new_val.0 > operands[1] as i16)
 }
 
@@ -57,7 +53,7 @@ pub fn jin(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, 
     branch(
         zmachine,
         instruction,
-        parent(&zmachine.state, operands[0] as usize)? == (operands[1] as usize),
+        parent(zmachine.state(), operands[0] as usize)? == (operands[1] as usize),
     )
 }
 
@@ -95,26 +91,20 @@ pub fn and(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, 
 pub fn loadw(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let address = (operands[0] as isize + (operands[1] as i16 * 2) as isize) as usize;
-    store_result(zmachine, instruction, zmachine.state.read_word(address)?)?;
+    store_result(zmachine, instruction, zmachine.read_word(address)?)?;
     Ok(instruction.next_address())
 }
 
 pub fn loadb(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let address = (operands[0] as isize + (operands[1] as i16) as isize) as usize;
-    store_result(
-        zmachine,
-        instruction,
-        zmachine.read_byte(address)? as u16,
-    )?;
+    store_result(zmachine, instruction, zmachine.read_byte(address)? as u16)?;
     Ok(instruction.next_address())
 }
 
 pub fn store(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine
-        .state
-        .set_variable_indirect(operands[0] as u8, operands[1])?;
+    zmachine.set_variable_indirect(operands[0] as u8, operands[1])?;
     Ok(instruction.next_address())
 }
 
@@ -127,19 +117,19 @@ pub fn insert_obj(
     let object = operands[0] as usize;
     if object != 0 {
         let new_parent = operands[1] as usize;
-        let old_parent = object::parent(&zmachine.state, object)?;
+        let old_parent = object::parent(zmachine.state(), object)?;
 
         if old_parent != new_parent {
             if old_parent != 0 {
-                let old_parent_child = object::child(&zmachine.state, old_parent)?;
+                let old_parent_child = object::child(zmachine.state(), old_parent)?;
 
                 if old_parent_child == object {
-                    let o = object::sibling(&zmachine.state, object)?;
-                    object::set_child(&mut zmachine.state, old_parent, o)?;
+                    let o = object::sibling(zmachine.state(), object)?;
+                    object::set_child(zmachine.state_mut(), old_parent, o)?;
                 } else {
                     let mut sibling = old_parent_child;
-                    while sibling != 0 && object::sibling(&zmachine.state, sibling)? != object {
-                        sibling = object::sibling(&zmachine.state, sibling)?;
+                    while sibling != 0 && object::sibling(zmachine.state(), sibling)? != object {
+                        sibling = object::sibling(zmachine.state(), sibling)?;
                     }
 
                     if sibling == 0 {
@@ -152,15 +142,15 @@ pub fn insert_obj(
                         ));
                     }
 
-                    let o = object::sibling(&zmachine.state, object)?;
-                    object::set_sibling(&mut zmachine.state, sibling, o)?;
+                    let o = object::sibling(zmachine.state(), object)?;
+                    object::set_sibling(zmachine.state_mut(), sibling, o)?;
                 }
             }
 
-            let o = object::child(&zmachine.state, new_parent)?;
-            object::set_sibling(&mut zmachine.state, object, o)?;
-            object::set_child(&mut zmachine.state, new_parent, object)?;
-            object::set_parent(&mut zmachine.state, object, new_parent)?;
+            let o = object::child(zmachine.state(), new_parent)?;
+            object::set_sibling(zmachine.state_mut(), object, o)?;
+            object::set_child(zmachine.state_mut(), new_parent, object)?;
+            object::set_parent(zmachine.state_mut(), object, new_parent)?;
         }
     }
 
@@ -173,14 +163,14 @@ pub fn test_attr(
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let condition = operands[0] > 0
-        && attribute::value(&zmachine.state, operands[0] as usize, operands[1] as u8)?;
+        && attribute::value(zmachine.state(), operands[0] as usize, operands[1] as u8)?;
     branch(zmachine, instruction, condition)
 }
 
 pub fn set_attr(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if operands[0] > 0 {
-        attribute::set(&mut zmachine.state, operands[0] as usize, operands[1] as u8)?;
+        attribute::set(zmachine.state_mut(), operands[0] as usize, operands[1] as u8)?;
     }
 
     Ok(instruction.next_address())
@@ -192,7 +182,7 @@ pub fn clear_attr(
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if operands[0] > 0 {
-        attribute::clear(&mut zmachine.state, operands[0] as usize, operands[1] as u8)?;
+        attribute::clear(zmachine.state_mut(), operands[0] as usize, operands[1] as u8)?;
     }
 
     Ok(instruction.next_address())
@@ -204,7 +194,7 @@ pub fn get_prop(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
     if operands[0] == 0 {
         store_result(zmachine, instruction, 0)?;
     } else {
-        let value = property::property(&zmachine.state, operands[0] as usize, operands[1] as u8)?;
+        let value = property::property(zmachine.state(), operands[0] as usize, operands[1] as u8)?;
         store_result(zmachine, instruction, value)?;
     }
 
@@ -221,7 +211,7 @@ pub fn get_prop_addr(
         store_result(zmachine, instruction, 0)?;
     } else {
         let value = property::property_data_address(
-            &zmachine.state,
+            zmachine.state(),
             operands[0] as usize,
             operands[1] as u8,
         )?;
@@ -241,7 +231,7 @@ pub fn get_next_prop(
         store_result(zmachine, instruction, 0)?;
     } else {
         let value =
-            property::next_property(&zmachine.state, operands[0] as usize, operands[1] as u8)?;
+            property::next_property(zmachine.state(), operands[0] as usize, operands[1] as u8)?;
         store_result(zmachine, instruction, value as u16)?;
     }
 
@@ -343,7 +333,7 @@ pub fn set_colour(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.io.set_colors(operands[0], operands[1])?;
+    zmachine.io_mut().set_colors(operands[0], operands[1])?;
     Ok(instruction.next_address())
 }
 

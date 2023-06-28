@@ -16,7 +16,7 @@ use self::{
     memory::Memory,
 };
 
-use super::instruction::StoreResult;
+use crate::instruction::StoreResult;
 
 mod frame;
 pub mod header;

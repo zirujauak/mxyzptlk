@@ -1,5 +1,5 @@
 use crate::error::{ErrorCode, RuntimeError};
-use crate::zmachine::instruction::{decoder, Instruction};
+use crate::instruction::{decoder, Instruction};
 use crate::zmachine::state::header::HeaderField;
 use crate::zmachine::state::{text, header};
 use crate::zmachine::ZMachine;

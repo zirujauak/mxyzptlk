@@ -1,6 +1,6 @@
 use crate::error::*;
 use crate::iff::quetzal::stks::{StackFrame, Stks};
-use crate::zmachine::instruction::StoreResult;
+use crate::instruction::StoreResult;
 
 #[derive(Debug)]
 pub struct Frame {
