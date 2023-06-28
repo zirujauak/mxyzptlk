@@ -194,26 +194,6 @@ impl ZMachine {
         return_address: usize,
     ) -> Result<usize, RuntimeError> {
         self.state.call_read_interrupt(address, return_address)
-        // if let Some(_) = self.interrupt {
-        //     Err(RuntimeError::new(
-        //         ErrorCode::System,
-        //         "Interrupt routine interrupted".to_string(),
-        //     ))
-        // } else {
-        //     debug!(target: "app::frame", "Read interrupt routine firing @ ${:06x}", address);
-        //     self.interrupt = Some(Interrupt::input(address));
-        //     let (initial_pc, local_variables) = self.routine_header(address)?;
-        //     let frame = Frame::call_routine(
-        //         address,
-        //         initial_pc,
-        //         &vec![],
-        //         local_variables,
-        //         None,
-        //         return_address,
-        //     )?;
-        //     self.frames.push(frame);
-        //     Ok(initial_pc)
-        // }
     }
 
     pub fn interrupt(&self) -> Option<&state::Interrupt> {
