@@ -15,16 +15,18 @@ pub mod instruction;
 pub mod object;
 pub mod text;
 pub mod zmachine;
+pub mod sound;
 
 use crate::config::Config;
 //use crate::iff::Chunk;
 use crate::log::*;
 use iff::blorb::Blorb;
-use zmachine::sound::Sounds;
+use sound::Engine;
+use sound::rodio_player::RodioPlayer;
 use zmachine::state::memory::Memory;
 use zmachine::ZMachine;
 
-fn open_blorb(name: &str) -> Option<Sounds> {
+fn initialize_sound_engine(name: &str) -> Option<Engine> {
     let filename = format!("{}.blorb", name);
     match Path::new(&filename).try_exists() {
         Ok(b) => {
@@ -35,7 +37,12 @@ fn open_blorb(name: &str) -> Option<Sounds> {
                         match f.read_to_end(&mut data) {
                             Ok(_) => {
                                 if let Ok(blorb) = Blorb::try_from(data) {
-                                    Some(Sounds::from(blorb))
+                                    if let Ok(player) = RodioPlayer::new() {
+                                        let engine = Engine::new(Box::new(player), blorb);
+                                        Some(engine)
+                                    } else {
+                                        None
+                                    }
                                 } else {
                                     None
                                 }
@@ -76,6 +83,7 @@ fn main() {
     info!(target: "app::memory", "Start memory log for '{}'", name);
     info!(target: "app::object", "Start object log for '{}'", name);
     info!(target: "app::quetzal", "Start quetzal log for '{}'", name);
+    info!(target: "app::sound", "Start sound log for '{}'", name);
     info!(target: "app::stack", "Start stack log for '{}'", name);
     info!(target: "app::trace", "Start trace log for '{}'", name);
     info!(target: "app::variable", "Start variable log for '{}'", name);
@@ -102,9 +110,9 @@ fn main() {
     match File::open(filename) {
         Ok(mut f) => match Memory::try_from(&mut f) {
             Ok(memory) => {
-                let blorb = open_blorb(&name);
+                let sound_engine = initialize_sound_engine(&name);
                 let mut zmachine =
-                    ZMachine::new(memory, config, blorb, &name).expect("Error creating state");
+                    ZMachine::new(memory, config, sound_engine, &name).expect("Error creating state");
 
                 trace!(target: "app::trace", "Begin execution");
                 if let Err(r) = zmachine.run() {

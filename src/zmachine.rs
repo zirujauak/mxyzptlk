@@ -1,7 +1,6 @@
 mod files;
 pub mod io;
 mod rng;
-pub mod sound;
 pub mod state;
 
 use std::fs;
@@ -19,6 +18,7 @@ use crate::instruction::decoder;
 use crate::instruction::processor;
 use crate::instruction::StoreResult;
 use crate::object::property;
+use crate::sound::Engine;
 use crate::text;
 use crate::zmachine::io::screen::Interrupt;
 use rng::chacha_rng::ChaChaRng;
@@ -26,7 +26,6 @@ use rng::RNG;
 
 use self::io::screen::InputEvent;
 use self::io::IO;
-use self::sound::Sounds;
 use self::state::header;
 use self::state::header::Flags1v3;
 use self::state::header::HeaderField;
@@ -41,7 +40,7 @@ pub struct ZMachine {
     rng: Box<dyn RNG>,
     input_interrupt: Option<u16>,
     input_interrupt_print: bool,
-    sounds: Option<Sounds>,
+    sounds: Option<Engine>,
     sound_interrupt: Option<usize>,
 }
 
@@ -49,13 +48,13 @@ impl ZMachine {
     pub fn new(
         memory: Memory,
         config: Config,
-        sounds: Option<Sounds>,
+        sounds: Option<Engine>,
         name: &str,
     ) -> Result<ZMachine, RuntimeError> {
         let version = memory.read_byte(HeaderField::Version as usize)?;
 
         if let Some(s) = sounds.as_ref() {
-            info!(target: "app::sound", "{} sounds loaded", s.sounds().len())
+            info!(target: "app::sound", "{} sounds loaded", s.sound_count())
         }
         let rng = ChaChaRng::new();
 
@@ -659,7 +658,7 @@ impl ZMachine {
             if let Some(address) = routine {
                 self.state.sound_interrupt(address);
             }
-            if sounds.current_effect() == effect {
+            if sounds.current_effect() as u16 == effect {
                 sounds.change_volume(volume);
                 Ok(())
             } else {
