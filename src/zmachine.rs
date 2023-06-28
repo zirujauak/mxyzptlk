@@ -18,7 +18,7 @@ use crate::instruction::decoder;
 use crate::instruction::processor;
 use crate::instruction::StoreResult;
 use crate::object::property;
-use crate::sound::Engine;
+use crate::sound::Manager;
 use crate::text;
 use crate::zmachine::io::screen::Interrupt;
 use rng::chacha_rng::ChaChaRng;
@@ -40,7 +40,7 @@ pub struct ZMachine {
     rng: Box<dyn RNG>,
     input_interrupt: Option<u16>,
     input_interrupt_print: bool,
-    sounds: Option<Engine>,
+    sound_manager: Option<Manager>,
     sound_interrupt: Option<usize>,
 }
 
@@ -48,12 +48,12 @@ impl ZMachine {
     pub fn new(
         memory: Memory,
         config: Config,
-        sounds: Option<Engine>,
+        sound_manager: Option<Manager>,
         name: &str,
     ) -> Result<ZMachine, RuntimeError> {
         let version = memory.read_byte(HeaderField::Version as usize)?;
 
-        if let Some(s) = sounds.as_ref() {
+        if let Some(s) = sound_manager.as_ref() {
             info!(target: "app::sound", "{} sounds loaded", s.sound_count())
         }
         let rng = ChaChaRng::new();
@@ -76,7 +76,7 @@ impl ZMachine {
             rng: Box::new(rng),
             input_interrupt: None,
             input_interrupt_print: false,
-            sounds,
+            sound_manager: sound_manager,
             sound_interrupt: None,
         })
     }
@@ -84,22 +84,6 @@ impl ZMachine {
     pub fn version(&self) -> u8 {
         self.version
     }
-
-    // pub fn state(&self) -> &State {
-    //     &self.state
-    // }
-
-    // pub fn state_mut(&mut self) -> &mut State {
-    //     &mut self.state
-    // }
-
-    // pub fn io(&mut self) -> &IO {
-    //     &self.io
-    // }
-
-    // pub fn io_mut(&mut self) -> &mut IO {
-    //     &mut self.io
-    // }
 
     pub fn input_interrupt_print(&self) -> bool {
         self.input_interrupt_print
@@ -411,7 +395,7 @@ impl ZMachine {
             // return buffer and clear any pending input_interrupt
             if let Some(_) = self.sound_interrupt {
                 info!(target: "app::input", "Sound interrupt pending");
-                if let Some(sounds) = self.sounds.as_mut() {
+                if let Some(sounds) = self.sound_manager.as_mut() {
                     info!(target: "app::input", "Sound playing? {}", sounds.is_playing());
                     if !sounds.is_playing() {
                         info!(target: "app::input", "Sound interrupt firing");
@@ -490,7 +474,7 @@ impl ZMachine {
                 info!(target: "app::frame", "Interrupt pending");
                 match &i.interrupt_type() {
                     state::InterruptType::Sound => {
-                        if let Some(sounds) = self.sounds.as_mut() {
+                        if let Some(sounds) = self.sound_manager.as_mut() {
                             info!(target: "app::frame", "Sound playing? {}", sounds.is_playing());
                             if !sounds.is_playing() {
                                 info!(target: "app::frame", "Sound interrupt firing");
@@ -654,10 +638,13 @@ impl ZMachine {
             None
         };
 
-        if let Some(sounds) = self.sounds.as_mut() {
+        if let Some(sounds) = self.sound_manager.as_mut() {
             if let Some(address) = routine {
                 self.state.sound_interrupt(address);
             }
+            // Sound is already playing, possibly repeating, so just
+            // adjust the volume, if possible, without interrupting
+            // the loop
             if sounds.current_effect() as u16 == effect {
                 sounds.change_volume(volume);
                 Ok(())
@@ -670,7 +657,7 @@ impl ZMachine {
     }
 
     pub fn stop_sound(&mut self) -> Result<(), RuntimeError> {
-        if let Some(sounds) = self.sounds.as_mut() {
+        if let Some(sounds) = self.sound_manager.as_mut() {
             if let Some(i) = self.state.interrupt() {
                 match i.interrupt_type() {
                     state::InterruptType::Sound => self.state.clear_interrupt(),
@@ -699,7 +686,7 @@ impl ZMachine {
                 match &i.interrupt_type() {
                     state::InterruptType::Sound => {
                         info!(target: "app::sound", "Pending sound interrupt");
-                        if let Some(sounds) = self.sounds.as_mut() {
+                        if let Some(sounds) = self.sound_manager.as_mut() {
                             info!(target: "app::sound", "Check for sound: {}", sounds.is_playing());
                             if !sounds.is_playing() {
                                 let pc = self.state.call_sound_interrupt(pc)?;

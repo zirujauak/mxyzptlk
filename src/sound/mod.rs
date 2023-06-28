@@ -43,7 +43,7 @@ pub trait Player {
     fn change_volume(&mut self, volume: u8);
 }
 
-pub struct Engine {
+pub struct Manager {
     player: Option<Box<dyn Player>>,
     sounds: HashMap<u32, Sound>,
     current_effect: u32,
@@ -75,9 +75,9 @@ impl From<Blorb> for HashMap<u32, Sound> {
     }
 }
 
-impl Engine {
-    pub fn new(player: Box<dyn Player>, blorb: Blorb) -> Engine {
-        Engine {
+impl Manager {
+    pub fn new(player: Box<dyn Player>, blorb: Blorb) -> Manager {
+        Manager {
             player: Some(player),
             sounds: HashMap::from(blorb),
             current_effect: 0,

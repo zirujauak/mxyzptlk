@@ -21,12 +21,12 @@ use crate::config::Config;
 //use crate::iff::Chunk;
 use crate::log::*;
 use iff::blorb::Blorb;
-use sound::Engine;
+use sound::Manager;
 use sound::rodio_player::RodioPlayer;
 use zmachine::state::memory::Memory;
 use zmachine::ZMachine;
 
-fn initialize_sound_engine(name: &str) -> Option<Engine> {
+fn initialize_sound_engine(name: &str) -> Option<Manager> {
     let filename = format!("{}.blorb", name);
     match Path::new(&filename).try_exists() {
         Ok(b) => {
@@ -38,8 +38,8 @@ fn initialize_sound_engine(name: &str) -> Option<Engine> {
                             Ok(_) => {
                                 if let Ok(blorb) = Blorb::try_from(data) {
                                     if let Ok(player) = RodioPlayer::new() {
-                                        let engine = Engine::new(Box::new(player), blorb);
-                                        Some(engine)
+                                        let manager = Manager::new(Box::new(player), blorb);
+                                        Some(manager)
                                     } else {
                                         None
                                     }
@@ -110,9 +110,9 @@ fn main() {
     match File::open(filename) {
         Ok(mut f) => match Memory::try_from(&mut f) {
             Ok(memory) => {
-                let sound_engine = initialize_sound_engine(&name);
+                let sound_manager = initialize_sound_engine(&name);
                 let mut zmachine =
-                    ZMachine::new(memory, config, sound_engine, &name).expect("Error creating state");
+                    ZMachine::new(memory, config, sound_manager, &name).expect("Error creating state");
 
                 trace!(target: "app::trace", "Begin execution");
                 if let Err(r) = zmachine.run() {
