@@ -1,9 +1,9 @@
 mod files;
 mod input;
 mod instruction;
+mod io;
 mod rng;
 // mod save_restore;
-mod screen;
 pub mod sound;
 pub mod state;
 
@@ -18,40 +18,32 @@ use std::time::UNIX_EPOCH;
 
 use crate::config::Config;
 use crate::error::*;
+use crate::zmachine::io::screen::Interrupt;
 use rng::chacha_rng::ChaChaRng;
 use rng::RNG;
-use screen::buffer::CellStyle;
-use screen::*;
 
 use self::instruction::decoder;
 use self::instruction::processor;
+use self::io::IO;
+use self::io::screen::InputEvent;
 use self::sound::Sounds;
 use self::state::header;
 use self::state::header::Flags1v3;
-use self::state::header::Flags2;
 use self::state::header::HeaderField;
 use self::state::memory::Memory;
 use self::state::object::property;
 use self::state::text;
 use self::state::State;
 
-pub struct Stream3 {
-    table: usize,
-    buffer: Vec<u16>,
-}
-
 pub struct ZMachine {
     name: String,
     version: u8,
     state: State,
-    screen: Screen,
+    io: IO,
     rng: Box<dyn RNG>,
     output_streams: u8,
-    stream_2: Option<File>,
-    stream_3: Vec<Stream3>,
     input_interrupt: Option<u16>,
     input_interrupt_print: bool,
-    buffered: bool,
     sounds: Option<Sounds>,
     sound_interrupt: Option<usize>,
 }
@@ -70,42 +62,28 @@ impl ZMachine {
         }
         let rng = ChaChaRng::new();
 
-        if version < 3 || version == 6 || version > 8 {
-            Err(RuntimeError::new(
-                ErrorCode::UnsupportedVersion,
-                format!("Version {} is not currently supported", version),
-            ))
-        } else {
-            let screen = match version {
-                3 => Screen::new_v3(config)?,
-                4 => Screen::new_v4(config)?,
-                _ => Screen::new_v5(config)?,
-            };
+        let io = IO::new(version, config)?;
 
-            let mut state = State::new(memory)?;
+        let mut state = State::new(memory)?;
 
-            let colors = screen.default_colors();
-            state.initialize(
-                screen.rows() as u8,
-                screen.columns() as u8,
-                (colors.0 as u8, colors.1 as u8),
-            )?;
-            Ok(ZMachine {
-                name: name.to_string(),
-                version,
-                state,
-                screen,
-                rng: Box::new(rng),
-                output_streams: 0x1,
-                stream_2: None,
-                stream_3: Vec::new(),
-                input_interrupt: None,
-                input_interrupt_print: false,
-                buffered: true,
-                sounds,
-                sound_interrupt: None,
-            })
-        }
+        let colors = io.default_colors();
+        state.initialize(
+            io.rows() as u8,
+            io.columns() as u8,
+            (colors.0 as u8, colors.1 as u8),
+        )?;
+        Ok(ZMachine {
+            name: name.to_string(),
+            version,
+            state,
+            io,
+            rng: Box::new(rng),
+            output_streams: 0x1,
+            input_interrupt: None,
+            input_interrupt_print: false,
+            sounds,
+            sound_interrupt: None,
+        })
     }
 
     pub fn version(&self) -> u8 {
@@ -119,309 +97,6 @@ impl ZMachine {
     pub fn state_mut(&mut self) -> &mut State {
         &mut self.state
     }
-
-    // pub fn initialize(&mut self) -> Result<(), RuntimeError> {
-    //     // Set V3 Flags 1
-    //     if self.version < 4 {
-    //         header::clear_flag1(self, Flags1v3::StatusLineNotAvailable as u8)?;
-    //         header::set_flag1(self, Flags1v3::ScreenSplitAvailable as u8)?;
-    //         header::clear_flag1(self, Flags1v3::VariablePitchDefault as u8)?;
-    //     }
-
-    //     // Set V4+ Flags 1
-    //     if self.version > 3 {
-    //         header::set_byte(
-    //             self,
-    //             HeaderField::DefaultBackground,
-    //             self.screen.default_colors().1 as u8,
-    //         )?;
-    //         header::set_byte(
-    //             self,
-    //             HeaderField::DefaultForeground,
-    //             self.screen.default_colors().0 as u8,
-    //         )?;
-    //         header::set_byte(self, HeaderField::ScreenLines, self.screen.rows() as u8)?;
-    //         header::set_byte(
-    //             self,
-    //             HeaderField::ScreenColumns,
-    //             self.screen.columns() as u8,
-    //         )?;
-
-    //         header::set_flag1(self, Flags1v4::SoundEffectsAvailable as u8)?;
-    //     }
-
-    //     // Set V5+ Flags 1
-    //     if self.version > 4 {
-    //         header::set_word(self, HeaderField::ScreenHeight, self.screen.rows() as u16)?;
-    //         header::set_word(self, HeaderField::ScreenWidth, self.screen.columns() as u16)?;
-    //         header::set_byte(self, HeaderField::FontWidth, 1)?;
-    //         header::set_byte(self, HeaderField::FontHeight, 1)?;
-    //         header::clear_flag1(self, Flags1v4::PicturesAvailable as u8)?;
-    //         header::set_flag1(self, Flags1v4::ColoursAvailable as u8)?;
-    //         header::set_flag1(self, Flags1v4::BoldfaceAvailable as u8)?;
-    //         header::set_flag1(self, Flags1v4::ItalicAvailable as u8)?;
-    //         header::set_flag1(self, Flags1v4::FixedSpaceAvailable as u8)?;
-    //         header::set_flag1(self, Flags1v4::TimedInputAvailable as u8)?;
-    //         //header::clear_flag2(&mut self.memory, Flags2::RequestMouse)?;
-    //         // Graphics font 3 support is crap atm
-    //         header::clear_flag2(self, Flags2::RequestPictures)?;
-    //     }
-
-    //     // Interpreter # and version
-    //     self.write_byte(0x1E, 6)?;
-    //     self.write_byte(0x1F, 'Z' as u8)?;
-
-    //     // Z-Machine standard compliance
-    //     self.write_byte(0x32, 1)?;
-    //     self.write_byte(0x33, 0)?;
-
-    //     if self.frames.is_empty() {
-    //         let pc = header::field_word(self, HeaderField::InitialPC)? as usize;
-    //         let f = Frame::new(pc, pc, &vec![], 0, &vec![], None, 0);
-    //         self.frames.clear();
-    //         self.frames.push(f);
-    //     }
-
-    //     Ok(())
-    // }
-
-    // pub fn memory(&self) -> &Memory {
-    //     &self.memory
-    // }
-
-    // pub fn frames(&self) -> usize {
-    //     self.frames.len()
-    // }
-
-    // pub fn current_frame(&self) -> Result<&Frame, RuntimeError> {
-    //     if let Some(frame) = self.frames.last() {
-    //         Ok(frame)
-    //     } else {
-    //         Err(RuntimeError::new(
-    //             ErrorCode::StackUnderflow,
-    //             format!("No runtime frame"),
-    //         ))
-    //     }
-    // }
-
-    // pub fn current_frame_mut(&mut self) -> Result<&mut Frame, RuntimeError> {
-    //     if let Some(frame) = self.frames.last_mut() {
-    //         Ok(frame)
-    //     } else {
-    //         Err(RuntimeError::new(
-    //             ErrorCode::StackUnderflow,
-    //             format!("No runtime frame"),
-    //         ))
-    //     }
-    // }
-
-    pub fn screen(&self) -> &Screen {
-        &self.screen
-    }
-
-    pub fn stream_2_mut(&mut self) -> Result<&mut File, RuntimeError> {
-        if let Some(f) = self.stream_2.as_mut() {
-            Ok(f)
-        } else {
-            Err(RuntimeError::new(
-                ErrorCode::System,
-                "Stream 2 not initialized".to_string(),
-            ))
-        }
-    }
-
-    // pub fn input_interrupt(&mut self) -> Option<u16> {
-    //     let v = self.input_interrupt;
-    //     self.input_interrupt = None;
-    //     v
-    // }
-
-    // pub fn checksum(&self) -> Result<u16, RuntimeError> {
-    //     let mut checksum = 0 as u16;
-    //     let size = header::field_word(self, HeaderField::FileLength)? as usize
-    //         * match self.version {
-    //             1 | 2 | 3 => 2,
-    //             4 | 5 => 4,
-    //             6 | 7 | 8 => 8,
-    //             _ => 0,
-    //         };
-    //     for i in 0x40..self.dynamic().len() {
-    //         checksum = u16::overflowing_add(checksum, self.dynamic[i] as u16).0;
-    //     }
-
-    //     for i in self.dynamic.len()..size {
-    //         checksum = u16::overflowing_add(checksum, self.memory().read_byte(i)? as u16).0;
-    //     }
-    //     Ok(checksum)
-    // }
-
-    // // MMU
-    // pub fn read_byte(&self, address: usize) -> Result<u8, RuntimeError> {
-    //     if address < 0x10000 {
-    //         self.memory.read_byte(address)
-    //     } else {
-    //         Err(RuntimeError::new(
-    //             ErrorCode::IllegalAccess,
-    //             format!("Byte address {:#06x} is in high memory", address),
-    //         ))
-    //     }
-    // }
-
-    // pub fn read_word(&self, address: usize) -> Result<u16, RuntimeError> {
-    //     if address < 0xFFFF {
-    //         self.memory.read_word(address)
-    //     } else {
-    //         Err(RuntimeError::new(
-    //             ErrorCode::IllegalAccess,
-    //             format!("Word address {:#06x} is in high memory", address),
-    //         ))
-    //     }
-    // }
-
-    // pub fn write_byte(&mut self, address: usize, value: u8) -> Result<(), RuntimeError> {
-    //     if address < self.static_mark {
-    //         self.memory.write_byte(address, value)
-    //     } else {
-    //         Err(RuntimeError::new(
-    //             ErrorCode::IllegalAccess,
-    //             format!(
-    //                 "Byte address {:#04x} is above the end of dynamic memory ({:#04x})",
-    //                 address, self.static_mark
-    //             ),
-    //         ))
-    //     }
-    // }
-
-    // pub fn write_word(&mut self, address: usize, value: u16) -> Result<(), RuntimeError> {
-    //     if address < self.static_mark - 1 {
-    //         if address == 0x10 {
-    //             if value & 0x0001 == 0x0001 {
-    //                 self.output_stream(2, None)?;
-    //             } else {
-    //                 self.output_stream(-2, None)?;
-    //             }
-    //         }
-    //         self.memory.write_word(address, value)?;
-    //         Ok(())
-    //     } else {
-    //         Err(RuntimeError::new(
-    //             ErrorCode::IllegalAccess,
-    //             format!(
-    //                 "Word address {:#04x} is above the end of dynamic memory ({:#04x})",
-    //                 address, self.static_mark
-    //             ),
-    //         ))
-    //     }
-    // }
-
-    // // Variables
-    // fn global_variable_address(&self, variable: u8) -> Result<usize, RuntimeError> {
-    //     let table = header::field_word(self, HeaderField::GlobalTable)? as usize;
-    //     let index = (variable as usize - 16) * 2;
-    //     Ok(table + index)
-    // }
-
-    // pub fn variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
-    //     if variable < 16 {
-    //         self.current_frame_mut()?.local_variable(variable)
-    //     } else {
-    //         let address = self.global_variable_address(variable)?;
-    //         self.read_word(address)
-    //     }
-    // }
-
-    // pub fn peek_variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
-    //     if variable < 16 {
-    //         self.current_frame()?.peek_local_variable(variable)
-    //     } else {
-    //         let address = self.global_variable_address(variable)?;
-    //         self.read_word(address)
-    //     }
-    // }
-
-    // pub fn set_variable(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
-    //     if variable < 16 {
-    //         self.current_frame_mut()?
-    //             .set_local_variable(variable, value)
-    //     } else {
-    //         let address = self.global_variable_address(variable)?;
-    //         self.write_word(address, value)
-    //     }
-    // }
-
-    // pub fn set_variable_indirect(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
-    //     if variable < 16 {
-    //         self.current_frame_mut()?
-    //             .set_local_variable_indirect(variable, value)
-    //     } else {
-    //         let address = self.global_variable_address(variable)?;
-    //         self.write_word(address, value)
-    //     }
-    //     // if variable == 0 {
-    //     //     self.frame_stack.current_frame_mut()?.pop()?;
-    //     // }
-    //     // self.frame_stack
-    //     //     .set_variable(&mut self.memory, variable as usize, value)
-    // }
-
-    // pub fn push(&mut self, value: u16) -> Result<(), RuntimeError> {
-    //     self.current_frame_mut()?.set_local_variable(0, value)
-    // }
-
-    // // Routines
-    // fn routine_header(&self, address: usize) -> Result<(usize, Vec<u16>), RuntimeError> {
-    //     let variable_count = self.memory().read_byte(address)? as usize;
-    //     let mut local_variables = vec![0 as u16; variable_count];
-
-    //     let initial_pc = if self.version < 5 {
-    //         for i in 0..variable_count {
-    //             let a = address + 1 + (i * 2);
-    //             local_variables[i] = self.memory().read_word(a)?;
-    //         }
-
-    //         address + 1 + (variable_count * 2)
-    //     } else {
-    //         address + 1
-    //     };
-
-    //     Ok((initial_pc, local_variables))
-    // }
-
-    // pub fn call_routine(
-    //     &mut self,
-    //     address: usize,
-    //     arguments: &Vec<u16>,
-    //     result: Option<StoreResult>,
-    //     return_address: usize,
-    // ) -> Result<usize, RuntimeError> {
-    //     self.state
-    //         .call_routine(address, arguments, result, return_address)
-    // }
-
-    // pub fn call_read_interrupt(
-    //     &mut self,
-    //     address: usize,
-    //     return_address: usize,
-    // ) -> Result<usize, RuntimeError> {
-    //     self.state.call_read_interrupt(address, return_address)
-    // }
-
-    // pub fn call_sound_interrupt(&mut self, return_address: usize) -> Result<usize, RuntimeError> {
-    //     self.state.call_sound_interrupt(return_address)
-    // }
-
-    // pub fn return_routine(&mut self, value: u16) -> Result<usize, RuntimeError> {
-    //     self.state.return_routine(value)
-    // }
-
-    // pub fn throw(&mut self, depth: u16, result: u16) -> Result<usize, RuntimeError> {
-    //     self.state.throw(depth, result)
-    // }
-
-    // pub fn set_pc(&mut self, pc: usize) -> Result<(), RuntimeError> {
-    //     self.current_frame_mut()?.set_pc(pc);
-    //     Ok(())
-    // }
 
     // RNG
     pub fn random(&mut self, range: u16) -> u16 {
@@ -438,117 +113,44 @@ impl ZMachine {
     }
 
     // Screen
-    pub fn output_stream(&mut self, stream: i16, table: Option<usize>) -> Result<(), RuntimeError> {
-        if stream > 0 {
-            let mask = (1 << stream - 1) & 0xF;
-            if stream == 2 {
-                if let None = self.stream_2 {
-                    self.stream_2 = Some(self.prompt_and_create("Transcript file: ", "txt")?);
-                }
-                header::set_flag2(&mut self.state, Flags2::Transcripting)?;
-            } else if stream == 3 {
-                self.stream_3.push(Stream3 {
-                    table: table.unwrap(),
-                    buffer: Vec::new(),
-                });
-            }
-            self.output_streams = self.output_streams | mask;
-        } else if stream == -2 {
-            header::clear_flag2(&mut self.state, Flags2::Transcripting)?;
-        } else if stream == -3 {
-            let stream3 = self.stream_3.pop().unwrap();
-            let len = stream3.buffer.len();
-            self.state.write_word(stream3.table, len as u16)?;
-            for i in 0..len {
-                self.state
-                    .write_byte(stream3.table + 2 + i, stream3.buffer[i] as u8)?;
-            }
-
-            if self.stream_3.is_empty() {
-                self.output_streams = self.output_streams & 0xb;
-            }
-        } else if stream < 0 {
-            let mask = !(1 << (stream.abs() - 1 & 0xF));
-            self.output_streams = self.output_streams & mask;
-        }
-
-        Ok(())
+    pub fn rows(&self) -> u16 {
+        self.io.rows() as u16
     }
 
-    fn transcript(&mut self, text: &Vec<u16>) -> Result<(), RuntimeError> {
-        match self.stream_2.as_mut() {
-            Some(f) => match f.write_all(
-                &text
-                    .iter()
-                    .map(|c| if *c == 0x0d { 0x0a } else { *c as u8 })
-                    .collect::<Vec<u8>>(),
-            ) {
-                Ok(_) => (),
-                Err(e) => error!(target: "app::trace", "Error writing transcript: {:?}", e),
-            },
-            None => error!(target: "app::trace", "Stream 2 not initialized"),
+    pub fn columns(&self) -> u16 {
+        self.io.columns() as u16
+    }
+    
+    pub fn output_stream(&mut self, stream: i16, table: Option<usize>) -> Result<(), RuntimeError> {
+        if stream > 0 {
+            self.io.enable_output_stream(stream as u8, table)
+        } else if stream < 0 {
+            self.io.disable_output_stream(&mut self.state, i16::abs(stream) as u8)
+        } else {
+            Err(RuntimeError::new(ErrorCode::System, format!("Output stream {} is not valid: [-4..4]", stream)))
         }
-
-        Ok(())
     }
 
     pub fn print(&mut self, text: &Vec<u16>) -> Result<(), RuntimeError> {
-        // Only print to the screen if stream 3 is not selected and stream 1
-        if self.output_streams & 0x5 == 0x1 {
-            let s2 = self.output_streams & 0x2 == 0x2;
-            if self.screen.selected_window() == 1 || !self.buffered {
-                self.screen.print(text);
-                if self.screen.selected_window() == 0 && s2 {
-                    self.transcript(text)?;
-                }
-            } else {
-                let words = text.split_inclusive(|c| *c == 0x20);
-                for word in words {
-                    if self.screen.columns() - self.screen.cursor().1 < word.len() as u32 {
-                        self.screen.new_line();
-                        if s2 {
-                            self.transcript(&[0x0d as u16].to_vec())?;
-                        }
-                    }
-                    self.screen.print(&word.to_vec());
-                    if s2 {
-                        self.transcript(&word.to_vec())?;
-                    }
-                }
-            }
-
-            if s2 {
-                if let Err(e) = self.stream_2_mut()?.flush() {
-                    error!(target: "app::trace", "Error flushing transcript: {}", e);
-                }
-            }
-        }
+        self.io.print_vec(text)?;
 
         if self.state.is_input_interrupt() {
             self.input_interrupt_print = true;
         }
 
-        if self.output_streams & 0x4 == 0x4 {
-            let stream3 = self.stream_3.last_mut().unwrap();
-            for c in text {
-                if *c != 0 {
-                    stream3.buffer.push(*c);
-                }
-            }
-        }
         Ok(())
     }
 
     pub fn split_window(&mut self, lines: u16) -> Result<(), RuntimeError> {
-        Ok(self.screen.split_window(lines as u32))
+        self.io.split_window(lines)
     }
 
     pub fn set_window(&mut self, window: u16) -> Result<(), RuntimeError> {
-        self.screen.select_window(window as u8)
+        self.io.set_window(window)
     }
 
     pub fn erase_window(&mut self, window: i16) -> Result<(), RuntimeError> {
-        self.screen.erase_window(window as i8)
+        self.io.erase_window(window)
     }
 
     pub fn status_line(&mut self) -> Result<(), RuntimeError> {
@@ -575,56 +177,55 @@ impl ZMachine {
                 .collect()
         };
 
-        let width = self.screen.columns() as usize;
-        let available_for_left = width - right.len() - 1;
-        if left.len() > available_for_left {
-            left.truncate(available_for_left - 4);
-            left.push('.' as u16);
-            left.push('.' as u16);
-            left.push('.' as u16);
-        }
+        self.io.status_line(&mut left, &mut right)
+        // let width = self.screen.columns() as usize;
+        // let available_for_left = width - right.len() - 1;
+        // if left.len() > available_for_left {
+        //     left.truncate(available_for_left - 4);
+        //     left.push('.' as u16);
+        //     left.push('.' as u16);
+        //     left.push('.' as u16);
+        // }
 
-        let mut spaces = vec![0x20 as u16; width - left.len() - right.len() - 1];
-        let mut status_line = vec![0x20 as u16];
-        status_line.append(&mut left);
-        status_line.append(&mut spaces);
-        status_line.append(&mut right);
-        let mut style = CellStyle::new();
-        style.set(Style::Reverse as u8);
+        // let mut spaces = vec![0x20 as u16; width - left.len() - right.len() - 1];
+        // let mut status_line = vec![0x20 as u16];
+        // status_line.append(&mut left);
+        // status_line.append(&mut spaces);
+        // status_line.append(&mut right);
+        // let mut style = CellStyle::new();
+        // style.set(Style::Reverse as u8);
 
-        self.screen.print_at(&status_line, (1, 1), &style);
-        self.screen.reset_cursor();
-        Ok(())
+        // self.screen.print_at(&status_line, (1, 1), &style);
+        // self.screen.reset_cursor();
+        // Ok(())
     }
 
     pub fn set_font(&mut self, font: u16) -> Result<u16, RuntimeError> {
-        Ok(self.screen.set_font(font as u8) as u16)
+        self.io.set_font(font)
     }
 
     pub fn set_text_style(&mut self, style: u16) -> Result<(), RuntimeError> {
-        self.screen.set_style(style as u8)
+        self.io.set_text_style(style)
     }
 
     pub fn cursor(&mut self) -> Result<(u16, u16), RuntimeError> {
-        let c = self.screen.cursor();
-        Ok((c.0 as u16, c.1 as u16))
+        self.io.cursor()
     }
 
     pub fn set_cursor(&mut self, row: u16, column: u16) -> Result<(), RuntimeError> {
-        Ok(self.screen.move_cursor(row as u32, column as u32))
+        self.io.set_cursor(row, column)
     }
 
     pub fn buffer_mode(&mut self, mode: u16) -> Result<(), RuntimeError> {
-        self.buffered = mode != 0;
-        Ok(())
+        self.io.buffer_mode(mode)
     }
 
     pub fn beep(&mut self) -> Result<(), RuntimeError> {
-        Ok(self.screen.beep())
+        self.io.beep()
     }
 
     pub fn set_colors(&mut self, foreground: u16, background: u16) -> Result<(), RuntimeError> {
-        self.screen.set_colors(foreground, background)
+        self.io.set_colors(foreground, background)
     }
 
     // Input
@@ -668,7 +269,7 @@ impl ZMachine {
                 return Ok(InputEvent::from_interrupt(Interrupt::ReadTimeout));
             }
 
-            let key = self.screen.read_key(end == 0 && !check_sound);
+            let key = self.io.read_key(end == 0 && !check_sound);
 
             if let Some(c) = key.zchar() {
                 if c == 253 || c == 254 {
@@ -762,7 +363,7 @@ impl ZMachine {
 
             info!(target: "app::input", "Now: {}, End: {}, Timeout: {}", now, end, timeout);
 
-            let e = self.screen.read_key(end == 0 && !check_sound);
+            let e = self.io.read_key(end == 0 && !check_sound);
             match e.zchar() {
                 Some(key) => {
                     if terminators.contains(&key) || (terminators.contains(&255) && (key > 128)) {
@@ -974,27 +575,28 @@ impl ZMachine {
         )?;
         self.read_key(0)?;
 
-        self.screen.quit();
+        self.io.quit();
         Ok(())
     }
 
     pub fn new_line(&mut self) -> Result<(), RuntimeError> {
-        if self.output_streams & 0x5 == 0x1 {
-            self.screen.new_line();
-            if self.output_streams & 0x2 == 0x2 {
-                self.transcript(&vec![0x0a as u16].to_vec())?;
-            }
-        }
+        self.io.new_line()
+        // if self.output_streams & 0x5 == 0x1 {
+        //     self.screen.new_line();
+        //     if self.output_streams & 0x2 == 0x2 {
+        //         self.transcript(&vec![0x0a as u16].to_vec())?;
+        //     }
+        // }
 
-        Ok(())
+        // Ok(())
     }
 
-    pub fn flush_screen(&mut self) -> Result<(), RuntimeError> {
-        self.screen.flush_buffer()
-    }
+    // pub fn flush_screen(&mut self) -> Result<(), RuntimeError> {
+    //     self.screen.flush_buffer()
+    // }
 
     pub fn backspace(&mut self) -> Result<(), RuntimeError> {
-        self.screen.backspace()
+        self.io.backspace()
     }
 
     // Sound
@@ -1066,7 +668,7 @@ impl ZMachine {
                             }
                         }
                     }
-                    _ => {}
+                    _ => self.state.set_pc(pc)?
                 }
             } else {
                 self.state.set_pc(pc)?;

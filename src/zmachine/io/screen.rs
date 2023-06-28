@@ -117,7 +117,7 @@ pub struct Screen {
     rows: u32,
     columns: u32,
     buffer: Buffer,
-    status_line: bool,
+    top: u32,
     window_1_top: Option<u32>,
     window_1_bottom: Option<u32>,
     window_0_top: u32,
@@ -157,7 +157,7 @@ impl Screen {
             rows,
             columns,
             buffer,
-            status_line: true,
+            top: 2,
             window_0_top: 2,
             window_1_top: None,
             window_1_bottom: None,
@@ -193,7 +193,7 @@ impl Screen {
             rows,
             columns,
             buffer,
-            status_line: false,
+            top: 1,
             window_0_top: 1,
             window_1_top: None,
             window_1_bottom: None,
@@ -230,7 +230,7 @@ impl Screen {
             rows,
             columns,
             buffer,
-            status_line: false,
+            top: 1,
             window_1_top: None,
             window_1_bottom: None,
             window_0_top: 1,
@@ -312,34 +312,53 @@ impl Screen {
     }
 
     pub fn split_window(&mut self, lines: u32) {
-        let top = match self.status_line {
-            true => 2,
-            false => 1,
-        };
-        if lines == 0 {
-            self.window_0_top = top;
-            self.window_1_top = None;
-            self.window_1_bottom = None;
-            self.cursor_1 = None;
-        } else {
-            let bottom = top + lines - 1;
-            self.window_1_top = Some(top);
-            self.window_1_bottom = Some(bottom);
-            self.cursor_1 = Some((1, 1));
-            self.window_0_top = bottom + 1;
-            if self.cursor_0.0 < self.window_0_top {
-                self.cursor_0 = (self.window_0_top, self.cursor_0.1)
-            }
-            if self.version == 3 {
-                for i in self.window_1_top.unwrap()..self.window_1_bottom.unwrap() {
-                    for j in 1..self.columns {
-                        self.buffer
-                            .clear(&mut self.terminal, self.current_colors, (i, j));
-                    }
-                }
-            }
+        let bottom = self.top + lines - 1;
+        self.window_1_top = Some(self.top);
+        self.window_1_bottom = Some(bottom);
+        self.cursor_1 = Some((1, 1));
+        self.window_0_top = bottom + 1;
+        if self.cursor_0.0 < self.window_0_top {
+            self.cursor_0 = (self.window_0_top, self.cursor_0.1)
         }
     }
+
+    pub fn unsplit_window(&mut self) {
+        self.window_0_top = self.top;
+        self.window_1_top = None;
+        self.window_1_bottom = None;
+        self.cursor_1 = None;
+        self.selected_window = 0;
+    }
+
+    // pub fn split_window(&mut self, lines: u32) {
+    //     let top = match self.status_line {
+    //         true => 2,
+    //         false => 1,
+    //     };
+    //     if lines == 0 {
+    //         self.window_0_top = top;
+    //         self.window_1_top = None;
+    //         self.window_1_bottom = None;
+    //         self.cursor_1 = None;
+    //     } else {
+    //         let bottom = top + lines - 1;
+    //         self.window_1_top = Some(top);
+    //         self.window_1_bottom = Some(bottom);
+    //         self.cursor_1 = Some((1, 1));
+    //         self.window_0_top = bottom + 1;
+    //         if self.cursor_0.0 < self.window_0_top {
+    //             self.cursor_0 = (self.window_0_top, self.cursor_0.1)
+    //         }
+    //         if self.version == 3 {
+    //             for i in self.window_1_top.unwrap()..self.window_1_bottom.unwrap() {
+    //                 for j in 1..self.columns {
+    //                     self.buffer
+    //                         .clear(&mut self.terminal, self.current_colors, (i, j));
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
     pub fn select_window(&mut self, window: u8) -> Result<(), RuntimeError> {
         self.lines_since_input = 0;
@@ -347,12 +366,8 @@ impl Screen {
             self.selected_window = 0;
             Ok(())
         } else if let Some(_) = self.cursor_1 {
-            let top = match self.status_line {
-                true => 2,
-                false => 1,
-            };
             self.selected_window = 1;
-            self.cursor_1 = Some((top, 1));
+            self.cursor_1 = Some((self.top, 1));
             Ok(())
         } else {
             Err(RuntimeError::new(

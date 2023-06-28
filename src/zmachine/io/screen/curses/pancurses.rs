@@ -1,10 +1,6 @@
 use pancurses::*;
 
-use crate::zmachine::screen::Color;
-use crate::zmachine::screen::InputEvent;
-use crate::zmachine::screen::Style;
-use crate::zmachine::screen::Terminal;
-use crate::zmachine::screen::buffer::CellStyle;
+use crate::zmachine::io::screen::{CellStyle, Color, InputEvent, Terminal, Style};
 
 pub struct PCTerminal {
     window: Window,

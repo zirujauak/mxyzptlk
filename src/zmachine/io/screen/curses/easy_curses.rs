@@ -2,11 +2,8 @@ use easycurses::Color;
 use easycurses::ColorPair;
 use easycurses::*;
 
-use crate::zmachine::screen;
-use crate::zmachine::screen::InputEvent;
-use crate::zmachine::screen::Style;
-use crate::zmachine::screen::Terminal;
-use crate::zmachine::screen::buffer::CellStyle;
+use crate::zmachine::io::screen::Style;
+use crate::zmachine::io::screen::{self, CellStyle, InputEvent, Terminal};
 
 pub struct ECTerminal {
     easycurses: EasyCurses,

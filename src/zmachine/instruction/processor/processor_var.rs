@@ -2,7 +2,7 @@ use crate::{
     error::{ErrorCode, RuntimeError},
     zmachine::{
         instruction::{processor::store_result, Instruction},
-        screen::Interrupt,
+        io::screen::Interrupt,
         state::{
             header::{self, HeaderField},
             object::property,
@@ -488,13 +488,6 @@ pub fn read_char(
         }
     }
 
-    // if let Some(interrupt) = zmachine.input_interrupt() {
-    //     if interrupt == 1 {
-    //         store_result(zmachine, instruction, 0)?;
-    //         return Ok(instruction.next_address());
-    //     }
-    // }
-
     let timeout = if operands.len() > 1 { operands[1] } else { 0 };
     let routine = if timeout > 0 && operands.len() > 2 {
         zmachine.state().packed_routine_address(operands[2])?
@@ -696,21 +689,23 @@ pub fn print_table(
     let operands = operand_values(zmachine, instruction)?;
     let table = operands[0] as usize;
     let width = operands[1] as usize;
-    let height = if operands.len() > 2 { operands[2] } else { 1 } as usize;
+    let height = if operands.len() > 2 { operands[2] } else { 1 };
     let skip = if operands.len() > 3 { operands[3] } else { 0 } as usize;
 
     let origin = zmachine.cursor()?;
     for i in 0..height as usize {
-        if origin.0 as u32 + i as u32 > zmachine.screen().rows() {
+        if origin.0 + i as u16 > zmachine.rows() {
             zmachine.new_line()?;
-            zmachine.set_cursor(zmachine.screen().rows() as u16, origin.1)?;
+            zmachine.set_cursor(zmachine.rows() as u16, origin.1)?;
         } else {
             zmachine.set_cursor(origin.0 + i as u16, origin.1)?;
         }
+        let mut text = Vec::new();
         for j in 0..width {
             let offset = i * (width + skip);
-            zmachine.print(&vec![zmachine.state.read_byte(table + offset + j)? as u16])?;
+            text.push(zmachine.state.read_byte(table + offset + j)? as u16);
         }
+        zmachine.print(&text)?;
     }
 
     Ok(instruction.next_address())

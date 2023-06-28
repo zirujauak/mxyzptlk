@@ -698,32 +698,6 @@ impl State {
             ))
         } else {
             self.restore_state(quetzal)
-            // // Reset the frame stack
-            // self.frames = Vec::from(quetzal.stks());
-
-            // // Capture flags 2, default colors, rows, and columns from header
-            // let flags2 = header::field_word(self, HeaderField::Flags2)?;
-            // let fg = header::field_byte(self, HeaderField::DefaultForeground)?;
-            // let bg = header::field_byte(self, HeaderField::DefaultBackground)?;
-            // let rows = header::field_byte(self, HeaderField::ScreenLines)?;
-            // let columns = header::field_byte(self, HeaderField::ScreenColumns)?;
-
-            // // Overwrite dynamic memory
-            // if let Some(umem) = quetzal.umem() {
-            //     self.memory.restore(umem.data())?
-            // }  else if let Some(cmem) = quetzal.cmem() {
-            //     self.memory.restore_compressed(cmem.data())?
-            // } else {
-            //     return Err(RuntimeError::new(ErrorCode::Restore, "No CMem/UMem chunk in save file".to_string()));
-            // }
-
-            // // Re-initialize the state, which will set the default colors, rows, and columns
-            // self.initialize(rows, columns, (fg, bg))?;
-
-            // // Restore flags 2
-            // self.write_word(HeaderField::Flags2 as usize, flags2)?;
-
-            // Ok(Some(quetzal.ifhd().pc() as usize))
         }
     }
 
