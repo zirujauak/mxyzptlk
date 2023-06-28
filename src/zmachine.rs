@@ -230,77 +230,10 @@ impl ZMachine {
 
     pub fn call_sound_interrupt(&mut self, return_address: usize) -> Result<usize, RuntimeError> {
         self.state.call_sound_interrupt(return_address)
-        // if let Some(i) = &self.interrupt {
-        //     match i.interrupt_type {
-        //         InterruptType::Sound => {
-        //             debug!(target: "app::frame", "Sound interrupt routine firing @ ${:06x}", i.address);
-        //             let (initial_pc, local_variables) = self.routine_header(i.address)?;
-        //             let frame = Frame::call_routine(
-        //                 i.address,
-        //                 initial_pc,
-        //                 &vec![],
-        //                 local_variables,
-        //                 None,
-        //                 return_address,
-        //             )?;
-        //             self.frames.push(frame);
-        //             self.interrupt = None;
-        //             Ok(initial_pc)
-        //         }
-        //         _ => Err(RuntimeError::new(
-        //             ErrorCode::System,
-        //             "Pending interrupt is not a sound interrupt".to_string(),
-        //         )),
-        //     }
-        // } else {
-        //     Err(RuntimeError::new(
-        //         ErrorCode::System,
-        //         "No pending interrupt".to_string(),
-        //     ))
-        // }
     }
 
     pub fn return_routine(&mut self, value: u16) -> Result<usize, RuntimeError> {
         self.state.return_routine(value)
-        // if let Some(i) = self.interrupt.as_mut() {
-        //     match i.interrupt_type {
-        //         // For an input interrupt, stash the return value where the READ
-        //         // instruction can get it.
-        //         InterruptType::Input => {
-        //             debug!(target: "app::frame", "READ interrupt returned {}", value);
-        //             i.set_result(value);
-        //         }
-        //         // For a sound interrupt, do nothing ... it will get cleared when the
-        //         // interrupt is triggered
-        //         _ => {}
-        //     }
-        // }
-
-        // if let Some(f) = self.frames.pop() {
-        //     let n = self.current_frame_mut()?;
-        //     n.set_pc(f.return_address());
-        //     debug!(target: "app::frame", "Return to ${:06x} -> {:?}", f.return_address(), f.result());
-        //     match &self.interrupt {
-        //         None => match f.result() {
-        //             Some(r) => self.set_variable(r.variable(), value)?,
-        //             None => (),
-        //         },
-        //         Some(i) => match i.interrupt_type {
-        //             InterruptType::Sound => match f.result() {
-        //                 Some(r) => self.set_variable(r.variable(), value)?,
-        //                 None => (),
-        //             },
-        //             _ => {}
-        //         },
-        //     }
-
-        //     Ok(self.current_frame()?.pc())
-        // } else {
-        //     Err(RuntimeError::new(
-        //         ErrorCode::System,
-        //         "No frame to return to".to_string(),
-        //     ))
-        // }
     }
 
     pub fn throw(&mut self, depth: u16, result: u16) -> Result<usize, RuntimeError> {
