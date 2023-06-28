@@ -58,7 +58,7 @@ More restructuring code and implementing better rust development practices.  The
 
 ## Fixed
 * `PRINT_TABLE` no longer prints padding that overwrites other text inappropriately
-* Stream 3 converts \n (0x13) to \r (0x0d), per spec.  This was responsible for issues with the layout in Beyond Zork.
+* Stream 3 converts \n (0x0d) to \r (0x0a), per spec.  This was responsible for issues with the layout in Beyond Zork.
 
 ## Regression
 * Stream 2 (transcripting) is no longer implemented
@@ -74,7 +74,10 @@ More restructuring code and implementing better rust development practices.  The
     * `!again` or `!g` to repeat last input, also for games that don't have a native `again` verb.
 * Update curses terminals to gracefully(?) handle resizing the terminal window.
 * Implement error handling as suggested by spec.
-  
+
+---
+---
+
 # June 24, 2023
 
 Refactored a lot of the code to make it more readable and manageable.  I also rewrote the terminal implementation to use either easycurses or pancurses, which are mostly the same except pancurses exposes mouse click and location info.  Easycurses should be able to do this by accessing the underlying pancurses lib.
