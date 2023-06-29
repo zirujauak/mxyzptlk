@@ -300,8 +300,9 @@ impl ZMachine {
         self.io.columns() as u16
     }
 
-    fn start_stream_2(&mut self) -> Result<File, RuntimeError> {
-        self.prompt_and_create("Transcript file name: ", "txt", false)
+    fn start_stream_2(&mut self) -> Result<(), RuntimeError> {
+        let file = self.prompt_and_create("Transcript file name: ", "txt", false)?;
+        Ok(self.io.set_stream_2(file))
     }
 
 

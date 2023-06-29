@@ -94,6 +94,7 @@ impl IO {
     ) -> Result<(), RuntimeError> {
         let mask = (1 << stream - 1) & 0xF;
         self.output_streams = self.output_streams | mask;
+        trace!(target: "app::target", "Enable output stream {} => {:04b}", stream, self.output_streams);
         match stream {
             1| 2 => Ok(()),
             3 => {
@@ -122,6 +123,7 @@ impl IO {
     ) -> Result<(), RuntimeError> {
         let mask = (1 << stream - 1) & 0xF;
         self.output_streams = self.output_streams & !mask;
+        trace!(target: "app::target", "Disable output stream {} => {:04b}", stream, self.output_streams);
         match stream {
             1 | 2 => Ok(()),
             3 => {
