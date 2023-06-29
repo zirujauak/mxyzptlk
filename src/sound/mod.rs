@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 mod rodio_player;
 
-#[cfg(feature = "sndfile")]
+#[cfg(not(target_os = "windows"))]
 mod loader;
 
 use crate::{
@@ -40,7 +40,7 @@ impl From<(u32, &OGGV, Option<&u32>)> for Sound {
 impl From<(u32, &AIFF, Option<&u32>)> for Sound {
     fn from((number, aiff, repeats): (u32, &AIFF, Option<&u32>)) -> Self {
         match loader::convert_aiff(&Vec::from(aiff)) {
-            Ok(sound) => Sound::new(number, sound, repeats),
+            Ok(sound) => Sound::new(number, &sound, repeats),
             Err(e) => {
                 error!(target: "app::sound", "Error converting AIFF: {}", e);
                 Sound::new(number, &vec![], repeats)
