@@ -2,11 +2,13 @@ use core::fmt;
 use std::collections::HashMap;
 
 mod rodio_player;
+
+#[cfg(feature = "sndfile")]
 mod loader;
 
 use crate::{
     error::RuntimeError,
-    iff::blorb::{oggv::OGGV, Blorb, aiff::AIFF},
+    iff::blorb::{aiff::AIFF, oggv::OGGV, Blorb},
     sound::rodio_player::RodioPlayer,
 };
 
@@ -28,33 +30,67 @@ impl fmt::Display for Sound {
     }
 }
 
+impl From<(u32, &OGGV, Option<&u32>)> for Sound {
+    fn from((number, oggv, repeats): (u32, &OGGV, Option<&u32>)) -> Self {
+        Sound::new(number, oggv.data(), repeats)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+impl From<(u32, &AIFF, Option<&u32>)> for Sound {
+    fn from((number, aiff, repeats): (u32, &AIFF, Option<&u32>)) -> Self {
+        match loader::convert_aiff(&Vec::from(aiff)) {
+            Ok(sound) => Sound::new(number, sound, repeats),
+            Err(e) => {
+                error!(target: "app::sound", "Error converting AIFF: {}", e);
+                Sound::new(number, &vec![], repeats)
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl From<(u32, &AIFF, Option<&u32>)> for Sound {
+    fn from((number, _aiff, repeats): (u32, &AIFF, Option<&u32>)) -> Self {
+        Sound::new(number, &vec![], repeats)
+    }
+}
 impl Sound {
-    pub fn from_oggv(number: u32, oggv: &OGGV, repeats: Option<&u32>) -> Sound {
+    pub fn new(number: u32, data: &Vec<u8>, repeats: Option<&u32>) -> Sound {
         Sound {
             number,
             repeats: repeats.copied(),
-            data: oggv.data().clone(),
+            data: data.clone(),
         }
     }
 
-    pub fn from_aiff(number: u32, aiff: &AIFF, repeats: Option<&u32>) -> Sound {
-        match loader::convert_aiff(&Vec::from(aiff)) {
-            Ok(sound) => {
-                Sound {
-                    number,
-                    repeats: repeats.copied(),
-                    data: sound
-                }
-            } Err(e) => {
-                error!(target: "app::sound", "Error converting AIFF: {}", e);
-                Sound {
-                    number,
-                    repeats: repeats.copied(),
-                    data: vec![],
-                }
-            }
-       }
-    }
+    // pub fn from_oggv(number: u32, oggv: &OGGV, repeats: Option<&u32>) -> Sound {
+    //     Sound {
+    //         number,
+    //         repeats: repeats.copied(),
+    //         data: oggv.data().clone(),
+    //     }
+    // }
+
+    // #[cfg(feature = "sndfile")]
+    // pub fn from_aiff(number: u32, aiff: &AIFF, repeats: Option<&u32>) -> Sound {
+    //     match loader::convert_aiff(&Vec::from(aiff)) {
+    //         Ok(sound) => {
+    //             Sound {
+    //                 number,
+    //                 repeats: repeats.copied(),
+    //                 data: sound
+    //             }
+    //         } Err(e) => {
+    //             error!(target: "app::sound", "Error converting AIFF: {}", e);
+    //             Sound {
+    //                 number,
+    //                 repeats: repeats.copied(),
+    //                 data: vec![],
+    //             }
+    //         }
+    //    }
+    // }
 }
 
 pub trait Player {
@@ -84,13 +120,16 @@ impl From<Blorb> for HashMap<u32, Sound> {
             for index in ridx.entries() {
                 if index.usage().eq("Snd ") {
                     if let Some(oggv) = value.oggv().get(&(index.start() as usize)) {
-                        let s = Sound::from_oggv(index.number(), oggv, loops.get(&index.number()));
+                        let s = Sound::from((index.number(), oggv, loops.get(&index.number())));
+                        // let s = Sound::from_oggv(index.number(), oggv, loops.get(&index.number()));
                         info!(target: "app::sound", "Sound: {}", s);
                         sounds.insert(index.number(), s);
                     } else if let Some(aiff) = value.aiff().get(&(index.start() as usize)) {
-                        let s= Sound::from_aiff(index.number(), aiff, loops.get(&(index.number())));
+                        let s = Sound::from((index.number(), aiff, loops.get(&(index.number()))));
                         info!(target: "app::sound", "Sound: {}", s);
-                        sounds.insert(index.number(), s);
+                        if !s.data.is_empty() {
+                            sounds.insert(index.number(), s);
+                        }
                     }
                 }
             }

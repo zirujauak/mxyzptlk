@@ -261,6 +261,7 @@ impl State {
         rows: u8,
         columns: u8,
         default_colors: (u8, u8),
+        sound: bool,
     ) -> Result<(), RuntimeError> {
         // Clear any pending interrupt
         self.interrupt = None;
@@ -297,6 +298,10 @@ impl State {
             //header::clear_flag2(&mut self.memory, Flags2::RequestMouse)?;
             // Graphics font 3 support is crap atm
             header::clear_flag2(self, Flags2::RequestPictures)?;
+            // If sounds weren't loaded
+            if !sound {
+                header::clear_flag2(self, Flags2::RequestSoundEffects)?;
+            }
         }
 
         // Interpreter # and version
@@ -690,7 +695,8 @@ impl State {
         }
 
         // Re-initialize the state, which will set the default colors, rows, and columns
-        self.initialize(rows, columns, (fg, bg))?;
+        // Ignore sound (for now), since it's in Flags2
+        self.initialize(rows, columns, (fg, bg), false)?;
 
         // Restore flags 2
         self.write_word(HeaderField::Flags2 as usize, flags2)?;
@@ -748,7 +754,7 @@ impl State {
         self.memory.reset();
         self.frames.clear();
 
-        self.initialize(rows, columns, (fg, bg))?;
+        self.initialize(rows, columns, (fg, bg), false)?;
         self.write_word(HeaderField::Flags2 as usize, flags2)?;
 
         Ok(self.current_frame()?.pc())

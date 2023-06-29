@@ -55,9 +55,13 @@ impl ZMachine {
     ) -> Result<ZMachine, RuntimeError> {
         let version = memory.read_byte(HeaderField::Version as usize)?;
 
-        if let Some(s) = sound_manager.as_ref() {
-            info!(target: "app::sound", "{} sounds loaded", s.sound_count())
-        }
+        let sounds = if let Some(s) = sound_manager.as_ref() {
+            info!(target: "app::sound", "{} sounds loaded", s.sound_count());
+            s.sound_count() > 0
+        } else {
+            false
+        };
+
         let rng = ChaChaRng::new();
 
         let io = IO::new(version, config)?;
@@ -69,6 +73,7 @@ impl ZMachine {
             io.rows() as u8,
             io.columns() as u8,
             (colors.0 as u8, colors.1 as u8),
+            sounds,
         )?;
         Ok(ZMachine {
             name: name.to_string(),
