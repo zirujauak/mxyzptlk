@@ -4,18 +4,16 @@ An inform (zmachine) virtual machine implemented in Rust.
 
 ## Usage
 
-I'm pretty sure a curses library (ncurses for Linux/MacOS, pdcurses for windows) needs to be installed. Will add instructions.  Short version: MacOS - use homebrew to install the `ncurses` formula;  Linux - depends on your package manager, look for `ncursesw` or `ncurses`;  Windows - google `pdcurses windows` and good luck!
-
 ### Building
 The following libraries are required to build from source:
-* Curses - either ncurses/ncursesw for Mac/Linux, or pdcurses for Windows
+* curses terminal library
     * Mac: `brew install ncurses` 
     * Linux: depends on the package manager your install uses.
-    * Windows: TBD
+    * Windows: pdcurses, instructions to follow
 * libsndfile - be sure your LD_LIBRARY_PATH (on Mac/Linux, at least) includes the directory with libsndfile
     * Mac: `brew install libsndfile` and then from the shell you're running cargo from: `export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib`
     * Linux: depends on the package manager your install uses.  
-    * Windows: TBD
+    * Windows: TBD - haven't tried a build that requires libsndfile with Windows yet
 
 ```
 $ cargo build
@@ -72,12 +70,15 @@ Execution will dump quite a bit of output to various `.log` files.  This can be 
 
 More restructuring code and implementing better rust development practices.  The sound player is now behind a trait, which should make it easier to change if necessary.  The old "state" has been rechristened "zmachine" and decomposed into separate files for runtime state, screen i/o, and sound.  Files for instruction, object, and text were pulled out of the zmachine module to keep internals private.
 
-## New!
-* Added code to read AIFF chunks from a blorb file and use `libsndfile` to convert them to FLAC, which `rodio` will play.  No need to pick a blorb apart, convert AIFF to OGGV, and rebuild!  However, there's a "click" at the end of the converted sound that's very noticable at higher volumes, especially when sounds repeat.  Need to investigate.
+### New!
+* Added code to read AIFF chunks from a blorb file and use `libsndfile` to convert them to FLAC, which `rodio` will play.  No need to pick a blorb apart, convert AIFF to OGGV, and rebuild!
 
-## Fixed
+### Fixed
 * `PRINT_TABLE` no longer prints padding that overwrites other text inappropriately, which was very evident in Beyond Zork
 * Stream 3 converts \n (0x0d) to \r (0x0a), per spec.  This was responsible for issues with the layout in Beyond Zork.
+
+### Bugs
+* FLAC audio clicks at the end, which is noticeable at higher volumes and especially annoying when a sound loops.  Need to investigate the conversion code to see if there's a fix.
 
 ### Backlog
 * Logging is a mess
