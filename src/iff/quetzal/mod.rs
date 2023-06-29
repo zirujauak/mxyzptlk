@@ -28,7 +28,7 @@ impl TryFrom<Vec<u8>> for Quetzal {
             ));
         }
 
-        let iff = IFF::from_vec(&value);
+        let iff = IFF::from(&value);
         if iff.form != "FORM" || iff.sub_form != "IFZS" {
             error!(target: "app::quetzal", "Expected sub form 'IFZS': '{}'", iff.sub_form);
             return Err(RuntimeError::new(

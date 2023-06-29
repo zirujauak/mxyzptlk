@@ -5,8 +5,8 @@ use crate::iff;
 use super::super::*;
 
 pub struct AIFF {
-    id: String,
-    length: u32,
+    _id: String,
+    _length: u32,
     data: Vec<u8>,
 }
 
@@ -38,7 +38,7 @@ impl From<&AIFF> for Vec<u8> {
 
 impl AIFF {
     pub fn new(id: &str, length: u32, data: &Vec<u8>) -> AIFF {
-        AIFF { id: id.to_string(), length, data: data.clone() }
+        AIFF { _id: id.to_string(), _length: length, data: data.clone() }
     }
 
     pub fn data(&self) -> &Vec<u8> {

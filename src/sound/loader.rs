@@ -38,7 +38,7 @@ fn tempfile(data: Option<&Vec<u8>>) -> Result<(NamedTempFile, File), RuntimeErro
     }
 }
 
-pub fn aiff_to_flac(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
+pub fn convert_aiff(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
     let (_, source) = tempfile(Some(data))?;
     match OpenOptions::ReadOnly(ReadOptions::Auto)
         .from_file(source)
@@ -47,8 +47,8 @@ pub fn aiff_to_flac(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
         Ok(snd) => {
             let (mut destfile, dest) = tempfile(None)?;
             match OpenOptions::WriteOnly(WriteOptions::new(
-                MajorFormat::FLAC,
-                SubtypeFormat::PCM_16,
+                MajorFormat::OGG,
+                SubtypeFormat::VORBIS,
                 Endian::File,
                 snd.get_samplerate(),
                 snd.get_channels(),
