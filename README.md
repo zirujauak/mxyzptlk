@@ -11,9 +11,17 @@ The following libraries are required to build from source:
     * Linux: depends on the package manager your install uses.
     * Windows: pdcurses, instructions to follow
 * libsndfile - be sure your LD_LIBRARY_PATH (on Mac/Linux, at least) includes the directory with libsndfile
-    * Mac: `brew install libsndfile` and then from the shell you're running cargo from: `export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib`
-    * Linux: depends on the package manager your install uses.  
-    * Windows: TBD - haven't tried a build that requires libsndfile with Windows yet
+    * Mac: 
+        * `brew install libsndfile` 
+        * `export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib` ... necessary every time you open a new shell unless you add it to the shell profile
+    * Linux: 
+        * Install libsndfile using your install's package manager
+        * May not need to update `LIBRARY_PATH`, since Linux typically puts libraries in a consistent place that's already in the path
+    * Windows:
+        * Download [libsndfile](https://github.com/libsndfile/libsndfile/releases) appropriate to your platform (32/64 bits)
+        * Extract `sndfile.lib` somewhere
+        * Update `LIBRARY_PATH` to include the somewhere above:
+            * Varies by shell: `export LIBRARY_PATH=$LIBRARY_PATH:/path/to/sndlib.lib`
 
 ```
 $ cargo build
