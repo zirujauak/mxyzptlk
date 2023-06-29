@@ -48,9 +48,15 @@ $ mxyzptlk filename.z5
 $ cargo run -- filename.z5
 ```
 
+Speaking of games, the [Interactive Fiction Archive](https://www.ifarchive.org/indexes/if-archive/) has quite a number of free games.  This interpreter is for "zcode" games only, generally those with names ending in ".z{version}".  Only `version`s 3, 4, 5, 7, and 8 are supported, though version 7 is somewhat rare and I haven't tried running one yet.
+
 ### Configuration
 
 Add notes about config.yml
+
+### Logs
+
+Execution will dump quite a bit of output to various `.log` files.  This can be mostly disabled by changing the `level` values in the `log4rs.yml` file to `warn`. Or just ignore them.
 
 # History
 ## June 28, 2023
