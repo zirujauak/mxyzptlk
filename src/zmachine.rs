@@ -7,6 +7,7 @@ use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
+use std::path::Path;
 use std::thread;
 use std::time::Duration;
 use std::time::SystemTime;
@@ -21,6 +22,7 @@ use crate::object::property;
 use crate::sound::Manager;
 use crate::text;
 use crate::zmachine::io::screen::Interrupt;
+use regex::Regex;
 use rng::chacha_rng::ChaChaRng;
 use rng::RNG;
 
@@ -109,7 +111,12 @@ impl ZMachine {
     fn update_transcript_bit(&mut self, old: u16, new: u16) -> Result<(), RuntimeError> {
         if old & 0x1 != new & 0x1 {
             if new & 0x1 == 0x1 {
-                self.io.enable_output_stream(2, None)
+                if !self.io.is_stream_2_open() {
+                    self.start_stream_2()?;
+                    self.io.enable_output_stream(2, None)
+                } else {
+                    self.io.enable_output_stream(2, None)
+                }
             } else {
                 self.io.disable_output_stream(&mut self.state, 2)
             }
@@ -121,7 +128,11 @@ impl ZMachine {
     pub fn write_byte(&mut self, address: usize, value: u8) -> Result<(), RuntimeError> {
         // Check if the transcript bit is being changed in Flags 2
         if address == 0x11 {
-            self.update_transcript_bit(self.state.read_byte(0x11)? as u16, value as u16)?
+            if let Err(_) = self.update_transcript_bit(self.state.read_byte(0x11)? as u16, value as u16) {
+                // Starting the transcript failed, so skip writing to memory
+                warn!(target: "app::memory", "Staring transcript failed, not writing data to Flags 2");
+                return Ok(())
+            }
         }
         self.state.write_byte(address, value)
     }
@@ -129,7 +140,11 @@ impl ZMachine {
     pub fn write_word(&mut self, address: usize, value: u16) -> Result<(), RuntimeError> {
         // Check if the transcript bit is being set in Flags 2
         if address == 0x10 {
-            self.update_transcript_bit(self.state.read_word(0x10)?, value)?
+            if let Err(_) = self.update_transcript_bit(self.state.read_word(0x10)?, value) {
+                // Starting the transcript failed, so skip writing to memory
+                warn!(target: "app::memory", "Staring transcript failed, not writing data to Flags 2");
+                return Ok(())
+            }
         }
         self.state.write_word(address, value)
     }
@@ -182,12 +197,16 @@ impl ZMachine {
         self.state.checksum()
     }
 
-    pub fn save(&self, pc: usize) -> Result<Vec<u8>, RuntimeError> {
-        self.state.save(pc)
+    pub fn save(&mut self, pc: usize) -> Result<(), RuntimeError> {
+        let save_data = self.state.save(pc)?;        
+        self.prompt_and_write("Save to: ", "ifzs", &save_data, false)
     }
 
-    pub fn restore(&mut self, data: Vec<u8>) -> Result<Option<usize>, RuntimeError> {
-        self.state.restore(data)
+    pub fn restore(&mut self) -> Result<Option<usize>, RuntimeError> {
+        match self.prompt_and_read("Restore from: ", "ifzs") {
+            Ok(save_data) => self.state.restore(save_data),
+            Err(e) => Err(e)
+        }
     }
 
     pub fn save_undo(&mut self, address: usize) -> Result<(), RuntimeError> {
@@ -281,9 +300,19 @@ impl ZMachine {
         self.io.columns() as u16
     }
 
+    fn start_stream_2(&mut self) -> Result<File, RuntimeError> {
+        self.prompt_and_create("Transcript file name: ", "txt", false)
+    }
+
+
     pub fn output_stream(&mut self, stream: i16, table: Option<usize>) -> Result<(), RuntimeError> {
         if stream > 0 {
-            self.io.enable_output_stream(stream as u8, table)
+            if stream == 2 && !self.io.is_stream_2_open() {
+                self.start_stream_2()?;
+                self.io.enable_output_stream(stream as u8, table)
+            } else {
+                self.io.enable_output_stream(stream as u8, table)
+            }
         } else if stream < 0 {
             self.io
                 .disable_output_stream(&mut self.state, i16::abs(stream) as u8)
@@ -305,6 +334,9 @@ impl ZMachine {
         Ok(())
     }
 
+    pub fn print_str(&mut self, text: String) -> Result<(), RuntimeError> {
+        self.io.print_vec(&text.chars().map(|c| c as u16).collect())
+    }
     pub fn split_window(&mut self, lines: u16) -> Result<(), RuntimeError> {
         self.io.split_window(lines)
     }
@@ -540,31 +572,78 @@ impl ZMachine {
         Ok(input_buffer)
     }
 
-    // Save/restore
-    pub fn prompt_and_create(&mut self, prompt: &str, suffix: &str) -> Result<File, RuntimeError> {
-        self.print(&prompt.chars().map(|c| c as u16).collect())?;
+    pub fn prompt_filename(
+        &mut self,
+        prompt: &str,
+        suffix: &str,
+        overwrite: bool,
+    ) -> Result<String, RuntimeError> {
+        self.print_str(prompt.to_string())?;
         let n = files::first_available(&self.name, suffix)?;
         self.print(&n)?;
 
         let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
-        let filename = String::from_utf16(&f).unwrap();
-        match fs::OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(filename.trim())
-        {
-            Ok(f) => Ok(f),
-            Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+        let filename = String::from_utf16(&f).expect("Error groking user input as a filename").trim().to_string();
+        if !overwrite {
+            let p = Path::new(&filename);
+            match Path::new(&filename).try_exists() {
+                Ok(b) => match b {
+                    true => {
+                        return Err(RuntimeError::new(
+                            ErrorCode::System,
+                            format!("'{}' already exists.", filename),
+                        ))
+                    }
+                    false => {}
+                },
+                Err(e) => {
+                    return Err(RuntimeError::new(
+                        ErrorCode::System,
+                        format!("Error checking if '{}' exists: {}", filename, e),
+                    ))
+                }
+            }
         }
-        // let file = fs::OpenOptions::new()
-        //     .create(true)
-        //     .truncate(true)
-        //     .write(true)
-        //     .open(filename.trim())
-        //     .unwrap();
 
-        // Ok(file)
+        match Regex::new(r".*\.z\d") {
+            Ok(r) => {
+                if r.is_match(&filename) {
+                    Err(RuntimeError::new(
+                        ErrorCode::System,
+                        "Filenames ending in '.z#' are not allowed".to_string(),
+                    ))
+                } else {
+                    Ok(filename)
+                }
+            }
+            Err(e) => Err(RuntimeError::new(
+                ErrorCode::System,
+                format!("Interal error with regex checking filename: {}", e),
+            )),
+        }
+    }
+
+    pub fn prompt_and_create(
+        &mut self,
+        prompt: &str,
+        suffix: &str,
+        overwrite: bool,
+    ) -> Result<File, RuntimeError> {
+        match self.prompt_filename(prompt, suffix, overwrite) {
+            Ok(filename) => match fs::OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(filename.trim())
+            {
+                Ok(f) => Ok(f),
+                Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+            },
+            Err(e) => {
+                self.print_str(format!("Error creating file: {}\r", e))?;
+                Err(e)
+            }
+        }
     }
 
     pub fn prompt_and_write(
@@ -572,8 +651,9 @@ impl ZMachine {
         prompt: &str,
         suffix: &str,
         data: &Vec<u8>,
+        overwrite: bool,
     ) -> Result<(), RuntimeError> {
-        let mut file = self.prompt_and_create(prompt, suffix)?;
+        let mut file = self.prompt_and_create(prompt, suffix, overwrite)?;
 
         match file.write_all(data) {
             Ok(_) => (),
@@ -602,6 +682,8 @@ impl ZMachine {
         }
     }
 
+    // Save/restore
+    // Also quit/restart
     pub fn quit(&mut self) -> Result<(), RuntimeError> {
         self.print(
             &"Press any key to exit"

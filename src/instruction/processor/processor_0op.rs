@@ -71,64 +71,32 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
         }
     };
 
-    let save_data = zmachine.save(pc)?;
-    match zmachine.prompt_and_write("Save to: ", "ifzs", &save_data) {
+    match zmachine.save(pc) {
         Ok(_) => save_result(zmachine, instruction, true),
-        Err(e) => {
-            zmachine.print(
-                &format!("Error writing save file: {}\r", e)
-                    .chars()
-                    .map(|c| c as u16)
-                    .collect(),
-            )?;
-            save_result(zmachine, instruction, false)
-        }
+        Err(_) => save_result(zmachine, instruction, false),
     }
 }
 
 pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    match zmachine.prompt_and_read("Restore from: ", "ifzs") {
-        Ok(save_data) => {
-            match zmachine.restore(save_data) {
-                Ok(address) => {
-                    match address {
-                        Some(a) => {
-                            let i = decoder::decode_instruction(zmachine, a - 1)?;
-                            if zmachine.version() == 3 {
-                                // V3 is a branch
-                                branch(zmachine, &i, true)
-                            } else {
-                                // V4 is a store
-                                store_result(zmachine, instruction, 2)?;
-                                Ok(i.next_address())
-                            }
-                        }
-                        None => branch(zmachine, instruction, false),
-                    }
-                }
-                Err(e) => {
-                    zmachine.print(
-                        &format!("Error reading: {}\r", e)
-                            .chars()
-                            .map(|c| c as u16)
-                            .collect(),
-                    )?;
+    match zmachine.restore() {
+        Ok(address) => {
+            match address {
+                Some(a) => {
+                    let i = decoder::decode_instruction(zmachine, a - 1)?;
                     if zmachine.version() == 3 {
-                        branch(zmachine, instruction, false)
+                        // V3 is a branch
+                        branch(zmachine, &i, true)
                     } else {
-                        store_result(zmachine, instruction, 0)?;
-                        Ok(instruction.next_address())
+                        // V4 is a store
+                        store_result(zmachine, instruction, 2)?;
+                        Ok(i.next_address())
                     }
                 }
+                None => branch(zmachine, instruction, false),
             }
         }
         Err(e) => {
-            zmachine.print(
-                &format!("Error reading: {}\r", e)
-                    .chars()
-                    .map(|c| c as u16)
-                    .collect(),
-            )?;
+            zmachine.print_str(format!("Error reading: {}\r", e))?;
             if zmachine.version() == 3 {
                 branch(zmachine, instruction, false)
             } else {

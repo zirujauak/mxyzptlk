@@ -172,7 +172,7 @@ fn branch_condition(
                 Some(Branch::new(
                     address + offset,
                     condition,
-                    branch_address(address - 1, b_offset as i16),
+                    branch_address(address + offset - 1, b_offset as i16),
                 )),
             ))
         }
@@ -186,7 +186,7 @@ fn branch_condition(
                 Some(Branch::new(
                     address + offset,
                     condition,
-                    branch_address(address, b_offset as i16),
+                    branch_address(address + offset, b_offset as i16),
                 )),
             ))
         }
@@ -300,7 +300,7 @@ pub fn decode_instruction(
     let (offset, operand_types) = operand_types(&bytes, &opcode, offset)?;
     let (offset, operands) = operands(&bytes, &operand_types, offset)?;
     let (offset, store) = result_variable(address + offset, &bytes, &opcode, version, offset)?;
-    let (offset, branch) = branch(address + offset, &bytes, version, &opcode, offset)?;
+    let (offset, branch) = branch(address, &bytes, version, &opcode, offset)?;
 
     Ok(Instruction::new(
         address,

@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::{fs::File, io::Write};
 
 use crate::{
     config::Config,
@@ -71,6 +71,17 @@ impl IO {
     }
 
     // Output streams
+    pub fn is_stream_2_open(&self) -> bool {
+        match self.stream_2 {
+            Some(_) => true,
+            None => false,
+        }
+    }
+
+    pub fn set_stream_2(&mut self, file: File) {
+        self.stream_2 = Some(file)
+    }
+
     pub fn is_stream_enabled(&self, stream: u8) -> bool {
         let mask = (1 << stream - 1) & 0xF;
         self.output_streams & mask == mask
@@ -84,8 +95,7 @@ impl IO {
         let mask = (1 << stream - 1) & 0xF;
         self.output_streams = self.output_streams | mask;
         match stream {
-            1 => Ok(()),
-            2 => todo!("Implement stream 2"),
+            1| 2 => Ok(()),
             3 => {
                 if let Some(address) = table {
                     self.stream_3.push(Stream3::new(address));
@@ -113,8 +123,7 @@ impl IO {
         let mask = (1 << stream - 1) & 0xF;
         self.output_streams = self.output_streams & !mask;
         match stream {
-            1 => Ok(()),
-            2 => todo!("Implement stream 2"),
+            1 | 2 => Ok(()),
             3 => {
                 if let Some(s) = self.stream_3.pop() {
                     let len = s.buffer.len();
@@ -136,6 +145,20 @@ impl IO {
     }
 
     // Output
+    pub fn transcript(&mut self, text: &Vec<u16>) -> Result<(), RuntimeError> {
+        if self.is_stream_enabled(2) {
+            if let Some(f) = self.stream_2.as_mut() {
+                let t:Vec<u8> = text.iter().map(|c| if *c == 0x0d { 0x0a } else { *c as u8 }).collect();
+                if let Err(e) = f.write_all(&t) {
+                    error!(target: "app::io", "Error writing to transcript file: {}", e);
+                }
+            } else {
+                warn!(target: "app::io", "Stream 2 is not open");
+            }
+        }
+
+        Ok(())
+    }
     pub fn print_vec(&mut self, text: &Vec<u16>) -> Result<(), RuntimeError> {
         // Only print to the screen if stream 3 is not selected and stream 1
         if self.is_stream_enabled(3) {
@@ -157,13 +180,20 @@ impl IO {
             if self.is_stream_enabled(1) {
                 if self.screen.selected_window() == 1 || !self.buffered {
                     self.screen.print(text);
+                    if self.screen.selected_window() == 0 {
+                        self.transcript(text)?;
+                    }
                 } else {
                     let words = text.split_inclusive(|c| *c == 0x20);
                     for word in words {
                         if self.screen.columns() - self.screen.cursor().1 < word.len() as u32 {
                             self.screen.new_line();
+                            self.transcript(&vec![0x0a as u16])?;
                         }
-                        self.screen.print(&word.to_vec());
+
+                        let w = word.to_vec();
+                        self.screen.print(&w);
+                        self.transcript(&w)?;
                     }
                 }
             }
@@ -185,6 +215,7 @@ impl IO {
         } else {
             if self.is_stream_enabled(1) {
                 self.screen.new_line();
+                self.transcript(&vec![0x0a as u16])?;
             }
         }
         // if self.output_streams & 0x5 == 0x1 {

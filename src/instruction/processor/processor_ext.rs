@@ -8,18 +8,11 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
             "SAVE table not implemented".to_string(),
         ))
     } else {
-        let save_data = zmachine.save(instruction.store().unwrap().address)?;
-        match zmachine.prompt_and_write("Save to: ", "ifzs", &save_data) {
+        match zmachine.save(instruction.store().unwrap().address()) {
             Ok(_) => {
                 store_result(zmachine, instruction, 1)?;
             }
-            Err(e) => {
-                zmachine.print(
-                    &format!("Error writing: {}\r", e)
-                        .chars()
-                        .map(|c| c as u16)
-                        .collect(),
-                )?;
+            Err(_) => {
                 store_result(zmachine, instruction, 0)?;
             }
         }
@@ -35,37 +28,20 @@ pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
             "RESTORE table not implemented".to_string(),
         ))
     } else {
-        match zmachine.prompt_and_read("Restore from: ", "ifzs") {
-            Ok(save_data) => match zmachine.restore(save_data) {
-                Ok(address) => match address {
-                    Some(a) => {
-                        let i = decoder::decode_instruction(zmachine, a - 3)?;
-                        store_result(zmachine, &i, 2)?;
-                        Ok(i.next_address())
-                    }
-                    None => {
-                        store_result(zmachine, instruction, 0)?;
-                        Ok(instruction.next_address())
-                    }
-                },
-                Err(e) => {
-                    zmachine.print(
-                        &format!("Error restoring: {}\r", e)
-                            .chars()
-                            .map(|c| c as u16)
-                            .collect(),
-                    )?;
+        match zmachine.restore() {
+            Ok(address) => match address {
+                Some(a) => {
+                    let i = decoder::decode_instruction(zmachine, a - 3)?;
+                    store_result(zmachine, &i, 2)?;
+                    Ok(i.next_address())
+                }
+                None => {
                     store_result(zmachine, instruction, 0)?;
                     Ok(instruction.next_address())
                 }
             },
             Err(e) => {
-                zmachine.print(
-                    &format!("Error reading: {}\r", e)
-                        .chars()
-                        .map(|c| c as u16)
-                        .collect(),
-                )?;
+                zmachine.print_str(format!("Error restoring: {}\r", e))?;
                 store_result(zmachine, instruction, 0)?;
                 Ok(instruction.next_address())
             }

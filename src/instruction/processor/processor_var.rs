@@ -377,7 +377,10 @@ pub fn output_stream(
         None
     };
 
-    zmachine.output_stream(stream, table)?;
+    if let Err(_) = zmachine.output_stream(stream, table) {
+        warn!(target: "app::instruction", "Start of transcript failed, stream 2 not enabled");
+    }
+    
     Ok(instruction.next_address())
 }
 
