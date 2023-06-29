@@ -48,6 +48,36 @@ $ mxyzptlk filename.z5
 $ cargo run -- filename.z5
 ```
 
+### Configuration
+
+Add notes about config.yml
+
+# June 27, 2023
+
+More restructuring code and implementing better rust development practices.  The sound player is now behind a trait, which should make it easier to change if necessary.  The old "state" has been rechristened "zmachine" and decomposed into separate files for runtime state, screen i/o, and sound.  Files for instruction, object, and text were pulled out of the zmachine module to keep internals private.
+
+## Fixed
+* `PRINT_TABLE` no longer prints padding that overwrites other text inappropriately
+* Stream 3 converts \n (0x0d) to \r (0x0a), per spec.  This was responsible for issues with the layout in Beyond Zork.
+
+## Regression
+* Stream 2 (transcripting) is no longer implemented
+* Logging is a mess
+
+## Backlog
+* Refactor read/sound interrupt handling to a consistent implementation.
+* Input streams
+* SAVE and RESTORE data (V5+)
+* Enable interpreter commands:
+    * `!undo` to undo a move in games that don't support `SAVE_UNDO` and `RESTORE_UNDO`
+    * up/down arrow keys to cycle through input history (if up/down aren't terminator characters for the `READ` instruction)
+    * `!again` or `!g` to repeat last input, also for games that don't have a native `again` verb.
+* Update curses terminals to gracefully(?) handle resizing the terminal window.
+* Implement error handling as suggested by spec.
+
+---
+---
+
 # June 24, 2023
 
 Refactored a lot of the code to make it more readable and manageable.  I also rewrote the terminal implementation to use either easycurses or pancurses, which are mostly the same except pancurses exposes mouse click and location info.  Easycurses should be able to do this by accessing the underlying pancurses lib.
@@ -136,6 +166,6 @@ It's going to be sloppy - I'm still acclimating to the peculiarities of Rust and
 ---
 
 ## History
-0.0.1 - ... work in progress
+0.0.1 - ... work in progress  
 0.0.2 - 20230623 - refactor
 
