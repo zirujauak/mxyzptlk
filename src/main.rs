@@ -22,7 +22,6 @@ use crate::config::Config;
 use crate::log::*;
 use iff::blorb::Blorb;
 use sound::Manager;
-use sound::rodio_player::RodioPlayer;
 use zmachine::state::memory::Memory;
 use zmachine::ZMachine;
 
@@ -37,8 +36,8 @@ fn initialize_sound_engine(name: &str) -> Option<Manager> {
                         match f.read_to_end(&mut data) {
                             Ok(_) => {
                                 if let Ok(blorb) = Blorb::try_from(data) {
-                                    if let Ok(player) = RodioPlayer::new() {
-                                        let manager = Manager::new(Box::new(player), blorb);
+                                    info!(target: "app::sound", "{}", blorb);
+                                    if let Ok(manager) = Manager::new(blorb) {
                                         Some(manager)
                                     } else {
                                         None

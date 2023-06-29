@@ -1,11 +1,13 @@
 use crate::{
     error::{ErrorCode, RuntimeError},
     instruction::{processor::store_result, Instruction},
+    object::property,
+    text,
     zmachine::{
         io::screen::Interrupt,
         state::{header::HeaderField, InterruptType},
         ZMachine,
-    }, object::property, text,
+    },
 };
 
 use super::{branch, call_fn, operand_values};
@@ -380,7 +382,7 @@ pub fn output_stream(
     if let Err(_) = zmachine.output_stream(stream, table) {
         warn!(target: "app::instruction", "Start of transcript failed, stream 2 not enabled");
     }
-    
+
     Ok(instruction.next_address())
 }
 

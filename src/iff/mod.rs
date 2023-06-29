@@ -1,5 +1,3 @@
-use std::{fs, io::Write};
-
 use crate::error::{ErrorCode, RuntimeError};
 
 pub mod blorb;
@@ -113,24 +111,6 @@ impl Chunk {
         }
 
         let length = vec_to_u32(&vec, offset + 4, 4);
-
-        match &form {
-            Some(fr) => {
-                let mut f = fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .truncate(true)
-                    .open(format!("sample-{}.aiff", offset))
-                    .unwrap();
-                f.write_all(&id_as_vec(&fr)).unwrap();
-                f.write_all(&u32_to_vec(length, 4)).unwrap();
-                let d = &vec[offset + 8..offset + 8 + (length as usize)];
-                f.write_all(d).unwrap();
-                f.flush().unwrap();
-            }
-            None => (),
-        }
-
         let data = vec[offset + 8..offset + 8 + length as usize].to_vec();
 
         Chunk {
