@@ -38,7 +38,7 @@ impl Sound {
     }
 
     pub fn from_aiff(number: u32, aiff: &AIFF, repeats: Option<&u32>) -> Sound {
-        match loader::aiff_to_flac(&Vec::from(aiff)) {
+        match loader::convert_aiff(&Vec::from(aiff)) {
             Ok(sound) => {
                 Sound {
                     number,
@@ -46,7 +46,7 @@ impl Sound {
                     data: sound
                 }
             } Err(e) => {
-                error!(target: "app::sound", "Error converting AIFF to FLAC: {}", e);
+                error!(target: "app::sound", "Error converting AIFF: {}", e);
                 Sound {
                     number,
                     repeats: repeats.copied(),
