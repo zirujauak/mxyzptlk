@@ -10,19 +10,25 @@ The following libraries are required to build from source:
     * Mac: `brew install ncurses` 
     * Linux: depends on the package manager your install uses.
     * Windows: pdcurses, instructions to follow
-* libsndfile - be sure your LD_LIBRARY_PATH (on Mac/Linux, at least) includes the directory with libsndfile
+* libsndfile - The `sndfile` feature (enabled by default) controls whether libsndfile is used to convert AIFF sounds to another format.  To disable `sndfile`, pass the `--no-default-features` flag to cargo when you build or run.
     * Mac: 
-        * `brew install libsndfile` 
-        * `export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib` ... necessary every time you open a new shell unless you add it to the shell profile
+        * Install: 
+        
+            `brew install libsndfile` 
+        * Update build environment: 
+        
+            `export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib`
+            
+            This is necessary every time you open a new shell unless you add it to the shell profile (`~/.zshenv`, for example).
     * Linux: 
         * Install libsndfile using your install's package manager
-        * May not need to update `LIBRARY_PATH`, since Linux typically puts libraries in a consistent place that's already in the path
+        * You probably won't need to update `LIBRARY_PATH`, since Linux package managers generally put libraries in a consistent place that compilers already know to use.
     * Windows:
         * Download [libsndfile](https://github.com/libsndfile/libsndfile/releases) appropriate to your platform (32/64 bits)
-        * Extract `sndfile.lib` to the project root somewhere (it's under `lib/`)
-        * Extract `sndfile.dll` to the project root
+        * Extract `sndfile.lib` (from the archive under `lib/`) to somewhere in the project tree - the project root is convenient.
+        * Extract `sndfile.dll` (from the archive under `bin/`) to the project root.
 
-            Note that the `sndfile.dll` should be in the same directory that you run executable from.  Otherwise, execution fails with "error while loading shared libraries...".  There's probably a way to add sndfile.dll to a system folder.
+            **Note** that the `sndfile.dll` should be in the same directory that you run executable from.  If using cargo from the project root, then `sndfile.dll` should be in the project root.  If running the `mxyzpltk{.exe}` binary, then it needs to be in the directory that you are invoking the binary from.  If execution fails with "error while loading shared libraries...", it's because the `sndfile.dll` wasn't found.  I'm sure there's a way to add the DLL to a common library path, I just haven't looked into it yet.
 
 ```
 $ cargo build
@@ -88,7 +94,6 @@ More restructuring code and implementing better rust development practices.  The
 
 ### Bugs
 * ~~FLAC audio clicks at the end, which is noticeable at higher volumes and especially annoying when a sound loops.  Need to investigate the conversion code to see if there's a fix.~~ (Avoiding this by using OGG/Vorbis instead)
-* The `sndfile` build fails to run on Windows.  Windows is currently an OGG/Vorbis only platform.
 
 ### Backlog
 * Logging is a mess
