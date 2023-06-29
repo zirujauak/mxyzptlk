@@ -37,7 +37,7 @@ Some are interactive, like TerpEtude, and others just run a sequence of tests an
 
 ### Running a game
 
-From a curses-supported terminal window measuring 80 columns by 24 rows or larger.  Smaller should work, mostly.
+From a curses-supported terminal window measuring 80 columns by 24 rows or larger.  Smaller should work, mostly.  Tested with zsh on a Mac and bash in Linux.  Windows opens a separate curses terminal window.  Don't use a terminal with more than 254 rows or columns - the ZMachine stores the screen size using byte values. 
 
 * Running the compiled binary directly, assuming it's in the $PATH:
 ```
