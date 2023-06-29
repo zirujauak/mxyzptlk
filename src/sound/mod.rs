@@ -1,11 +1,13 @@
 use core::fmt;
 use std::collections::HashMap;
 
-pub mod rodio_player;
+mod rodio_player;
+mod loader;
 
 use crate::{
     error::RuntimeError,
-    iff::blorb::{oggv::OGGV, Blorb},
+    iff::blorb::{oggv::OGGV, Blorb, aiff::AIFF},
+    sound::rodio_player::RodioPlayer,
 };
 
 pub struct Sound {
@@ -18,7 +20,7 @@ impl fmt::Display for Sound {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Sound {}, repeats: {:?},  {} bytes",
+            "Sound {}, repeats: {:?}, {} bytes",
             self.number,
             self.repeats,
             self.data.len()
@@ -33,6 +35,25 @@ impl Sound {
             repeats: repeats.copied(),
             data: oggv.data().clone(),
         }
+    }
+
+    pub fn from_aiff(number: u32, aiff: &AIFF, repeats: Option<&u32>) -> Sound {
+        match loader::aiff_to_flac(&Vec::from(aiff)) {
+            Ok(sound) => {
+                Sound {
+                    number,
+                    repeats: repeats.copied(),
+                    data: sound
+                }
+            } Err(e) => {
+                error!(target: "app::sound", "Error converting AIFF to FLAC: {}", e);
+                Sound {
+                    number,
+                    repeats: repeats.copied(),
+                    data: vec![],
+                }
+            }
+       }
     }
 }
 
@@ -62,8 +83,12 @@ impl From<Blorb> for HashMap<u32, Sound> {
         if let Some(ridx) = value.ridx() {
             for index in ridx.entries() {
                 if index.usage().eq("Snd ") {
-                    if let Some(oggv) = value.snds().get(&(index.start() as usize)) {
+                    if let Some(oggv) = value.oggv().get(&(index.start() as usize)) {
                         let s = Sound::from_oggv(index.number(), oggv, loops.get(&index.number()));
+                        info!(target: "app::sound", "Sound: {}", s);
+                        sounds.insert(index.number(), s);
+                    } else if let Some(aiff) = value.aiff().get(&(index.start() as usize)) {
+                        let s= Sound::from_aiff(index.number(), aiff, loops.get(&(index.number())));
                         info!(target: "app::sound", "Sound: {}", s);
                         sounds.insert(index.number(), s);
                     }
@@ -76,12 +101,12 @@ impl From<Blorb> for HashMap<u32, Sound> {
 }
 
 impl Manager {
-    pub fn new(player: Box<dyn Player>, blorb: Blorb) -> Manager {
-        Manager {
-            player: Some(player),
+    pub fn new(blorb: Blorb) -> Result<Manager, RuntimeError> {
+        Ok(Manager {
+            player: Some(Box::new(RodioPlayer::new()?)),
             sounds: HashMap::from(blorb),
             current_effect: 0,
-        }
+        })
     }
 
     pub fn current_effect(&self) -> u32 {

@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt};
 
 use ridx::RIdx;
 
-use crate::error::{ErrorCode, RuntimeError};
+use crate::{error::{ErrorCode, RuntimeError}, iff::blorb::aiff::AIFF};
 
 use self::{oggv::OGGV, sloop::Loop};
 
@@ -11,11 +11,12 @@ use super::{quetzal::ifhd::IFhd, IFF};
 pub mod oggv;
 pub mod ridx;
 pub mod sloop;
-
+pub mod aiff;
 pub struct Blorb {
     ridx: Option<RIdx>,
     ifhd: Option<IFhd>,
-    snds: HashMap<usize, OGGV>,
+    oggv: HashMap<usize, OGGV>,
+    aiff: HashMap<usize, AIFF>,
     sloop: Option<Loop>,
 }
 
@@ -31,8 +32,13 @@ impl fmt::Display for Blorb {
             writeln!(f, "{}", ridx)?;
         }
         writeln!(f, "Sound resources:")?;
-        for k in self.snds.keys() {
-            if let Some(s) = self.snds.get(k) {
+        for k in self.oggv.keys() {
+            if let Some(s) = self.oggv.get(k) {
+                writeln!(f, "\t{}", s)?;
+            }
+        }
+        for k in self.aiff.keys() {
+            if let Some(s) = self.aiff.get(k) {
                 writeln!(f, "\t{}", s)?;
             }
         }
@@ -68,21 +74,24 @@ impl TryFrom<Vec<u8>> for Blorb {
         let mut ridx = None;
         let mut ifhd = None;
         let mut sloop = None;
-        let mut snds: HashMap<usize, OGGV> = HashMap::new();
-
+        let mut oggv: HashMap<usize, OGGV> = HashMap::new();
+        let mut aiff: HashMap<usize, AIFF> = HashMap::new();
         for chunk in iff.chunks {
             match chunk.id.as_str() {
                 "RIdx" => ridx = Some(RIdx::from(chunk)),
                 "IFhd" => ifhd = Some(IFhd::from(chunk)),
                 "Loop" => sloop = Some(Loop::from(chunk)),
                 "OGGV" => {
-                    snds.insert(chunk.offset, OGGV::from(chunk));
+                    oggv.insert(chunk.offset, OGGV::from(chunk));
+                }
+                "AIFF" => {
+                    aiff.insert(chunk.offset, AIFF::from(chunk));
                 }
                 _ => warn!(target: "app::blorb", "Ignoring chunk id {}", chunk.id),
             }
         }
 
-        let blorb = Blorb::new(ridx, ifhd, snds, sloop);
+        let blorb = Blorb::new(ridx, ifhd, oggv, aiff, sloop);
         debug!(target: "app::blorb", "{}", blorb);
         Ok(blorb)
     }
@@ -92,13 +101,15 @@ impl Blorb {
     pub fn new(
         ridx: Option<RIdx>,
         ifhd: Option<IFhd>,
-        snds: HashMap<usize, OGGV>,
+        oggv: HashMap<usize, OGGV>,
+        aiff: HashMap<usize, AIFF>,
         sloop: Option<Loop>,
     ) -> Blorb {
         Blorb {
             ridx,
             ifhd,
-            snds,
+            oggv,
+            aiff,
             sloop,
         }
     }
@@ -111,8 +122,12 @@ impl Blorb {
         self.ifhd.as_ref()
     }
 
-    pub fn snds(&self) -> &HashMap<usize, OGGV> {
-        &self.snds
+    pub fn oggv(&self) -> &HashMap<usize, OGGV> {
+        &self.oggv
+    }
+
+    pub fn aiff(&self) -> &HashMap<usize, AIFF> {
+        &self.aiff
     }
 
     pub fn sloop(&self) -> Option<&Loop> {

@@ -7,6 +7,15 @@ An inform (zmachine) virtual machine implemented in Rust.
 I'm pretty sure a curses library (ncurses of Linux/MacOS, pdcurses for windows) needs to be installed. Will add instructions.  Short version: MacOS - use homebrew to install the `ncurses` formula;  Linux - depends on your package manager, look for `ncursesw` or `ncurses`;  Windows - google `pdcurses windows` and good luck!
 
 ### Building
+The following libraries are required to build from source:
+* Curses - either ncurses/ncursesw for Mac/Linux, or pdcurses for Windows
+    * Mac: `brew install ncurses` 
+    * Linux: depends on the package manager your install uses.
+    * Windows: TBD
+* libsndfile - be sure your LD_LIBRARY_PATH (on Mac/Linux, at least) includes the directory with libsndfile
+    * Mac: `brew install libsndfile` and then from the shell you're running cargo from: `export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib`
+    * Linux: depends on the package manager your install uses.  
+    * Windows: TBD
 
 ```
 $ cargo build
@@ -55,6 +64,9 @@ Add notes about config.yml
 # June 28, 2023
 
 More restructuring code and implementing better rust development practices.  The sound player is now behind a trait, which should make it easier to change if necessary.  The old "state" has been rechristened "zmachine" and decomposed into separate files for runtime state, screen i/o, and sound.  Files for instruction, object, and text were pulled out of the zmachine module to keep internals private.
+
+## New!
+* Added code to read AIFF chunks from a blorb file and use `libsndfile` to convert them to FLAC, which `rodio` will play.  No need to pick a blorb apart, convert AIFF to OGGV, and rebuild!  However, there's a "click" at the end of the converted sound that's very noticable at higher volumes, especially when sounds repeat.  Need to investigate.
 
 ## Fixed
 * `PRINT_TABLE` no longer prints padding that overwrites other text inappropriately, which was very evident in Beyond Zork

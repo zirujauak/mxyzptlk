@@ -586,7 +586,6 @@ impl ZMachine {
         let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
         let filename = String::from_utf16(&f).expect("Error groking user input as a filename").trim().to_string();
         if !overwrite {
-            let p = Path::new(&filename);
             match Path::new(&filename).try_exists() {
                 Ok(b) => match b {
                     true => {
