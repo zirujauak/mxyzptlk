@@ -1,5 +1,7 @@
 use std::{fs, io::Write};
 
+use crate::error::{ErrorCode, RuntimeError};
+
 pub mod blorb;
 pub mod quetzal;
 
@@ -71,6 +73,37 @@ pub struct Chunk {
 }
 
 impl Chunk {
+    pub fn new(offset: usize, form: Option<String>, id: String, data: &Vec<u8>) -> Chunk {
+        let length = data.len() as u32 + if data.len() % 2 == 1 { 1 } else { 0 };
+        Chunk {
+            offset,
+            form,
+            id,
+            length,
+            data: data.clone(),
+        }
+    }
+
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    pub fn form(&self) -> Option<&String> {
+        self.form.as_ref()
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn length(&self) -> u32 {
+        self.length
+    }
+
+    pub fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
+
     pub fn from_vec(vec: &Vec<u8>, offset: usize) -> Chunk {
         let mut form = None;
         let mut id = vec_to_id(&vec, offset);
@@ -92,14 +125,12 @@ impl Chunk {
                 f.write_all(&id_as_vec(&fr)).unwrap();
                 f.write_all(&u32_to_vec(length, 4)).unwrap();
                 let d = &vec[offset + 8..offset + 8 + (length as usize)];
-                trace!("d: {} bytes", d.len());
                 f.write_all(d).unwrap();
                 f.flush().unwrap();
             }
             None => (),
         }
 
-        trace!("IFF Chunk: {:?}/{} {:#05x}", form, id, length);
         let data = vec[offset + 8..offset + 8 + length as usize].to_vec();
 
         Chunk {
@@ -137,7 +168,7 @@ impl Chunk {
         // Data
         v.append(&mut self.data.clone());
 
-        if self.data.len() %2 == 1 {
+        if self.data.len() % 2 == 1 {
             v.push(0);
         }
 
@@ -147,22 +178,33 @@ impl Chunk {
 
 pub struct IFF {
     form: String,
-    length: u32,
+    _length: u32,
     sub_form: String,
     chunks: Vec<Chunk>,
 }
 
 impl IFF {
-    pub fn from_vec(v: Vec<u8>) -> IFF {
-        let form = vec_to_id(&v, 0);
-        let length = vec_to_u32(&v, 4, 4);
-        let sub_form = vec_to_id(&v, 8);
+    pub fn form_from_vec(v: &Vec<u8>) -> Result<String, RuntimeError> {
+        if v.len() < 4 {
+            Err(RuntimeError::new(
+                ErrorCode::IFF,
+                "Not an IFF file".to_string(),
+            ))
+        } else {
+            Ok(vec_to_id(v, 0))
+        }
+    }
+
+    pub fn from_vec(v: &Vec<u8>) -> IFF {
+        let form = vec_to_id(v, 0);
+        let length = vec_to_u32(v, 4, 4);
+        let sub_form = vec_to_id(v, 8);
         let mut chunks = Vec::new();
 
         let mut offset = 12;
         let len = v.len();
         while offset < len - 1 {
-            let chunk = Chunk::from_vec(&v, offset);
+            let chunk = Chunk::from_vec(v, offset);
             let l = chunk.data.len();
             chunks.push(chunk);
             offset = offset + 8 + l;
@@ -171,16 +213,9 @@ impl IFF {
             }
         }
 
-        trace!(
-            "IFF: {}/{} {:#05x}, {} chunks",
-            form,
-            sub_form,
-            length,
-            chunks.len()
-        );
         IFF {
             form,
-            length,
+            _length: length,
             sub_form,
             chunks,
         }

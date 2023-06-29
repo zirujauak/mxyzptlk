@@ -1,31 +1,42 @@
-use crate::executor::{state::State, header};
+use std::fmt;
+
 use super::super::*;
 
 pub struct UMem {
-    pub data: Vec<u8>,
+    data: Vec<u8>,
+}
+
+impl fmt::Display for UMem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "uncompressed data size: {}", self.data.len())
+    }
+}
+
+impl From<Vec<u8>> for UMem {
+    fn from(value: Vec<u8>) -> UMem {
+        UMem::new(&value)
+    }
+}
+
+impl From<Chunk> for UMem {
+    fn from(value: Chunk) -> UMem {
+        UMem::new(value.data())
+    }
+}
+
+impl From<&UMem> for Vec<u8> {
+    fn from(value: &UMem) -> Vec<u8> {
+        chunk("UMem", &mut value.data.clone())
+    }
 }
 
 impl UMem {
-    pub fn from_state(state: &State) -> UMem {
-        UMem {
-            data: state.memory_map()[0..header::static_memory_base(state) as usize].to_vec(),
-        }
+    pub fn new(data: &Vec<u8>) -> UMem {
+        UMem { data: data.clone() }
     }
 
-    pub fn from_vec(chunk: Vec<u8>) -> UMem {
-        UMem {
-            data: chunk.clone(),
-        }
-    }
-
-    pub fn from_chunk(chunk: Chunk) -> UMem {
-        UMem {
-            data: chunk.data.clone()
-        }
-    }
-    
-    pub fn to_chunk(&self) -> Vec<u8> {
-        chunk("UMem", &mut self.data.clone())
+    pub fn data(&self) -> &Vec<u8> {
+        &self.data
     }
 }
 

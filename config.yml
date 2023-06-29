@@ -1,0 +1,13 @@
+# Valid terminals are "pancurses" and "easycurses"
+terminal: "pancurses"
+# Valid colors:
+#  2 = BLACK
+#  3 = RED
+#  4 = GREEN
+#  5 = YELLOW
+#  6 = BLUE
+#  7 = MAGENTA
+#  8 = CYAN
+#  9 = WHITE
+foreground: 8
+background: 2
