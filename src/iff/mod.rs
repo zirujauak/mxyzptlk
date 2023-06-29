@@ -229,30 +229,4 @@ impl IFF {
             Ok(vec_to_id(v, 0))
         }
     }
-
-    // pub fn from_vec(v: &Vec<u8>) -> IFF {
-    //     let form = vec_to_id(v, 0);
-    //     let length = vec_to_u32(v, 4, 4);
-    //     let sub_form = vec_to_id(v, 8);
-    //     let mut chunks = Vec::new();
-
-    //     let mut offset = 12;
-    //     let len = v.len();
-    //     while offset < len - 1 {
-    //         let chunk = Chunk::from((v, offset));
-    //         let l = chunk.data.len();
-    //         chunks.push(chunk);
-    //         offset = offset + 8 + l;
-    //         if l % 2 == 1 {
-    //             offset = offset + 1;
-    //         }
-    //     }
-
-    //     IFF {
-    //         form,
-    //         _length: length,
-    //         sub_form,
-    //         chunks,
-    //     }
-    // }
 }
