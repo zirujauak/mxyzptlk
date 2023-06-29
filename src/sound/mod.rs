@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 mod rodio_player;
 
-// #[cfg(not(target_os = "windows"))]
+#[cfg(feature = "sndfile")]
 mod loader;
 
 use crate::{
@@ -36,6 +36,7 @@ impl From<(u32, &OGGV, Option<&u32>)> for Sound {
     }
 }
 
+#[cfg(feature = "sndfile")]
 impl From<(u32, &AIFF, Option<&u32>)> for Sound {
     fn from((number, aiff, repeats): (u32, &AIFF, Option<&u32>)) -> Self {
         match loader::convert_aiff(&Vec::from(aiff)) {
@@ -48,12 +49,13 @@ impl From<(u32, &AIFF, Option<&u32>)> for Sound {
     }
 }
 
-// #[cfg(target_os = "windows")]
-// impl From<(u32, &AIFF, Option<&u32>)> for Sound {
-//     fn from((number, _aiff, repeats): (u32, &AIFF, Option<&u32>)) -> Self {
-//         Sound::new(number, &vec![], repeats)
-//     }
-// }
+#[cfg(not (feature = "sndfile"))]
+impl From<(u32, &AIFF, Option<&u32>)> for Sound {
+    fn from((number, _aiff, repeats): (u32, &AIFF, Option<&u32>)) -> Self {
+        Sound::new(number, &vec![], repeats)
+    }
+}
+
 impl Sound {
     pub fn new(number: u32, data: &Vec<u8>, repeats: Option<&u32>) -> Sound {
         Sound {
@@ -62,34 +64,6 @@ impl Sound {
             data: data.clone(),
         }
     }
-
-    // pub fn from_oggv(number: u32, oggv: &OGGV, repeats: Option<&u32>) -> Sound {
-    //     Sound {
-    //         number,
-    //         repeats: repeats.copied(),
-    //         data: oggv.data().clone(),
-    //     }
-    // }
-
-    // #[cfg(feature = "sndfile")]
-    // pub fn from_aiff(number: u32, aiff: &AIFF, repeats: Option<&u32>) -> Sound {
-    //     match loader::convert_aiff(&Vec::from(aiff)) {
-    //         Ok(sound) => {
-    //             Sound {
-    //                 number,
-    //                 repeats: repeats.copied(),
-    //                 data: sound
-    //             }
-    //         } Err(e) => {
-    //             error!(target: "app::sound", "Error converting AIFF: {}", e);
-    //             Sound {
-    //                 number,
-    //                 repeats: repeats.copied(),
-    //                 data: vec![],
-    //             }
-    //         }
-    //    }
-    // }
 }
 
 pub trait Player {

@@ -19,9 +19,10 @@ The following libraries are required to build from source:
         * May not need to update `LIBRARY_PATH`, since Linux typically puts libraries in a consistent place that's already in the path
     * Windows:
         * Download [libsndfile](https://github.com/libsndfile/libsndfile/releases) appropriate to your platform (32/64 bits)
-        * Extract `sndfile.lib` somewhere
-        * Update `LIBRARY_PATH` to include the somewhere above:
-            * Varies by shell: `export LIBRARY_PATH=$LIBRARY_PATH:/path/to/sndlib.lib`
+        * Extract `sndfile.lib` to the project root somewhere (it's under `lib/`)
+        * Extract `sndfile.dll` to the project root
+
+            Note that the `sndfile.dll` should be in the same directory that you run executable from.  Otherwise, execution fails with "error while loading shared libraries...".  There's probably a way to add sndfile.dll to a system folder.
 
 ```
 $ cargo build
@@ -87,6 +88,7 @@ More restructuring code and implementing better rust development practices.  The
 
 ### Bugs
 * ~~FLAC audio clicks at the end, which is noticeable at higher volumes and especially annoying when a sound loops.  Need to investigate the conversion code to see if there's a fix.~~ (Avoiding this by using OGG/Vorbis instead)
+* The `sndfile` build fails to run on Windows.  Windows is currently an OGG/Vorbis only platform.
 
 ### Backlog
 * Logging is a mess
