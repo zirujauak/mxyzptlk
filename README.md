@@ -4,7 +4,7 @@ An inform (zmachine) virtual machine implemented in Rust.
 
 ## Usage
 
-I'm pretty sure a curses library (ncurses of Linux/MacOS, pdcurses for windows) needs to be installed. Will add instructions.  Short version: MacOS - use homebrew to install the `ncurses` formula;  Linux - depends on your package manager, look for `ncursesw` or `ncurses`;  Windows - google `pdcurses windows` and good luck!
+I'm pretty sure a curses library (ncurses for Linux/MacOS, pdcurses for windows) needs to be installed. Will add instructions.  Short version: MacOS - use homebrew to install the `ncurses` formula;  Linux - depends on your package manager, look for `ncursesw` or `ncurses`;  Windows - google `pdcurses windows` and good luck!
 
 ### Building
 
