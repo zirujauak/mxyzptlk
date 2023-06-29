@@ -52,19 +52,16 @@ $ cargo run -- filename.z5
 
 Add notes about config.yml
 
-# June 27, 2023
+# June 28, 2023
 
 More restructuring code and implementing better rust development practices.  The sound player is now behind a trait, which should make it easier to change if necessary.  The old "state" has been rechristened "zmachine" and decomposed into separate files for runtime state, screen i/o, and sound.  Files for instruction, object, and text were pulled out of the zmachine module to keep internals private.
 
 ## Fixed
-* `PRINT_TABLE` no longer prints padding that overwrites other text inappropriately
+* `PRINT_TABLE` no longer prints padding that overwrites other text inappropriately, which was very evident in Beyond Zork
 * Stream 3 converts \n (0x0d) to \r (0x0a), per spec.  This was responsible for issues with the layout in Beyond Zork.
 
-## Regression
-* Stream 2 (transcripting) is no longer implemented
-* Logging is a mess
-
 ## Backlog
+* Logging is a mess
 * Refactor read/sound interrupt handling to a consistent implementation.
 * Input streams
 * SAVE and RESTORE data (V5+)
