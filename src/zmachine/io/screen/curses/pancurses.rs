@@ -71,7 +71,6 @@ impl PCTerminal {
             Input::KeyMouse => {
                 match pancurses::getmouse() {
                     Ok(event) => {
-                        info!(target: "app::input", "Mouse: {:?}", event);
                         if event.bstate & BUTTON1_CLICKED == BUTTON1_CLICKED {
                             InputEvent::from_mouse(254, event.y as u16 + 1, event.x as u16 + 1)
                         } else if event.bstate & BUTTON1_DOUBLE_CLICKED == BUTTON1_DOUBLE_CLICKED {

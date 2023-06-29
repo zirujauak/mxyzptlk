@@ -5,8 +5,8 @@ pub mod pancurses;
 
 fn char_to_u16(c: char) -> InputEvent {
     match c {
-        '\u{7f}' => InputEvent::from_char(0x08),
-        '\u{0a}' => InputEvent::from_char(0x0d),
+        '\u{7f}' | '\u{08}' => InputEvent::from_char(0x08),
+        '\u{0a}' | '\u{0d}' => InputEvent::from_char(0x0d),
         ' '..='~' => InputEvent::from_char(c as u16),
         '\u{e4}' => InputEvent::from_char(0x9b),
         '\u{f6}' => InputEvent::from_char(0x9c),
