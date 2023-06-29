@@ -54,7 +54,7 @@ impl TryFrom<Vec<u8>> for Blorb {
     type Error = RuntimeError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let iff = IFF::from_vec(&value);
+        let iff = IFF::from(&value);
 
         if iff.form != "FORM" || iff.sub_form != "IFRS" {
             error!(
