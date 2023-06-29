@@ -4,6 +4,9 @@ version = "0.0.2"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["sndfile"]
+sndfile = ["dep:sndfile"]
 
 [dependencies]
 log = "0.4.17"
@@ -18,4 +21,4 @@ tempfile = "3.4.0"
 easycurses = "0.13.0"
 serde_yaml = "0.9.19"
 regex = "1.7.1"
-sndfile = "0.1.1"
+sndfile = { version = "0.1.1", optional = true }

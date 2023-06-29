@@ -10,10 +10,25 @@ The following libraries are required to build from source:
     * Mac: `brew install ncurses` 
     * Linux: depends on the package manager your install uses.
     * Windows: pdcurses, instructions to follow
-* libsndfile - be sure your LD_LIBRARY_PATH (on Mac/Linux, at least) includes the directory with libsndfile
-    * Mac: `brew install libsndfile` and then from the shell you're running cargo from: `export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib`
-    * Linux: depends on the package manager your install uses.  
-    * Windows: TBD - haven't tried a build that requires libsndfile with Windows yet
+* libsndfile - The `sndfile` feature (enabled by default) controls whether libsndfile is used to convert AIFF sounds to another format.  To disable `sndfile`, pass the `--no-default-features` flag to cargo when you build or run.
+    * Mac: 
+        * Install: 
+        
+            `brew install libsndfile` 
+        * Update build environment: 
+        
+            `export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib`
+            
+            This is necessary every time you open a new shell unless you add it to the shell profile (`~/.zshenv`, for example).
+    * Linux: 
+        * Install libsndfile using your install's package manager
+        * You probably won't need to update `LIBRARY_PATH`, since Linux package managers generally put libraries in a consistent place that compilers already know to use.
+    * Windows:
+        * Download [libsndfile](https://github.com/libsndfile/libsndfile/releases) appropriate to your platform (32/64 bits)
+        * Extract `sndfile.lib` (from the archive under `lib/`) to somewhere in the project tree - the project root is convenient.
+        * Extract `sndfile.dll` (from the archive under `bin/`) to the project root.
+
+            **Note** that the `sndfile.dll` should be in the same directory that you run executable from.  If using cargo from the project root, then `sndfile.dll` should be in the project root.  If running the `mxyzpltk{.exe}` binary, then it needs to be in the directory that you are invoking the binary from.  If execution fails with "error while loading shared libraries...", it's because the `sndfile.dll` wasn't found.  I'm sure there's a way to add the DLL to a common library path, I just haven't looked into it yet.
 
 ```
 $ cargo build
