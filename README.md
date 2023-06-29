@@ -4,7 +4,7 @@ An inform (zmachine) virtual machine implemented in Rust.
 
 ## Usage
 
-I'm pretty sure a curses library (ncurses of Linux/MacOS, pdcurses for windows) needs to be installed. Will add instructions.  Short version: MacOS - use homebrew to install the `ncurses` formula;  Linux - depends on your package manager, look for `ncursesw` or `ncurses`;  Windows - google `pdcurses windows` and good luck!
+I'm pretty sure a curses library (ncurses for Linux/MacOS, pdcurses for windows) needs to be installed. Will add instructions.  Short version: MacOS - use homebrew to install the `ncurses` formula;  Linux - depends on your package manager, look for `ncursesw` or `ncurses`;  Windows - google `pdcurses windows` and good luck!
 
 ### Building
 The following libraries are required to build from source:
@@ -33,7 +33,7 @@ The `zcode` directory contains several freely available test files.  I did not a
     * Also available [here](https://github.com/townba/etude) with source code.  The `etude.z5` and `gntests.z5` files included are from this repo.
 * [Czech](https://www.ifarchive.org/if-archive/infocom/interpreters/tools/czech_0_8.zip) by Amir Karger
 * [Praxix](https://www.ifarchive.org/if-archive/infocom/interpreters/tools/praxix.zip) by Zarf & Dannii
-* [Strict](https://www.ifarchive.org/if-archive/infocom/interpreters/tools/strictz.z5) by Torbjorn Andersso
+* [Strict](https://www.ifarchive.org/if-archive/infocom/interpreters/tools/strictz.z5) by Torbjorn Andersson
 
 These files have been included in this repo without express permission and will be removed upon request by the author.
 
@@ -46,7 +46,7 @@ Some are interactive, like TerpEtude, and others just run a sequence of tests an
 
 ### Running a game
 
-From a curses-supported terminal window measuring 80 columns by 24 rows or larger.  Smaller should work, mostly.
+From a curses-supported terminal window measuring 80 columns by 24 rows or larger.  Smaller should work, mostly.  Tested with zsh on a Mac and bash in Linux.  Windows opens a separate curses terminal window.  Don't use a terminal with more than 254 rows or columns - the ZMachine stores the screen size using byte values. 
 
 * Running the compiled binary directly, assuming it's in the $PATH:
 ```
@@ -57,11 +57,18 @@ $ mxyzptlk filename.z5
 $ cargo run -- filename.z5
 ```
 
+Speaking of games, the [Interactive Fiction Archive](https://www.ifarchive.org/indexes/if-archive/) has quite a number of free games.  This interpreter is for "zcode" games only, generally those with names ending in ".z{version}".  Only `version`s 3, 4, 5, 7, and 8 are supported, though version 7 is somewhat rare and I haven't tried running one yet.
+
 ### Configuration
 
 Add notes about config.yml
 
-# June 28, 2023
+### Logs
+
+Execution will dump quite a bit of output to various `.log` files.  This can be mostly disabled by changing the `level` values in the `log4rs.yml` file to `warn`. Or just ignore them.
+
+# History
+## June 28, 2023
 
 More restructuring code and implementing better rust development practices.  The sound player is now behind a trait, which should make it easier to change if necessary.  The old "state" has been rechristened "zmachine" and decomposed into separate files for runtime state, screen i/o, and sound.  Files for instruction, object, and text were pulled out of the zmachine module to keep internals private.
 
@@ -72,7 +79,7 @@ More restructuring code and implementing better rust development practices.  The
 * `PRINT_TABLE` no longer prints padding that overwrites other text inappropriately, which was very evident in Beyond Zork
 * Stream 3 converts \n (0x0d) to \r (0x0a), per spec.  This was responsible for issues with the layout in Beyond Zork.
 
-## Backlog
+### Backlog
 * Logging is a mess
 * Refactor read/sound interrupt handling to a consistent implementation.
 * Input streams
@@ -87,11 +94,11 @@ More restructuring code and implementing better rust development practices.  The
 ---
 ---
 
-# June 24, 2023
+## June 24, 2023
 
 Refactored a lot of the code to make it more readable and manageable.  I also rewrote the terminal implementation to use either easycurses or pancurses, which are mostly the same except pancurses exposes mouse click and location info.  Easycurses should be able to do this by accessing the underlying pancurses lib.
 
-## Working
+### Working
 * Curses-based terminal interpreter (two!) with working zmachine screen model including color and font styling, though italic characters are underlined due to limitations in curses.  Mouse input is also working correctly in Beyond Zork.
 * Output pauses when a full screen of text has been printed without input from the player.  Hitting `Enter` (or `Return`) will print just one more line, any other key prints up to a full page.
 * Multiple undo states as with previous update
@@ -104,10 +111,10 @@ Refactored a lot of the code to make it more readable and manageable.  I also re
 * V5 sound (Sherlock) ... provisionally.  The clock chime sounds 6 times as 6AM and the interrupt routine runs (and does nothing of consequence), but I haven't played far enough to trigger an interrupt that does anything interesting.
 * STATUS_LINE will truncate the location name if the screen is too narrow to display full text.  For those who wax longingly for a Commodore VIC-20, maybe?
 
-## Fixed!
+### Fixed!
 * AREAD opcode correctly sets the text buffer positions of words, which fixed problems with setting the table style and handling puzzle pieces in jigsaw.z8
 
-## Backlog
+### Backlog
 * Refactor read/sound interrupt handling so it less ... hacky
 * Input streams
 * SAVE and RESTORE data (V5+)
@@ -120,9 +127,9 @@ Refactored a lot of the code to make it more readable and manageable.  I also re
 ---
 ---
 
-# March 11, 2023
+## March 11, 2023
 
-## Working
+### Working
 
 * Curses-based terminal interpreter with working zmachine screen model support including color and font styling.  Color, however is inconsistent in different shells and on different platforms due to differences in the underlying curses libraries (I think).  "True color" is even more inconsistent, for good measure.
 * Multiple undo states keeping the most recent 10 stored undo states.
@@ -132,19 +139,19 @@ Refactored a lot of the code to make it more readable and manageable.  I also re
 * Mouse input in Beyond Zork.
 * Sound effects in The Lurking Horror with a suitable blorb resource file containing OGG sound data.
 
-## Not working
+### Not working
 * AIFF sound playback ... need to find a Rust lib for this.
 * Infocom V6 games (Zork 0, Shogun, Journey, Arthur) - most V6 instructions will panic.
 * Infocom V5 sound interrupts (Sherlock is the only V5 game with sound?)
 * Input streams (reading commands from a file instead of keyboard)
 * V5+ save/restore data ... not extensively used
 
-## Bugs
+### Bugs
 * Beyond Zork windowed display has minor glitches where spaces appear where they shouldn't be.
 * Jigsaw won't show the puzzle frame.
 * Small screen sizes can cause problems with status line display
 
-## Backlog
+### Backlog
 * V5 sound interrupts
 * Fix handling of small (< 80 column) screens
 * Debug Beyond Zork display glitches
@@ -152,20 +159,20 @@ Refactored a lot of the code to make it more readable and manageable.  I also re
 * Input streams
 * Save/restore data
 
-## Future
+### Future
 * Browser-based interpreter
 * Native interpreters for MacOS/Linux/Windows
 
 ---
 ---
 
-# Feb 19, 2023
+## Feb 19, 2023
 
-## Why?
+### Why?
 
 I want to learn Rust.  The zmachine is a well-documented virtual machine with implementations dating back to 1980 on platforms from the Apple ][ to the (Sinclar) ZX.  I've also worked on other implementations, first porting the [Frotz](https://www.ifwiki.org/Frotz) interpreter to the Apple //gs in the mid 90s and later authoring (unreleased) Java and Clojure implementations.  It seems to be my go-to when I don't have any better ideas.
 
-## What
+### What
 
 The general idea is to separate the virtual machine that executes code from the interpreter, which provides the user interface.  I have wild and unexplored ideas of native UX implementations, web implementations, etc.
 
