@@ -71,8 +71,8 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     let filename = &args[1];
-    let name: Vec<&str> = filename.split(".").collect();
-    let name = name[0].to_string();
+    let name: Vec<&str> = filename.split("/").collect();
+    let name = name[name.len() - 1].to_string();
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
     log_mdc::insert("instruction_count", format!("{:8x}", 0));
     error!(target: "app::blorb", "Start blorb log for '{}'", name);
