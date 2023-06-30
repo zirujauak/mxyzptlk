@@ -117,7 +117,9 @@ impl ZMachine {
         if old & 0x1 != new & 0x1 {
             if new & 0x1 == 0x1 {
                 if !self.io.is_stream_2_open() {
-                    self.start_stream_2()?;
+                    if let Err(e) = self.start_stream_2() {
+                        self.print_str(format!("Error starting stream 2: {}\r", e))?;
+                    }
                     self.io.enable_output_stream(2, None)
                 } else {
                     self.io.enable_output_stream(2, None)
