@@ -515,7 +515,7 @@ impl ZMachine {
         loop {
             // If a sound interrupt is set and there is no sound playing,
             // return buffer and clear any pending input_interrupt
-            if let Some(a) = self.state.sound_interrupt() {
+            if let Some(_) = self.state.sound_interrupt() {
                 info!(target: "app::frame", "Interrupt pending");
                 if let Some(sounds) = self.sound_manager.as_mut() {
                     info!(target: "app::frame", "Sound playing? {}", sounds.is_playing());
@@ -775,7 +775,7 @@ impl ZMachine {
                 return Ok(());
             }
 
-            if let Some(address) = self.state.sound_interrupt() {
+            if let Some(_) = self.state.sound_interrupt() {
                 if let Some(sounds) = self.sound_manager.as_mut() {
                     if !sounds.is_playing() {
                         let pc = self.state.call_sound_interrupt(pc)?;
