@@ -249,4 +249,23 @@ impl Frame {
             return_address,
         ))
     }
+
+    pub fn call_input_interrupt(
+        address: usize,
+        initial_pc: usize,
+        local_variables: Vec<u16>,
+        return_address: usize,
+    ) -> Result<Frame, RuntimeError> {
+        let mut f = Frame::new(
+            address,
+            initial_pc,
+            &local_variables,
+            0,
+            &Vec::new(),
+            None,
+            return_address,
+        );
+        f.input_interrupt = true;
+        Ok(f)
+    }
 }
