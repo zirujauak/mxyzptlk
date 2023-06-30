@@ -22,77 +22,17 @@ mod frame;
 pub mod header;
 pub mod memory;
 
-#[derive(Debug)]
-pub enum InterruptType {
-    Input,
-    Sound,
-}
-
-pub struct Interrupt {
-    interrupt_type: InterruptType,
-    address: usize,
-    result: Option<u16>,
-}
-
-impl fmt::Display for Interrupt {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(result) = self.result {
-            write!(
-                f,
-                "{:?} interrupt ${:06x} => {:04x}",
-                self.interrupt_type, self.address, result
-            )
-        } else {
-            write!(
-                f,
-                "{:?} interrupt ${:06x}",
-                self.interrupt_type, self.address
-            )
-        }
-    }
-}
-
-impl Interrupt {
-    pub fn input(address: usize) -> Interrupt {
-        Interrupt {
-            interrupt_type: InterruptType::Input,
-            address,
-            result: None,
-        }
-    }
-
-    pub fn sound(address: usize) -> Interrupt {
-        Interrupt {
-            interrupt_type: InterruptType::Sound,
-            address,
-            result: None,
-        }
-    }
-
-    pub fn interrupt_type(&self) -> &InterruptType {
-        &self.interrupt_type
-    }
-
-    pub fn address(&self) -> usize {
-        self.address
-    }
-
-    pub fn result(&self) -> Option<u16> {
-        self.result
-    }
-
-    pub fn set_result(&mut self, value: u16) {
-        self.result = Some(value)
-    }
-}
-
 pub struct State {
     version: u8,
     memory: Memory,
     static_mark: usize,
     frames: Vec<Frame>,
     undo_stack: Vec<Quetzal>,
-    interrupt: Option<Interrupt>,
+    // read_interrupt_pending is set when the READ starts, read_interrupt_result is set when the interrupt routine returns
+    read_interrupt_pending: bool,
+    read_interrupt_result: Option<u16>,
+    // sound_interrupt containts the address of the interrupt routine and is stored when SOUND_EFFECT is run
+    sound_interrupt: Option<usize>,
 }
 
 impl fmt::Display for State {
@@ -206,7 +146,9 @@ impl State {
             static_mark,
             frames: Vec::new(),
             undo_stack: Vec::new(),
-            interrupt: None,
+            read_interrupt_pending: false,
+            read_interrupt_result: None,
+            sound_interrupt: None,
         })
     }
 
@@ -226,13 +168,13 @@ impl State {
         self.frames.len()
     }
 
-    pub fn interrupt(&self) -> Option<&Interrupt> {
-        self.interrupt.as_ref()
-    }
+    // pub fn interrupt(&self) -> Option<&Interrupt> {
+    //     self.interrupt.as_ref()
+    // }
 
-    pub fn clear_interrupt(&mut self) {
-        self.interrupt = None;
-    }
+    // pub fn clear_interrupt(&mut self) {
+    //     self.interrupt = None;
+    // }
 
     fn current_frame(&self) -> Result<&Frame, RuntimeError> {
         if let Some(frame) = self.frames.last() {
@@ -264,7 +206,9 @@ impl State {
         sound: bool,
     ) -> Result<(), RuntimeError> {
         // Clear any pending interrupt
-        self.interrupt = None;
+        self.read_interrupt_pending = false;
+        self.read_interrupt_result = None;
+        self.sound_interrupt = None;
 
         // Set V3 Flags 1
         if self.version < 4 {
@@ -500,13 +444,10 @@ impl State {
         }
     }
 
-    // Routines
+    // Routines/Interrupts
     pub fn is_input_interrupt(&self) -> bool {
-        if let Some(i) = &self.interrupt {
-            match i.interrupt_type {
-                InterruptType::Input => true,
-                _ => false,
-            }
+        if let Some(_) = self.read_interrupt_result {
+            true
         } else {
             false
         }
@@ -546,14 +487,55 @@ impl State {
         address: usize,
         return_address: usize,
     ) -> Result<usize, RuntimeError> {
-        if let Some(_) = self.interrupt {
+        if self.read_interrupt_pending {
+            debug!(target: "app::frame", "Read interrupt routine firing @ ${:06x}", address);
+            self.clear_read_interrupt();
+            self.read_interrupt_result = Some(0);
+            let (initial_pc, local_variables) = self.routine_header(address)?;
+            let frame =
+                Frame::call_input_interrupt(address, initial_pc, local_variables, return_address)?;
+
+            self.frames.push(frame);
+            Ok(initial_pc)
+        } else {
             Err(RuntimeError::new(
                 ErrorCode::System,
-                "Interrupt routine interrupted".to_string(),
+                format!("No read interrupt pending"),
             ))
-        } else {
-            debug!(target: "app::frame", "Read interrupt routine firing @ ${:06x}", address);
-            self.interrupt = Some(Interrupt::input(address));
+        }
+    }
+
+    pub fn read_interrupt_pending(&self) -> bool {
+        self.read_interrupt_pending
+    }
+
+    pub fn set_read_interrupt(&mut self) {
+        self.read_interrupt_pending = true;
+    }
+
+    pub fn read_interrupt_result(&self) -> Option<u16> {
+        self.read_interrupt_result
+    }
+
+    pub fn clear_read_interrupt(&mut self) {
+        self.read_interrupt_pending = false;
+        self.read_interrupt_result = None;
+    }
+
+    pub fn sound_interrupt(&self) -> Option<usize> {
+        self.sound_interrupt
+    }
+
+    pub fn set_sound_interrupt(&mut self, address: usize) {
+        self.sound_interrupt = Some(address);
+    }
+
+    pub fn clear_sound_interrupt(&mut self) {
+        self.sound_interrupt = None;
+    }
+
+    pub fn call_sound_interrupt(&mut self, return_address: usize) -> Result<usize, RuntimeError> {
+        if let Some(address) = self.sound_interrupt {
             let (initial_pc, local_variables) = self.routine_header(address)?;
             let frame = Frame::call_routine(
                 address,
@@ -564,37 +546,8 @@ impl State {
                 return_address,
             )?;
             self.frames.push(frame);
+            self.clear_sound_interrupt();
             Ok(initial_pc)
-        }
-    }
-
-    pub fn sound_interrupt(&mut self, address: usize) {
-        self.interrupt = Some(Interrupt::sound(address));
-    }
-
-    pub fn call_sound_interrupt(&mut self, return_address: usize) -> Result<usize, RuntimeError> {
-        if let Some(i) = &self.interrupt {
-            match i.interrupt_type {
-                InterruptType::Sound => {
-                    debug!(target: "app::frame", "Sound interrupt routine firing @ ${:06x}", i.address);
-                    let (initial_pc, local_variables) = self.routine_header(i.address)?;
-                    let frame = Frame::call_routine(
-                        i.address,
-                        initial_pc,
-                        &vec![],
-                        local_variables,
-                        None,
-                        return_address,
-                    )?;
-                    self.frames.push(frame);
-                    self.interrupt = None;
-                    Ok(initial_pc)
-                }
-                _ => Err(RuntimeError::new(
-                    ErrorCode::System,
-                    "Pending interrupt is not a sound interrupt".to_string(),
-                )),
-            }
         } else {
             Err(RuntimeError::new(
                 ErrorCode::System,
@@ -604,35 +557,17 @@ impl State {
     }
 
     pub fn return_routine(&mut self, value: u16) -> Result<usize, RuntimeError> {
-        if let Some(i) = self.interrupt.as_mut() {
-            match i.interrupt_type {
-                // For an input interrupt, stash the return value where the READ
-                // instruction can get it.
-                InterruptType::Input => {
-                    debug!(target: "app::frame", "READ interrupt returned {}", value);
-                    i.set_result(value);
-                }
-                // For a sound interrupt, do nothing ... it will get cleared when the
-                // interrupt is triggered
-                _ => {}
-            }
-        }
-
         if let Some(f) = self.frames.pop() {
             let n = self.current_frame_mut()?;
             n.set_pc(f.return_address());
             debug!(target: "app::frame", "Return to ${:06x} -> {:?}", f.return_address(), f.result());
-            match &self.interrupt {
-                None => match f.result() {
+            match f.input_interrupt() {
+                false => match f.result() {
                     Some(r) => self.set_variable(r.variable(), value)?,
                     None => (),
                 },
-                Some(i) => match i.interrupt_type {
-                    InterruptType::Sound => match f.result() {
-                        Some(r) => self.set_variable(r.variable(), value)?,
-                        None => (),
-                    },
-                    _ => {}
+                true => if self.read_interrupt_pending {
+                    self.read_interrupt_result = Some(value);
                 },
             }
 

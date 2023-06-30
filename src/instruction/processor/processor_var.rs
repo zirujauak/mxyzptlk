@@ -3,11 +3,7 @@ use crate::{
     instruction::{processor::store_result, Instruction},
     object::property,
     text,
-    zmachine::{
-        io::screen::Interrupt,
-        state::{header::HeaderField, InterruptType},
-        ZMachine,
-    },
+    zmachine::{io::screen::Interrupt, state::header::HeaderField, ZMachine},
 };
 
 use super::{branch, call_fn, operand_values};
@@ -86,25 +82,12 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
     let text_buffer = operands[0] as usize;
 
-    if let Some(i) = zmachine.interrupt() {
-        match i.interrupt_type() {
-            InterruptType::Input => match i.result() {
-                Some(v) => {
-                    zmachine.clear_interrupt();
-                    if v == 1 {
-                        zmachine.write_byte(text_buffer + 1, 0)?;
-                        store_result(zmachine, &instruction, 0)?;
-                        return Ok(instruction.next_address());
-                    }
-                }
-                None => {
-                    return Err(RuntimeError::new(
-                        ErrorCode::System,
-                        "Input interrupt routine did not return a value".to_string(),
-                    ))
-                }
-            },
-            _ => {}
+    if let Some(r) = zmachine.read_interrupt_result() {
+        zmachine.clear_read_interrupt();
+        if r == 1 {
+            zmachine.write_byte(text_buffer + 1, 0)?;
+            store_result(zmachine, &instruction, 0)?;
+            return Ok(instruction.next_address());
         }
     }
 
@@ -124,6 +107,7 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
     let timeout = if operands.len() > 2 { operands[2] } else { 0 };
     let routine = if timeout > 0 && operands.len() > 2 {
+        zmachine.set_read_interrupt_pending();
         zmachine.packed_routine_address(operands[3])?
     } else {
         0
@@ -165,22 +149,41 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
     info!(target: "app::input", "READ: input {:?}", input_buffer);
     info!(target: "app::input", "READ: terminator {:?}", terminator);
+
+    // If there was no terminator, then input was interrupted
     if let None = terminator {
+        // Store any input that was read before the interrupt
         zmachine.write_byte(text_buffer + 1, input_buffer.len() as u8)?;
         for i in 0..input_buffer.len() {
             zmachine.write_byte(text_buffer + 2 + i, input_buffer[i] as u8)?;
         }
 
         info!(target: "app::input", "READ interrupted");
-        if let Some(i) = zmachine.interrupt() {
-            match &i.interrupt_type() {
-                InterruptType::Sound => {
-                    return zmachine.call_sound_interrupt(instruction.address())
-                }
-                _ => {}
+        // Inconsistent behavior here:
+        // * When a sound with an interrupt is played, the runtime state interrupt is set when the sound plays
+        // * When a read is called with a timeout, the runtime state interrupt isn't set until if/when the interrupt fires
+        //
+        // This is due to a difference what happens when an interrupt finished.
+        // * Sound interrupts do not return a value and execution resumes as the instruction interrupted
+        // * Read interrupts do return a value, and the READ instruction needs to check this to determine whether
+        //   to continue reading or abort
+        //
+        // Also, sound and read interrupts will stomp all over each other, which is probably fine because games that
+        // use sound don't use timed input (that I know of), but annoying none the less
+
+        if let Some(_) = zmachine.sound_interrupt() {
+            if !zmachine.is_sound_playing() {
+                info!(target: "app::input", "Sound interrupt firing");
+                zmachine.clear_read_interrupt();
+                return zmachine.call_sound_interrupt(instruction.address());
             }
         } else if routine > 0 {
             return zmachine.call_read_interrupt(routine, instruction.address());
+        } else {
+            return Err(RuntimeError::new(
+                ErrorCode::System,
+                format!("Read returned no terminator, but there is no interrupt to run"),
+            ));
         }
     }
 
@@ -449,29 +452,17 @@ pub fn read_char(
         ));
     }
 
-    if let Some(i) = zmachine.interrupt() {
-        match i.interrupt_type() {
-            InterruptType::Input => match i.result() {
-                Some(v) => {
-                    zmachine.clear_interrupt();
-                    if v == 1 {
-                        store_result(zmachine, &instruction, 0)?;
-                        return Ok(instruction.next_address());
-                    }
-                }
-                None => {
-                    return Err(RuntimeError::new(
-                        ErrorCode::System,
-                        "Input interrupt routine did not return a value".to_string(),
-                    ))
-                }
-            },
-            _ => {}
+    if let Some(v) = zmachine.read_interrupt_result() {
+        zmachine.clear_read_interrupt();
+        if v == 1 {
+            store_result(zmachine, &instruction, 0)?;
+            return Ok(instruction.next_address());
         }
     }
 
     let timeout = if operands.len() > 1 { operands[1] } else { 0 };
     let routine = if timeout > 0 && operands.len() > 2 {
+        zmachine.set_read_interrupt_pending();
         zmachine.packed_routine_address(operands[2])?
     } else {
         0
