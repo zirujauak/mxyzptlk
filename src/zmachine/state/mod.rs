@@ -623,6 +623,7 @@ impl State {
         } else if let Some(cmem) = quetzal.cmem() {
             self.memory.restore_compressed(cmem.data())?
         } else {
+            error!(target: "app::quetzal", "No CMem/Umem chunk found in save state");
             return Err(RuntimeError::new(
                 ErrorCode::Restore,
                 "No CMem/UMem chunk in save file".to_string(),
@@ -659,7 +660,6 @@ impl State {
     pub fn save_undo(&mut self, pc: usize) -> Result<(), RuntimeError> {
         let quetzal = Quetzal::try_from((&*self, pc))?;
         debug!(target: "app::quetzal", "Storing undo state");
-        //trace!(target: "app::quetzal", "{}", quetzal);
         self.undo_stack.push(quetzal);
         self.undo_stack.truncate(10);
         Ok(())
@@ -668,9 +668,9 @@ impl State {
     pub fn restore_undo(&mut self) -> Result<Option<usize>, RuntimeError> {
         if let Some(quetzal) = self.undo_stack.pop() {
             debug!(target: "app::quetzal", "Restoring undo state");
-            //trace!(target: "app::quetzal", "{}", quetzal);
             self.restore_state(quetzal)
         } else {
+            warn!(target: "app::quetzal", "No saved state for undo");
             Err(RuntimeError::new(
                 ErrorCode::Restore,
                 "Undo stack is empty".to_string(),

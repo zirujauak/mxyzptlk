@@ -74,6 +74,13 @@ appenders:
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
+  stream:
+    kind: file
+    path: "stack.log"
+    append: false
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
+
   variable:
     kind: file
     path: "variable.log"
@@ -89,79 +96,85 @@ appenders:
       pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]:{f}/{L} - {m}{n}"
 
 root:
-  level: trace
+  level: info
   appenders:
     - trace
 
 loggers:
   app::blorb:
-    level: info
+    level: warn
     appenders:
       - blorb
     additive: false
 
   app::frame:
-    level: debug
+    level: warn
     appenders:
       - frame
     additive: false
 
   app::header:
-    level: debug
+    level: warn
     appenders:
       - header
     additive: false
 
   app::input:
-    level: info
+    level: warn
     appenders:
       - input
     additive: false
 
   app::instruction:
-    level: info
+    level: warn
     appenders:
       - instruction
     additive: false
 
   app::memory:
-    level: info
+    level: warn
     appenders:
       - memory
     additive: false
 
   app::object:
-    level: info
+    level: warn
     appenders:
       - object
     additive: false
 
   app::quetzal:
-    level: debug
+    level: warn
     appenders:
       - quetzal
     additive: false
 
   app::sound:
-    level: info
+    level: warn
     appenders:
       - sound
     additive: false
 
   app::stack:
-    level: info
+    level: warn
+    appenders:
+      - stack
+    additive: false
+
+  app::stream:
+    level: warn
     appenders:
       - stack
     additive: false
 
   app::variable:
-    level: info
+    level: warn
     appenders:
       - variable
     additive: false
 
   app::trace:
-    level: trace
+    level: info
     appenders:
       - trace
     additive: false

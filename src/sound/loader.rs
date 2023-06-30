@@ -4,7 +4,7 @@ use std::{
 };
 
 use sndfile::{
-    Endian, MajorFormat, OpenOptions, ReadOptions, SubtypeFormat, WriteOptions, SndFileIO,
+    Endian, MajorFormat, OpenOptions, ReadOptions, SndFileIO, SubtypeFormat, WriteOptions,
 };
 use tempfile::NamedTempFile;
 
@@ -57,13 +57,29 @@ pub fn convert_aiff(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
             .as_mut()
             {
                 Ok(ws) => {
-                    let data:Vec<i32> = snd.read_all_to_vec().expect("Error reading sound data");
-                    ws.write_from_slice(&data).expect("Error writing converted sound data");
-                    let mut x: Vec<u8> = Vec::new();
-                    destfile
-                        .read_to_end(&mut x)
-                        .expect("Error reading from tempfile");
-                    return Ok(x);
+                    let v:Result<Vec<f32>,()> = snd.read_all_to_vec();
+                    match v {
+                        Ok(data) => match ws.write_from_slice(&data) {
+                            Ok(_) => {
+                                let mut x: Vec<u8> = Vec::new();
+                                match destfile.read_to_end(&mut x) {
+                                    Ok(_) => Ok(x),
+                                    Err(e) => Err(RuntimeError::new(
+                                        ErrorCode::System,
+                                        format!("Error reading converted sound data: {}", e),
+                                    )),
+                                }
+                            }
+                            Err(_) => Err(RuntimeError::new(
+                                ErrorCode::System,
+                                format!("sndfile: Error writing convered sound data:"),
+                            )),
+                        },
+                        Err(_) => Err(RuntimeError::new(
+                            ErrorCode::System,
+                            format!("sndfile: Error reading source sound data:"),
+                        )),
+                    }
                 }
                 Err(e) => {
                     return Err(RuntimeError::new(
@@ -73,11 +89,9 @@ pub fn convert_aiff(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
                 }
             }
         }
-        Err(e) => {
-            Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Error loading AIFF file: {:?}", e),
-            ))
-        }
+        Err(e) => Err(RuntimeError::new(
+            ErrorCode::System,
+            format!("Error loading AIFF file: {:?}", e),
+        )),
     }
 }

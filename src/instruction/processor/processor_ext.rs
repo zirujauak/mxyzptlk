@@ -8,6 +8,7 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
             "SAVE table not implemented".to_string(),
         ))
     } else {
+        // unwrap() should be safe here because this is a store instruction
         match zmachine.save(instruction.store().unwrap().address()) {
             Ok(_) => {
                 store_result(zmachine, instruction, 1)?;
@@ -63,7 +64,7 @@ pub fn log_shift(
     } else if places == 0 {
         value
     } else {
-        error!(target: "app::instruction", "LOG_SHIFT {:04x} {}?!", value, places);
+        error!(target: "app::instruction", "Invalid places for LOG_SHIFT {:04x} {} [-15..15]", value, places);
         0
     };
 
@@ -85,7 +86,7 @@ pub fn art_shift(
     } else if places == 0 {
         value
     } else {
-        error!(target: "app::instruction", "ART_SHIFT {:04x} {}?!", value, places);
+        error!(target: "app::instruction", "Invalid places for ART_SHIFT {:04x} {} [-15..15]", value, places);
         0
     };
 
@@ -124,6 +125,7 @@ pub fn save_undo(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
+    // unwrap() should be safe here because this is a store instruction
     zmachine.save_undo(instruction.store().unwrap().address())?;
     store_result(zmachine, instruction, 1)?;
     Ok(instruction.next_address())
@@ -145,8 +147,7 @@ pub fn restore_undo(
                 Ok(instruction.next_address())
             }
         },
-        Err(e) => {
-            error!(target: "app::quetzal", "Error restoring from undo zmachine: {}", e);
+        Err(_) => {
             store_result(zmachine, instruction, 0)?;
             Ok(instruction.next_address())
         }

@@ -258,6 +258,8 @@ impl Screen {
         if self.selected_window == 0 {
             self.cursor_0
         } else {
+            // unwrap() should be safe here because when selected_window
+            // is 1, cursor_1 is Some
             self.cursor_1.unwrap()
         }
     }
@@ -428,6 +430,8 @@ impl Screen {
         let (row, col) = if self.selected_window == 0 {
             self.cursor_0
         } else {
+            // unwrap() should be safe here because when selected_window
+            // is 1, cursor_1 is Some
             self.cursor_1.unwrap()
         };
         for i in col..self.columns {
@@ -477,6 +481,8 @@ impl Screen {
                 self.cursor_0 = (self.cursor_0.0, self.cursor_0.1 + 1)
             }
         } else {
+            // unwrap() should be safe here because when selected_window
+            // is 1, cursor_1 is Some
             if self.cursor_1.unwrap().1 == self.columns {
                 // At the end of the row
                 if self.cursor_1.unwrap().0 < self.window_1_bottom.unwrap() {
@@ -512,6 +518,8 @@ impl Screen {
                     self.cursor_0,
                 );
             } else {
+                // unwrap() should be safe here because when selected_window
+                // is 1, cursor_1 is Some
                 self.buffer.print(
                     &mut self.terminal,
                     zchar,
@@ -543,6 +551,8 @@ impl Screen {
         if self.selected_window == 0 {
             self.next_line();
         } else {
+            // unwrap() should be safe here because when selected_window
+            // is 1, cursor_1 is Some
             if self.cursor_1.unwrap().0 < self.window_1_bottom.unwrap() {
                 self.cursor_1 = Some((self.cursor_1.unwrap().0 + 1, 1));
             }
@@ -559,6 +569,8 @@ impl Screen {
         if self.selected_window == 0 {
             self.terminal.move_cursor(self.cursor_0);
         } else {
+            // unwrap() should be safe here because when selected_window
+            // is 1, cursor_1 is Some
             self.terminal.move_cursor(self.cursor_1.unwrap());
         }
 
@@ -584,6 +596,8 @@ impl Screen {
         if self.selected_window == 0 {
             self.terminal.move_cursor(self.cursor_0);
         } else {
+            // unwrap() should be safe here because when selected_window
+            // is 1, cursor_1 is Some
             self.terminal.move_cursor(self.cursor_1.unwrap());
         }
     }

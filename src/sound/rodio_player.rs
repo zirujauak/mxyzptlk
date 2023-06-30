@@ -3,7 +3,7 @@ use std::io::Write;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use tempfile::NamedTempFile;
 
-use crate::error::{RuntimeError, ErrorCode};
+use crate::error::{ErrorCode, RuntimeError};
 
 use super::Player;
 
@@ -27,29 +27,43 @@ impl Player for RodioPlayer {
         match NamedTempFile::new() {
             Ok(mut write) => match write.reopen() {
                 Ok(read) => match write.write_all(&sound) {
-                    Ok(_) => match Decoder::new(read) {
-                        Ok(source) => match self.get_sink() {
-                            Some(sink) => {
-                                sink.set_volume(volume as f32 / 128.0);
-                                // V5
-                                if repeats == 0 {
-                                    sink.append(source.repeat_infinite())
-                                }
-                                for _ in 0..repeats {
-                                    sink.append(Decoder::new(write.reopen().unwrap()).unwrap());
-                                }
+                    Ok(_) => {
+                        match Decoder::new(read) {
+                            Ok(source) => {
+                                match self.get_sink() {
+                                    Some(sink) => {
+                                        sink.set_volume(volume as f32 / 128.0);
+                                        // V5
+                                        if repeats == 0 {
+                                            sink.append(source.repeat_infinite())
+                                        } else {
+                                            for _ in 0..repeats {
+                                                let source = match write.reopen() {
+                                            Ok(f) => match Decoder::new(f) {
+                                                Ok(source) => source,
+                                                Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("Error creating source for sound: {}", e))),
+                                            },
+                                            Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("Error reopening tempfile for sound: {}", e))),
+                                        };
+                                                sink.append(source);
+                                            }
+                                        }
 
-                                sink.play();
+                                        sink.play();
+                                    }
+                                    None => error!(target: "app::sound", "rodio: No sink"),
+                                }
                             }
-                            None => error!(target: "app::trace", "No sink"),
-                        },
-                        Err(e) => error!(target: "app::trace", "Error decoding sound: {}", e),
-                    },
-                    Err(e) => error!(target: "app::trace", "Error writing tempfile: {}", e),
+                            Err(e) => {
+                                error!(target: "app::sound", "rodio: Error decoding sound: {}", e)
+                            }
+                        }
+                    }
+                    Err(e) => error!(target: "app::sound", "rodio: Error writing tempfile: {}", e),
                 },
-                Err(e) => error!(target: "app::trace", "Error writing tempfile: {}", e),
+                Err(e) => error!(target: "app::sound", "rodio: Error writing tempfile: {}", e),
             },
-            Err(e) => error!(target: "app::trace", "Error opening tempfile: {}", e),
+            Err(e) => error!(target: "app::sound", "rodio: Error opening tempfile: {}", e),
         }
         Ok(())
     }
@@ -82,14 +96,20 @@ impl RodioPlayer {
                         sink: Some(sink),
                     }),
                     Err(e) => {
-                        error!(target: "app::trace", "Error initializing sink: {}", e);
-                        Err(RuntimeError::new(ErrorCode::System, format!("Error initializing sink: {}", e)))
-                    },
+                        error!(target: "app::sound", "rodio: Error initializing sink: {}", e);
+                        Err(RuntimeError::new(
+                            ErrorCode::System,
+                            format!("Error initializing sink: {}", e),
+                        ))
+                    }
                 }
             }
             Err(e) => {
-                error!(target: "app::trace", "Error opening sound output stream: {}", e);
-                Err(RuntimeError::new(ErrorCode::System, format!("Error initializing output stream: {}", e)))
+                error!(target: "app::sound", "rodio: Error opening sound output stream: {}", e);
+                Err(RuntimeError::new(
+                    ErrorCode::System,
+                    format!("Error initializing output stream: {}", e),
+                ))
             }
         }
     }
