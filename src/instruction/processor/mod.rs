@@ -1,6 +1,3 @@
-// use super::{Instruction, Operand, OperandType, StoreResult, OperandCount, OpcodeForm};
-// use crate::executor::context::{error::ContextError, header, Context};
-
 use crate::error::*;
 use crate::zmachine::ZMachine;
 
@@ -24,22 +21,18 @@ fn operand_values(
     instruction: &Instruction,
 ) -> Result<Vec<u16>, RuntimeError> {
     let mut v = Vec::new();
-    let mut s = "Operands: ".to_string();
+    let mut l = "Operand values: ".to_string();
     for o in instruction.operands() {
-        let value = operand_value(zmachine, &o);
-        match value {
-            Ok(val) => {
-                match o.operand_type() {
-                    OperandType::SmallConstant => s.push_str(&format!(" {:#02x}", val)),
-                    _ => s.push_str(&format!(" {:#04x}", val)),
-                };
-                v.push(val)
-            }
-            Err(e) => return Err(e),
+        let value = operand_value(zmachine, &o)?;
+        match o.operand_type {
+            OperandType::SmallConstant => l.push_str(&format!(" #{:02x}", value as u8)),
+            _ => l.push_str(&format!(" #{:04x}", value)),
         }
+        v.push(value)
     }
-
-    info!(target: "app::instruction", "{}", s);
+    if v.len() > 0 {
+        info!(target: "app::instruction", "{}", l);
+    }
     Ok(v)
 }
 
@@ -99,7 +92,7 @@ fn call_fn(
 }
 
 pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    info!(target: "app::instruction", "{}", instruction);
+    info!(target: "app::instruction", "dispatch: {}", instruction);
     match instruction.opcode().form() {
         OpcodeForm::Ext => match instruction.opcode().instruction() {
             0x00 => processor_ext::save(zmachine, instruction),

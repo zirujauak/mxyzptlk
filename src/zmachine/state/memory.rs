@@ -207,7 +207,7 @@ impl Memory {
                 Some(b) => {
                     let i = data.len();
                     if *b == 0 {
-                        let l = *iter.next().unwrap() as usize;
+                        let l = *iter.next().expect("Incomplete CMem 0 run") as usize;
                         for j in 0..l + 1 {
                             data.push(self.dynamic[i + j]);
                         }

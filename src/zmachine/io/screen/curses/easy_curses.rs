@@ -12,7 +12,7 @@ pub struct ECTerminal {
 impl ECTerminal {
     pub fn new() -> ECTerminal {
         info!(target: "app::input", "Initialize easycurses terminal");
-        let mut easycurses = EasyCurses::initialize_system().unwrap();
+        let mut easycurses = EasyCurses::initialize_system().expect("Error initializing easycurses");
         easycurses.set_cursor_visibility(CursorVisibility::Invisible);
         easycurses.set_echo(false);
         easycurses.set_keypad_enabled(true);

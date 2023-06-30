@@ -117,7 +117,9 @@ impl ZMachine {
         if old & 0x1 != new & 0x1 {
             if new & 0x1 == 0x1 {
                 if !self.io.is_stream_2_open() {
-                    self.start_stream_2()?;
+                    if let Err(e) = self.start_stream_2() {
+                        self.print_str(format!("Error starting stream 2: {}\r", e))?;
+                    }
                     self.io.enable_output_stream(2, None)
                 } else {
                     self.io.enable_output_stream(2, None)
@@ -133,10 +135,12 @@ impl ZMachine {
     pub fn write_byte(&mut self, address: usize, value: u8) -> Result<(), RuntimeError> {
         // Check if the transcript bit is being changed in Flags 2
         if address == 0x11 {
-            if let Err(_) = self.update_transcript_bit(self.state.read_byte(0x11)? as u16, value as u16) {
+            if let Err(_) =
+                self.update_transcript_bit(self.state.read_byte(0x11)? as u16, value as u16)
+            {
                 // Starting the transcript failed, so skip writing to memory
                 warn!(target: "app::memory", "Staring transcript failed, not writing data to Flags 2");
-                return Ok(())
+                return Ok(());
             }
         }
         self.state.write_byte(address, value)
@@ -148,7 +152,7 @@ impl ZMachine {
             if let Err(_) = self.update_transcript_bit(self.state.read_word(0x10)?, value) {
                 // Starting the transcript failed, so skip writing to memory
                 warn!(target: "app::memory", "Staring transcript failed, not writing data to Flags 2");
-                return Ok(())
+                return Ok(());
             }
         }
         self.state.write_word(address, value)
@@ -203,14 +207,17 @@ impl ZMachine {
     }
 
     pub fn save(&mut self, pc: usize) -> Result<(), RuntimeError> {
-        let save_data = self.state.save(pc)?;        
+        let save_data = self.state.save(pc)?;
         self.prompt_and_write("Save to: ", "ifzs", &save_data, false)
     }
 
     pub fn restore(&mut self) -> Result<Option<usize>, RuntimeError> {
         match self.prompt_and_read("Restore from: ", "ifzs") {
             Ok(save_data) => self.state.restore(save_data),
-            Err(e) => Err(e)
+            Err(e) => {
+                error!(target: "app::quetzal", "Error restoring: {}", e);
+                Err(e)
+            }
         }
     }
 
@@ -322,16 +329,19 @@ impl ZMachine {
         Ok(self.io.set_stream_2(file))
     }
 
-
     pub fn output_stream(&mut self, stream: i16, table: Option<usize>) -> Result<(), RuntimeError> {
         if stream > 0 {
+            info!(target: "app::stream", "Enabling output stream {}", stream);
             if stream == 2 && !self.io.is_stream_2_open() {
-                self.start_stream_2()?;
+                if let Err(e) = self.start_stream_2() {
+                    error!(target: "app::stream", "Error starting stream 2: {}", e);
+                }
                 self.io.enable_output_stream(stream as u8, table)
             } else {
                 self.io.enable_output_stream(stream as u8, table)
             }
         } else if stream < 0 {
+            info!(target: "app::stream", "Disabling output stream {}", i16::abs(stream));
             self.io
                 .disable_output_stream(&mut self.state, i16::abs(stream) as u8)
         } else {
@@ -423,13 +433,56 @@ impl ZMachine {
     }
 
     // Input
+    fn now(&self, timeout: Option<u16>) -> u128 {
+        match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(t) => {
+                if let Some(d) = timeout {
+                    t.as_millis() + d as u128
+                } else {
+                    t.as_millis()
+                }
+            }
+            Err(e) => {
+                error!(target: "app::trace", "Error getting current system time: {}", e);
+                0
+            }
+        }
+    }
+
+    fn mouse_data(&mut self, event: &InputEvent) -> Result<(), RuntimeError> {
+        let column = match event.column() {
+            Some(col) => col,
+            _ => {
+                error!(target: "app::input", "Input event missing mouse column data");
+                0
+            }
+        };
+        let row = match event.row() {
+            Some(row) => row,
+            _ => {
+                error!(target: "app::input", "Input event missing mouse row data");
+                0
+            }
+        };
+
+        debug!(target: "app::input", "Storing mouse coordinates {},{}", column, row);
+        header::set_extension(
+            &mut self.state,
+            1,
+            column
+        )?;
+        header::set_extension(
+            &mut self.state,
+            2,
+            row
+        )?;
+
+        Ok(())
+    }
+
     pub fn read_key(&mut self, timeout: u16) -> Result<InputEvent, RuntimeError> {
         let end = if timeout > 0 {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Error getting system time")
-                .as_millis()
-                + (timeout as u128)
+            self.now(Some(timeout))
         } else {
             0
         };
@@ -453,10 +506,7 @@ impl ZMachine {
                 }
             }
 
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Error getting system time")
-                .as_millis();
+            let now = self.now(None);
             if end > 0 && now > end {
                 return Ok(InputEvent::from_interrupt(Interrupt::ReadTimeout));
             }
@@ -465,17 +515,7 @@ impl ZMachine {
 
             if let Some(c) = key.zchar() {
                 if c == 253 || c == 254 {
-                    info!(target: "app::input", "Storing mouse coordinates {},{}", key.column().unwrap(), key.row().unwrap());
-                    header::set_extension(
-                        &mut self.state,
-                        1,
-                        key.column().expect("Mouse click with no column data"),
-                    )?;
-                    header::set_extension(
-                        &mut self.state,
-                        2,
-                        key.row().expect("Mouse click with no row data"),
-                    )?;
+                    self.mouse_data(&key)?;
                 }
 
                 return Ok(key);
@@ -495,11 +535,7 @@ impl ZMachine {
         let mut input_buffer = text.clone();
 
         let end = if timeout > 0 {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Error getting system time")
-                .as_millis()
-                + (timeout as u128)
+            self.now(Some(timeout))
         } else {
             0
         };
@@ -527,10 +563,7 @@ impl ZMachine {
                 }
             }
 
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Error getting system time")
-                .as_millis();
+            let now = self.now(None);
             if end > 0 && now > end {
                 info!(target: "app::input", "read_line timed out");
                 return Ok(input_buffer);
@@ -545,16 +578,7 @@ impl ZMachine {
                 Some(key) => {
                     if terminators.contains(&key) || (terminators.contains(&255) && (key > 128)) {
                         if key == 254 || key == 253 {
-                            header::set_extension(
-                                &mut self.state,
-                                1,
-                                e.column().expect("Mouse click with no column data"),
-                            )?;
-                            header::set_extension(
-                                &mut self.state,
-                                2,
-                                e.row().expect("Mouse click with no row data"),
-                            )?;
+                            self.mouse_data(&e)?;
                         }
 
                         input_buffer.push(key);
@@ -586,13 +610,23 @@ impl ZMachine {
         prompt: &str,
         suffix: &str,
         overwrite: bool,
+        first: bool,
     ) -> Result<String, RuntimeError> {
         self.print_str(prompt.to_string())?;
-        let n = files::first_available(&self.name, suffix)?;
+        let n = if first {
+            files::first_available(&self.name, suffix)?
+        } else {
+            files::last_existing(&self.name, suffix)?
+        };
+
         self.print(&n)?;
 
         let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
-        let filename = String::from_utf16(&f).expect("Error groking user input as a filename").trim().to_string();
+        let filename = match String::from_utf16(&f) {
+            Ok(s) => s.trim().to_string(),
+            Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("Error parsing user input: {}", e)))
+        };
+
         if !overwrite {
             match Path::new(&filename).try_exists() {
                 Ok(b) => match b {
@@ -637,7 +671,7 @@ impl ZMachine {
         suffix: &str,
         overwrite: bool,
     ) -> Result<File, RuntimeError> {
-        match self.prompt_filename(prompt, suffix, overwrite) {
+        match self.prompt_filename(prompt, suffix, overwrite, true) {
             Ok(filename) => match fs::OpenOptions::new()
                 .create(true)
                 .truncate(true)
@@ -674,12 +708,7 @@ impl ZMachine {
     }
 
     pub fn prompt_and_read(&mut self, prompt: &str, suffix: &str) -> Result<Vec<u8>, RuntimeError> {
-        self.print(&prompt.chars().map(|c| c as u16).collect())?;
-        let n = files::last_existing(&self.name, suffix)?;
-        self.print(&n)?;
-
-        let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
-        let filename = String::from_utf16(&f).unwrap();
+        let filename = self.prompt_filename(prompt, suffix, true, false)?;
         let mut data = Vec::new();
         match File::open(filename.trim()) {
             Ok(mut file) => match file.read_to_end(&mut data) {

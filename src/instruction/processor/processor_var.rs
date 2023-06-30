@@ -97,8 +97,6 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
         0
     };
 
-    info!(target: "app::input", "READ: text buffer ${:04x} / parse buffer ${:04x}", text_buffer, parse);
-
     let len = if zmachine.version() < 5 {
         zmachine.read_byte(text_buffer)? - 1
     } else {
@@ -131,11 +129,7 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
     zmachine.clear_input_interrupt_print();
 
-    info!(target: "app::input", "READ initial input: {:?}", existing_input);
-
     let terminators = terminators(zmachine)?;
-    info!(target: "app::input", "READ terminators: {:?}", terminators);
-
     let input_buffer = zmachine.read_line(&existing_input, len, &terminators, timeout * 100)?;
     let terminator = if let Some(c) = input_buffer.last() {
         if terminators.contains(c) {
@@ -147,9 +141,6 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
         None
     };
 
-    info!(target: "app::input", "READ: input {:?}", input_buffer);
-    info!(target: "app::input", "READ: terminator {:?}", terminator);
-
     // If there was no terminator, then input was interrupted
     if let None = terminator {
         // Store any input that was read before the interrupt
@@ -158,7 +149,7 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
             zmachine.write_byte(text_buffer + 2 + i, input_buffer[i] as u8)?;
         }
 
-        info!(target: "app::input", "READ interrupted");
+        debug!(target: "app::input", "READ interrupted");
         // Inconsistent behavior here:
         // * When a sound with an interrupt is played, the runtime state interrupt is set when the sound plays
         // * When a read is called with a timeout, the runtime state interrupt isn't set until if/when the interrupt fires
@@ -173,11 +164,12 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
         if let Some(_) = zmachine.sound_interrupt() {
             if !zmachine.is_sound_playing() {
-                info!(target: "app::input", "Sound interrupt firing");
+                debug!(target: "app::input", "Sound interrupt firing");
                 zmachine.clear_read_interrupt();
                 return zmachine.call_sound_interrupt(instruction.address());
             }
         } else if routine > 0 {
+            debug!(target: "app::input", "Read interrupt firing");
             return zmachine.call_read_interrupt(routine, instruction.address());
         } else {
             return Err(RuntimeError::new(
@@ -193,10 +185,8 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
             None => 0,
         };
 
-    info!(target: "app::input", "READ: {} characters", end);
     // Store input to the text buffer
     if zmachine.version() < 5 {
-        info!(target: "app::input", "READ: write input buffer to ${:04x}", text_buffer + 1);
         // Store the buffer contents
         for i in 0..end {
             zmachine.write_byte(text_buffer + 1 + i, to_lower_case(input_buffer[i]))?;
@@ -204,7 +194,6 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
         // Terminated by a 0
         zmachine.write_byte(text_buffer + 1 + end, 0)?;
     } else {
-        info!(target: "app::input", "READ: write input buffer to ${:04x}", text_buffer + 2);
         // Store the buffer length
         zmachine.write_byte(text_buffer + 1, end as u8)?;
         for i in 0..end {
@@ -220,7 +209,6 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
     if zmachine.version() > 4 {
         if let Some(t) = terminator {
-            info!(target: "app::input", "Store terminator {}", *t);
             store_result(zmachine, instruction, *t)?;
         } else {
             store_result(zmachine, instruction, 0)?;
@@ -382,10 +370,7 @@ pub fn output_stream(
         None
     };
 
-    if let Err(_) = zmachine.output_stream(stream, table) {
-        warn!(target: "app::instruction", "Start of transcript failed, stream 2 not enabled");
-    }
-
+    zmachine.output_stream(stream, table)?;
     Ok(instruction.next_address())
 }
 
@@ -423,7 +408,6 @@ pub fn sound_effect(
                         None
                     };
 
-                    info!(target: "app::sound", "Sound interrupt routine: {:?}", routine);
                     zmachine.play_sound(number, volume as u8, repeats as u8, routine)?
                 }
                 3 | 4 => zmachine.stop_sound()?,
@@ -604,7 +588,6 @@ pub fn encode_text(
 
     let encoded_text = text::encode_text(&zchars, 3);
 
-    info!(target: "app::input", "Encoded text: {:04x} {:04x} {:04x}", encoded_text[0], encoded_text[1], encoded_text[2]);
     for i in 0..encoded_text.len() {
         zmachine.write_word(dest_buffer + (i * 2), encoded_text[i])?
     }

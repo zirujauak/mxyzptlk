@@ -42,7 +42,7 @@ impl From<(u32, &AIFF, Option<&u32>)> for Sound {
         match loader::convert_aiff(&Vec::from(aiff)) {
             Ok(sound) => Sound::new(number, &sound, repeats),
             Err(e) => {
-                error!(target: "app::sound", "Error converting AIFF: {}", e);
+                error!(target: "app::sound", "Error converting AIFF resource: {}", e);
                 Sound::new(number, &vec![], repeats)
             }
         }
@@ -143,7 +143,7 @@ impl Manager {
         volume: u8,
         repeats: Option<u8>,
     ) -> Result<(), RuntimeError> {
-        info!(target: "app::sound", "play_sound({}, {}, {:?})", effect, volume, repeats);
+        debug!(target: "app::sound", "Playing sound effect {}, at volume {}, with repeats {:?}", effect, volume, repeats);
         if let Some(p) = self.player.as_mut() {
             match self.sounds.get(&(effect as u32)) {
                 Some(sound) => {
@@ -162,7 +162,7 @@ impl Manager {
                     p.play_sound(&sound.data, volume, r)
                 }
                 None => {
-                    error!(target: "app::trace", "Sound effect {} not found", effect);
+                    error!(target: "app::sound", "Sound effect {} not found", effect);
                     Ok(())
                 }
             }
@@ -172,6 +172,7 @@ impl Manager {
     }
 
     pub fn stop_sound(&mut self) {
+        debug!(target: "app::sound", "Stopping sound playback");
         if let Some(p) = self.player.as_mut() {
             p.stop_sound()
         }
@@ -180,6 +181,7 @@ impl Manager {
     }
 
     pub fn change_volume(&mut self, volume: u8) {
+        debug!(target: "app::sound", "Changing volume of playing sound to {}", volume);
         if let Some(p) = self.player.as_mut() {
             p.change_volume(volume)
         }
