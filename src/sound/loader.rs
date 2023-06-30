@@ -47,8 +47,8 @@ pub fn convert_aiff(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
         Ok(snd) => {
             let (mut destfile, dest) = tempfile(None)?;
             match OpenOptions::WriteOnly(WriteOptions::new(
-                MajorFormat::OGG,
-                SubtypeFormat::VORBIS,
+                MajorFormat::FLAC,
+                SubtypeFormat::PCM_S8,
                 Endian::File,
                 snd.get_samplerate(),
                 snd.get_channels(),
@@ -57,7 +57,7 @@ pub fn convert_aiff(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
             .as_mut()
             {
                 Ok(ws) => {
-                    let data:Vec<f32> = snd.read_all_to_vec().expect("Error reading sound data");
+                    let data:Vec<i32> = snd.read_all_to_vec().expect("Error reading sound data");
                     ws.write_from_slice(&data).expect("Error writing converted sound data");
                     let mut x: Vec<u8> = Vec::new();
                     destfile
