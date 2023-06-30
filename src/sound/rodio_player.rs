@@ -39,12 +39,12 @@ impl Player for RodioPlayer {
                                         } else {
                                             for _ in 0..repeats {
                                                 let source = match write.reopen() {
-                                            Ok(f) => match Decoder::new(f) {
-                                                Ok(source) => source,
-                                                Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("Error creating source for sound: {}", e))),
-                                            },
-                                            Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("Error reopening tempfile for sound: {}", e))),
-                                        };
+                                                    Ok(f) => match Decoder::new(f) {
+                                                        Ok(source) => source,
+                                                        Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("Error creating source for sound: {}", e))),
+                                                    },
+                                                    Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("Error reopening tempfile for sound: {}", e))),
+                                                };
                                                 sink.append(source);
                                             }
                                         }
@@ -54,6 +54,7 @@ impl Player for RodioPlayer {
                                     None => error!(target: "app::sound", "rodio: No sink"),
                                 }
                             }
+
                             Err(e) => {
                                 error!(target: "app::sound", "rodio: Error decoding sound: {}", e)
                             }
