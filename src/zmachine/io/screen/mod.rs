@@ -1,10 +1,8 @@
-pub mod buffer;
 mod curses;
 
 use crate::config::Config;
 use crate::error::*;
-use buffer::Buffer;
-use buffer::CellStyle;
+
 use curses::easy_curses::ECTerminal;
 use curses::pancurses::PCTerminal;
 
@@ -26,6 +24,34 @@ pub enum Style {
     Bold = 2,
     Italic = 4,
     Fixed = 8,
+}
+
+#[derive(Clone, Copy)]
+pub struct CellStyle {
+    mask: u8,
+}
+
+impl CellStyle {
+    pub fn new() -> CellStyle {
+        CellStyle { mask: 0 }
+    }
+
+    pub fn set(&mut self, style: u8) {
+        match style {
+            0 => self.mask = 0,
+            _ => self.mask = self.mask | (style & 0xf),
+        }
+    }
+
+    pub fn clear(&mut self, style: u8) {
+        let mask = !(style & 0xF);
+        self.mask = self.mask & mask;
+    }
+
+    pub fn is_style(&self, style: Style) -> bool {
+        let s = style as u8;
+        self.mask & s == s
+    }
 }
 
 #[derive(Debug)]
@@ -116,7 +142,6 @@ pub struct Screen {
     version: u8,
     rows: u32,
     columns: u32,
-    buffer: Buffer,
     top: u32,
     window_1_top: Option<u32>,
     window_1_bottom: Option<u32>,
@@ -150,13 +175,11 @@ impl Screen {
 
         let (rows, columns) = terminal.as_ref().size();
         let colors = map_colors(config.foreground(), config.background())?;
-        let buffer = Buffer::new(rows, columns, colors);
 
         Ok(Screen {
             version: 3,
             rows,
             columns,
-            buffer,
             top: 2,
             window_0_top: 2,
             window_1_top: None,
@@ -187,12 +210,11 @@ impl Screen {
 
         let (rows, columns) = terminal.as_ref().size();
         let colors = map_colors(config.foreground(), config.background())?;
-        let buffer = Buffer::new(rows, columns, colors);
+
         Ok(Screen {
             version: 4,
             rows,
             columns,
-            buffer,
             top: 1,
             window_0_top: 1,
             window_1_top: None,
@@ -223,13 +245,11 @@ impl Screen {
 
         let (rows, columns) = terminal.as_ref().size();
         let colors = map_colors(config.foreground(), config.background())?;
-        let buffer = Buffer::new(rows, columns, colors);
 
         Ok(Screen {
             version: 5,
             rows,
             columns,
-            buffer,
             top: 1,
             window_1_top: None,
             window_1_bottom: None,
@@ -354,8 +374,14 @@ impl Screen {
             0 => {
                 for i in self.window_0_top..=self.rows {
                     for j in 1..self.columns {
-                        self.buffer
-                            .clear(&mut self.terminal, self.current_colors, (i, j));
+                        self.terminal.as_mut().print_at(
+                            0x20,
+                            i,
+                            j,
+                            self.current_colors,
+                            &CellStyle::new(),
+                            1,
+                        );
                     }
                 }
                 self.cursor_0 = if self.version == 4 {
@@ -372,8 +398,14 @@ impl Screen {
                     if let Some(end) = self.window_1_bottom {
                         for i in start..=end {
                             for j in 1..self.columns {
-                                self.buffer
-                                    .clear(&mut self.terminal, self.current_colors, (i, j));
+                                self.terminal.as_mut().print_at(
+                                    0x20,
+                                    i,
+                                    j,
+                                    self.current_colors,
+                                    &CellStyle::new(),
+                                    1,
+                                );
                             }
                         }
                         self.cursor_1 = Some((start, 1))
@@ -388,8 +420,14 @@ impl Screen {
                 self.window_0_top = 1;
                 for i in self.window_0_top..=self.rows {
                     for j in 1..=self.columns {
-                        self.buffer
-                            .clear(&mut self.terminal, self.current_colors, (i, j));
+                        self.terminal.as_mut().print_at(
+                            0x20,
+                            i,
+                            j,
+                            self.current_colors,
+                            &CellStyle::new(),
+                            1,
+                        );
                     }
                 }
                 self.cursor_0 = if self.version == 4 {
@@ -404,8 +442,14 @@ impl Screen {
             -2 => {
                 for i in 1..self.rows {
                     for j in 1..self.columns {
-                        self.buffer
-                            .clear(&mut self.terminal, self.current_colors, (i, j));
+                        self.terminal.as_mut().print_at(
+                            0x20,
+                            i,
+                            j,
+                            self.current_colors,
+                            &CellStyle::new(),
+                            1,
+                        );
                     }
                     if let Some(_) = self.cursor_1 {
                         self.cursor_1 = Some((1, 1))
@@ -435,16 +479,21 @@ impl Screen {
             self.cursor_1.unwrap()
         };
         for i in col..self.columns {
-            self.buffer
-                .clear(&mut self.terminal, self.current_colors, (row, i));
+            self.terminal.as_mut().print_at(
+                0x20,
+                row,
+                i,
+                self.current_colors,
+                &CellStyle::new(),
+                1,
+            );
         }
     }
 
     fn next_line(&mut self) {
         self.lines_since_input = self.lines_since_input + 1;
         if self.cursor_0.0 == self.rows {
-            self.buffer
-                .scroll(&mut self.terminal, self.window_0_top, self.current_colors);
+            self.terminal.scroll(self.window_0_top);
             self.cursor_0 = (self.rows, 1);
         } else {
             self.cursor_0 = (self.cursor_0.0 + 1, 1);
@@ -509,24 +558,24 @@ impl Screen {
             self.new_line();
         } else if zchar != 0 {
             if self.selected_window == 0 {
-                self.buffer.print(
-                    &mut self.terminal,
+                self.terminal.print_at(
                     zchar,
+                    self.cursor_0.0,
+                    self.cursor_0.1,
                     self.current_colors,
                     &self.current_style,
                     self.font,
-                    self.cursor_0,
                 );
             } else {
                 // unwrap() should be safe here because when selected_window
                 // is 1, cursor_1 is Some
-                self.buffer.print(
-                    &mut self.terminal,
+                self.terminal.print_at(
                     zchar,
+                    self.cursor_1.unwrap().0,
+                    self.cursor_1.unwrap().1,
                     self.current_colors,
                     &self.current_style,
                     self.font,
-                    self.cursor_1.unwrap(),
                 );
             }
             self.advance_cursor();
@@ -535,13 +584,13 @@ impl Screen {
 
     pub fn print_at(&mut self, text: &Vec<u16>, at: (u32, u32), style: &CellStyle) {
         for i in 0..text.len() {
-            self.buffer.print(
-                &mut self.terminal,
+            self.terminal.print_at(
                 text[i],
+                at.0,
+                at.1 + i as u32,
                 self.current_colors,
                 style,
                 self.font,
-                (at.0, at.1 + i as u32),
             );
         }
         self.terminal.flush()
@@ -627,7 +676,7 @@ pub trait Terminal {
         &mut self,
         zchar: u16,
         row: u32,
-        cursor: u32,
+        column: u32,
         colors: (Color, Color),
         style: &CellStyle,
         font: u8,

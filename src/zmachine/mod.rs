@@ -377,6 +377,10 @@ impl ZMachine {
         self.io.erase_window(window)
     }
 
+    pub fn erase_line(&mut self) -> Result<(), RuntimeError> {
+        self.io.erase_line()
+    }
+    
     pub fn status_line(&mut self) -> Result<(), RuntimeError> {
         let status_type = header::flag1(&self.state, Flags1v3::StatusLineType as u8)?;
         let object = self.state.variable(16)? as usize;
