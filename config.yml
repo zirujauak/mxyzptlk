@@ -11,3 +11,5 @@ terminal: "pancurses"
 #  9 = WHITE
 foreground: 8
 background: 2
+# Logging - "enabled" or "disabled"
+logging: disabled
