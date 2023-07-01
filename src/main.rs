@@ -82,9 +82,9 @@ fn main() {
     };
 
     let filename = &args[1];
-    let name: Vec<&str> = filename.split("/").collect();
-    let name = name[name.len() - 1].to_string();
-    if (config.logging()) {
+    if config.logging() {
+        let name: Vec<&str> = filename.split("/").collect();
+        let name = name[name.len() - 1].to_string();
         log4rs::init_file("log4rs.yml", Default::default()).unwrap();
         log_mdc::insert("instruction_count", format!("{:8x}", 0));
         error!(target: "app::blorb", "Start blorb log for '{}'", name);
@@ -99,6 +99,9 @@ fn main() {
         error!(target: "app::trace", "Start trace log for '{}'", name);
         error!(target: "app::variable", "Start variable log for '{}'", name);
     }
+
+    let name:Vec<&str> = filename.split(".").collect();
+    let name = name[0].to_string();
     let config_file = File::open("config.yml");
     let config = if let Ok(f) = config_file {
         if let Ok(c) = Config::from_file(f) {
