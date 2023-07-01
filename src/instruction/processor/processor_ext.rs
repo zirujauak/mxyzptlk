@@ -3,10 +3,8 @@ use super::*;
 pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if operands.len() > 0 {
-        Err(RuntimeError::new(
-            ErrorCode::UnimplementedInstruction,
-            "SAVE table not implemented".to_string(),
-        ))
+        error!(target: "app::instruction", "SAVE auxiliary data not implemented yet");
+        store_result(zmachine, instruction, 0)?;
     } else {
         // unwrap() should be safe here because this is a store instruction
         match zmachine.save(instruction.store().unwrap().address()) {
@@ -17,17 +15,16 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
                 store_result(zmachine, instruction, 0)?;
             }
         }
-        Ok(instruction.next_address())
     }
+    Ok(instruction.next_address())
 }
 
 pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if operands.len() > 0 {
-        Err(RuntimeError::new(
-            ErrorCode::UnimplementedInstruction,
-            "RESTORE table not implemented".to_string(),
-        ))
+        error!(target: "app::instruction", "RESTORE auxiliary data not implemented yet");
+        store_result(zmachine, instruction, 0)?;
+        Ok(instruction.next_address())
     } else {
         match zmachine.restore() {
             Ok(address) => match address {

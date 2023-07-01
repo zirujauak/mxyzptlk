@@ -5,7 +5,7 @@ use crate::{
     error::{ErrorCode, RuntimeError},
 };
 
-use self::screen::{buffer::CellStyle, Color, InputEvent, Screen, Style};
+use self::screen::{CellStyle, Color, InputEvent, Screen, Style};
 
 use super::state::State;
 
@@ -270,6 +270,11 @@ impl IO {
                 format!("{} is not a valid window to erase [-2, -1, 0, 1]", window),
             )),
         }
+    }
+
+    pub fn erase_line(&mut self) -> Result<(), RuntimeError> {
+        self.screen.erase_line();
+        Ok(())
     }
 
     pub fn status_line(

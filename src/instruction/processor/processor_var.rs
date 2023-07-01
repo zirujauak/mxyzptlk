@@ -326,10 +326,17 @@ pub fn erase_window(
     Ok(instruction.next_address())
 }
 
-// pub fn erase_line(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn erase_line(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    if operands[0] == 1 {
+        zmachine.erase_line()?;
+    }
+
+    Ok(instruction.next_address())
+}
 
 pub fn set_cursor(
     zmachine: &mut ZMachine,
@@ -374,13 +381,14 @@ pub fn output_stream(
     Ok(instruction.next_address())
 }
 
-// pub fn input_stream(
-//     context: &mut Context,
-//     instruction: &Instruction,
-// ) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+pub fn input_stream(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<usize, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    error!(target: "app::instruction", "INPUT_STREAM not implemented, instruction ignored");
+    Ok(instruction.next_address())
+}
 
 pub fn sound_effect(
     zmachine: &mut ZMachine,
