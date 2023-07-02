@@ -1,6 +1,9 @@
 use easycurses::Color;
 use easycurses::ColorPair;
 use easycurses::*;
+use pancurses::ALL_MOUSE_EVENTS;
+use pancurses::BUTTON1_CLICKED;
+use pancurses::BUTTON1_DOUBLE_CLICKED;
 
 use crate::zmachine::io::screen::Style;
 use crate::zmachine::io::screen::{self, CellStyle, InputEvent, Terminal};
@@ -12,7 +15,9 @@ pub struct ECTerminal {
 impl ECTerminal {
     pub fn new() -> ECTerminal {
         info!(target: "app::input", "Initialize easycurses terminal");
-        let mut easycurses = EasyCurses::initialize_system().expect("Error initializing easycurses");
+        let mut easycurses =
+            EasyCurses::initialize_system().expect("Error initializing easycurses");
+        pancurses::mousemask(ALL_MOUSE_EVENTS, None);
         easycurses.set_cursor_visibility(CursorVisibility::Invisible);
         easycurses.set_echo(false);
         easycurses.set_keypad_enabled(true);
@@ -53,7 +58,25 @@ impl ECTerminal {
             Input::KeyF10 => InputEvent::from_char(142),
             Input::KeyF11 => InputEvent::from_char(143),
             Input::KeyF12 => InputEvent::from_char(144),
-            _ => InputEvent::no_input(),
+            Input::KeyMouse => match pancurses::getmouse() {
+                Ok(event) => {
+                    if event.bstate & BUTTON1_CLICKED == BUTTON1_CLICKED {
+                        InputEvent::from_mouse(254, event.y as u16 + 1, event.x as u16 + 1)
+                    } else if event.bstate & BUTTON1_DOUBLE_CLICKED == BUTTON1_DOUBLE_CLICKED {
+                        InputEvent::from_mouse(253, event.y as u16 + 1, event.x as u16 + 1)
+                    } else {
+                        InputEvent::no_input()
+                    }
+                }
+                Err(e) => {
+                    error!(target: "app::input", "{}", e);
+                    InputEvent::no_input()
+                }
+            },
+            _ => {
+                info!(target: "app::input", "Input: {:?}", input);
+                InputEvent::no_input()
+            }
         }
     }
 }
@@ -143,11 +166,7 @@ impl Terminal for ECTerminal {
         self.easycurses.clear();
     }
 
-    fn quit(&mut self) {
-        
-    }
+    fn quit(&mut self) {}
 
-    fn set_colors(&mut self, _colors: (screen::Color, screen::Color)) {
-
-    }
+    fn set_colors(&mut self, _colors: (screen::Color, screen::Color)) {}
 }

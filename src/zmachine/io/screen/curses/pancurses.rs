@@ -21,6 +21,8 @@ impl PCTerminal {
         pancurses::noecho();
         pancurses::cbreak();
         pancurses::start_color();
+        pancurses::mousemask(ALL_MOUSE_EVENTS, None);
+        
         window.keypad(true);
         window.clear();
         window.refresh();
