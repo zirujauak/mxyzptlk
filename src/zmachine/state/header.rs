@@ -84,7 +84,7 @@ pub fn set_word(state: &mut State, field: HeaderField, value: u16) -> Result<(),
 
 pub fn flag1(state: &State, flag: u8) -> Result<u8, RuntimeError> {
     let flags = field_byte(state, HeaderField::Flags1)?;
-    if flags & flag as u8 > 0 {
+    if flags & flag > 0 {
         Ok(1)
     } else {
         Ok(0)
