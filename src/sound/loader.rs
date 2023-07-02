@@ -57,7 +57,7 @@ pub fn convert_aiff(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
             .as_mut()
             {
                 Ok(ws) => {
-                    let v:Result<Vec<f32>,()> = snd.read_all_to_vec();
+                    let v: Result<Vec<f32>, ()> = snd.read_all_to_vec();
                     match v {
                         Ok(data) => match ws.write_from_slice(&data) {
                             Ok(_) => {
@@ -81,12 +81,10 @@ pub fn convert_aiff(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
                         )),
                     }
                 }
-                Err(e) => {
-                    Err(RuntimeError::new(
-                        ErrorCode::System,
-                        format!("Error opening output tempfile: {:?}", e),
-                    ))
-                }
+                Err(e) => Err(RuntimeError::new(
+                    ErrorCode::System,
+                    format!("Error opening output tempfile: {:?}", e),
+                )),
             }
         }
         Err(e) => Err(RuntimeError::new(

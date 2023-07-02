@@ -2,7 +2,8 @@ use crate::{
     error::{ErrorCode, RuntimeError},
     instruction::Instruction,
     object::{self, property},
-    zmachine::ZMachine, text,
+    text,
+    zmachine::ZMachine,
 };
 
 use super::{branch, operand_values, store_result};

@@ -100,7 +100,7 @@ fn main() {
         error!(target: "app::variable", "Start variable log for '{}'", name);
     }
 
-    let name:Vec<&str> = filename.split('.').collect();
+    let name: Vec<&str> = filename.split('.').collect();
     let name = name[0].to_string();
     let config_file = File::open("config.yml");
     let config = if let Ok(f) = config_file {

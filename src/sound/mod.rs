@@ -49,7 +49,7 @@ impl From<(u32, &AIFF, Option<&u32>)> for Sound {
     }
 }
 
-#[cfg(not (feature = "sndfile"))]
+#[cfg(not(feature = "sndfile"))]
 impl From<(u32, &AIFF, Option<&u32>)> for Sound {
     fn from((number, _aiff, repeats): (u32, &AIFF, Option<&u32>)) -> Self {
         Sound::new(number, &vec![], repeats)

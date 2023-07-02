@@ -15,7 +15,7 @@ fn usize_as_vec(d: usize, bytes: usize) -> Vec<u8> {
 
 fn vec_as_usize(v: Vec<u8>, bytes: usize) -> usize {
     let mut u: usize = 0;
-    for(i, b) in v.iter().enumerate() {
+    for (i, b) in v.iter().enumerate() {
         u |= (*b as usize) << ((bytes - 1 - i) * 8);
     }
 

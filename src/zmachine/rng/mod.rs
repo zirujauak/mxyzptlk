@@ -2,7 +2,7 @@ pub mod chacha_rng;
 
 pub enum Mode {
     Random,
-    Predictable
+    Predictable,
 }
 
 pub trait ZRng {

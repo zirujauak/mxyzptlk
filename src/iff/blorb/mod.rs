@@ -2,16 +2,19 @@ use std::{collections::HashMap, fmt};
 
 use ridx::RIdx;
 
-use crate::{error::{ErrorCode, RuntimeError}, iff::blorb::aiff::AIFF};
+use crate::{
+    error::{ErrorCode, RuntimeError},
+    iff::blorb::aiff::AIFF,
+};
 
 use self::{oggv::OGGV, sloop::Loop};
 
 use super::{quetzal::ifhd::IFhd, IFF};
 
+pub mod aiff;
 pub mod oggv;
 pub mod ridx;
 pub mod sloop;
-pub mod aiff;
 pub struct Blorb {
     ridx: Option<RIdx>,
     ifhd: Option<IFhd>,
