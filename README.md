@@ -4,6 +4,18 @@ An inform (zmachine) virtual machine implemented in Rust.
 
 ## Usage
 
+### Installation
+* Download the appropriate release binary for your system.  The `-no-sndfile` builds do not require `libsndfile`, but are unable to use AIFF sound resources.
+    * `aarch64-apple-darwin` for ARM-based (M1, M2) Macs
+    * ... More platforms to be added later
+* Decompress the GZip archive using your favorite decompression tool:
+    * `tar -xzvf mxyzptlk-1.0-beta.1-aarch64-apple-darwin.tar.gz`
+    * 7Zip on Windows
+* If desired, move the `mxyzptlk` binary to a local `bin/` directory (`/usr/local/bin` on most Linux and Mac installations) for ease of use.
+* If desired, copy the `log4rs.yml` and `config.yml` files to the directory you plan to run `mxyzptlk` from.  The default configuration does not enable logging, so unless you want to change the default color scheme (white on black), you can skip this step.
+* Download a zcode file ([Curses](https://www.ifarchive.org/if-archive/games/zcode/curses.z5), for example) and try it out:
+    * `mxyzptlk curses.z5`
+
 ### Building
 The following libraries are required to build from source:
 * curses terminal library
@@ -74,13 +86,24 @@ Speaking of games, the [Interactive Fiction Archive](https://www.ifarchive.org/i
 
 ### Configuration
 
-Add notes about config.yml
+The `config.yml` as shipped contains the default configuration.  If you wish to change the default color scheme, terminal library, or enable logging, you'll need to ensure a copy of this file is either present in the same directory you'll execute `mxyzptlk` from or your home directory (which varies by platform).
 
 ### Logs
 
-Execution will dump quite a bit of output to various `.log` files.  This can be mostly disabled by changing the `level` values in the `log4rs.yml` file to `warn`. Or just ignore them.
+When logging is enabled, execution will dump quite a bit of output to various `.log` files in the current working directory.  Logging is disabled by default, but can be enabled via the `config.yml` file (see above) and further refined by changing the various `level` values used for different log files.  
 
 # History
+## July 1, 2023
+Release 1.0-beta.1
+
+Initial beta release.  Versions 3 - 5, 7*, and 8 should be fully supported with the exception of certain SAVE/RESTORE instructions and the INPUT_STREAM instruction, as noted in the backlog.
+
+I wouldn't recommend resizing the terminal window once a game is started.  Early prototypes to handle resizing had mixed results - V3 games seemed to work fine, but the V5 games tested didn't always respect the updated row/column counts in header fields.
+
+### Backlog
+* INPUT_STREAM - not implemented, will emit an error to the `instruction` log and continue execution.
+* SAVE and RESTORE auxiliary data (V5+) - not implemented, will emit and error to the `instruction` log, report failure to save/restore, and continue execution.
+
 ## June 29, 2023
 
 More restructuring code and implementing better rust development practices.  The sound player is now behind a trait, which should make it easier to change if necessary.  The old "state" has been rechristened "zmachine" and decomposed into separate files for runtime state, screen i/o, and sound.  Files for instruction, object, and text were pulled out of the zmachine module to keep internals private.
@@ -193,11 +216,4 @@ I want to learn Rust.  The zmachine is a well-documented virtual machine with im
 The general idea is to separate the virtual machine that executes code from the interpreter, which provides the user interface.  I have wild and unexplored ideas of native UX implementations, web implementations, etc.
 
 It's going to be sloppy - I'm still acclimating to the peculiarities of Rust and figuring out what I can get from a library vs. what I have to write myself.
-
----
----
-
-## History
-0.0.1 - ... work in progress  
-0.0.2 - 20230623 - refactor
 
