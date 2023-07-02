@@ -6,7 +6,7 @@ An inform (zmachine) virtual machine implemented in Rust.
 
 ### Installation
 * Download the appropriate release binary for your system.  The `-no-sndfile` builds do not require `libsndfile`, but are unable to use AIFF sound resources.
-    * `aarch64-apple-darwin` for ARM-based (M1, M2) Macs
+    * `aarch64-apple-darwin` for ARM-based (M1, M2) Macs running macos
     * ... More platforms to be added later
 * Decompress the GZip archive using your favorite decompression tool:
     * `tar -xzvf mxyzptlk-1.0-beta.1-aarch64-apple-darwin.tar.gz`
