@@ -31,6 +31,12 @@ pub struct CellStyle {
     mask: u8,
 }
 
+impl Default for CellStyle {
+    fn default() -> Self {
+        CellStyle::new()
+    }
+}
+
 impl CellStyle {
     pub fn new() -> CellStyle {
         CellStyle { mask: 0 }
@@ -39,13 +45,13 @@ impl CellStyle {
     pub fn set(&mut self, style: u8) {
         match style {
             0 => self.mask = 0,
-            _ => self.mask = self.mask | (style & 0xf),
+            _ => self.mask |= style & 0xf,
         }
     }
 
     pub fn clear(&mut self, style: u8) {
         let mask = !(style & 0xF);
-        self.mask = self.mask & mask;
+        self.mask &= mask;
     }
 
     pub fn is_style(&self, style: Style) -> bool {
@@ -255,8 +261,8 @@ impl Screen {
             window_1_bottom: None,
             window_0_top: 1,
             selected_window: 0,
-            default_colors: colors.clone(),
-            current_colors: colors.clone(),
+            default_colors: colors,
+            current_colors: colors,
             current_style: CellStyle::new(),
             font: 1,
             cursor_0: (1, 1),
@@ -357,7 +363,7 @@ impl Screen {
         if window == 0 {
             self.selected_window = 0;
             Ok(())
-        } else if let Some(_) = self.cursor_1 {
+        } else if self.cursor_1.is_some() {
             self.selected_window = 1;
             self.cursor_1 = Some((self.top, 1));
             Ok(())
@@ -451,7 +457,7 @@ impl Screen {
                             1,
                         );
                     }
-                    if let Some(_) = self.cursor_1 {
+                    if self.cursor_1.is_some() {
                         self.cursor_1 = Some((1, 1))
                     }
                     self.cursor_0 = if self.version == 4 {
@@ -491,7 +497,7 @@ impl Screen {
     }
 
     fn next_line(&mut self) {
-        self.lines_since_input = self.lines_since_input + 1;
+        self.lines_since_input += 1;
         if self.cursor_0.0 == self.rows {
             self.terminal.scroll(self.window_0_top);
             self.cursor_0 = (self.rows, 1);
@@ -513,7 +519,7 @@ impl Screen {
             }
             self.cursor_0 = (self.rows, 1);
             self.current_style.clear(Style::Reverse as u8);
-            self.print(&vec![0x20 as u16; 6]);
+            self.print(&vec![0x20; 6]);
             if reverse {
                 self.current_style.set(Style::Reverse as u8)
             }
@@ -583,9 +589,9 @@ impl Screen {
     }
 
     pub fn print_at(&mut self, text: &Vec<u16>, at: (u32, u32), style: &CellStyle) {
-        for i in 0..text.len() {
+        for (i, c) in text.iter().enumerate() {
             self.terminal.print_at(
-                text[i],
+                *c,
                 at.0,
                 at.1 + i as u32,
                 self.current_colors,
@@ -634,7 +640,8 @@ impl Screen {
     }
 
     pub fn set_style(&mut self, style: u8) -> Result<(), RuntimeError> {
-        Ok(self.current_style.set(style))
+        self.current_style.set(style);
+        Ok(())
     }
 
     pub fn beep(&mut self) {

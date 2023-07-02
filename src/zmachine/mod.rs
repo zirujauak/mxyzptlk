@@ -24,7 +24,7 @@ use crate::text;
 use crate::zmachine::io::screen::Interrupt;
 use regex::Regex;
 use rng::chacha_rng::ChaChaRng;
-use rng::RNG;
+use rng::ZRng;
 
 use self::io::screen::InputEvent;
 use self::io::IO;
@@ -39,7 +39,7 @@ pub struct ZMachine {
     version: u8,
     state: State,
     io: IO,
-    rng: Box<dyn RNG>,
+    rng: Box<dyn ZRng>,
     input_interrupt: Option<u16>,
     input_interrupt_print: bool,
     sound_manager: Option<Manager>,
