@@ -1,5 +1,5 @@
-use std::fs::File;
 use serde_yaml::{self, Value};
+use std::fs::File;
 
 use crate::error::{ErrorCode, RuntimeError};
 
@@ -13,12 +13,22 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config { terminal: "pancurses".to_string(), foreground: 9, background: 2, logging: false}
+        Config {
+            terminal: "pancurses".to_string(),
+            foreground: 9,
+            background: 2,
+            logging: false,
+        }
     }
 }
 impl Config {
     pub fn new(terminal: String, foreground: u8, background: u8, logging: bool) -> Self {
-        Config { terminal, foreground, background, logging}
+        Config {
+            terminal,
+            foreground,
+            background,
+            logging,
+        }
     }
 
     pub fn from_file(file: File) -> Result<Config, RuntimeError> {
@@ -30,27 +40,20 @@ impl Config {
                 };
                 let foreground = match data["foreground"].as_u64() {
                     Some(v) => v as u8,
-                    None => 9
+                    None => 9,
                 };
                 let background = match data["background"].as_u64() {
                     Some(v) => v as u8,
-                    None => 2
+                    None => 2,
                 };
                 let logging = match data["logging"].as_str() {
                     Some(t) => t == "enabled",
-                    None => false
+                    None => false,
                 };
-                
-                Ok(Config::new(
-                    terminal,
-                    foreground,
-                    background,
-                    logging
-                ))
-            },
-            Err(e) => {
-                Err(RuntimeError::new(ErrorCode::System, format!("{}", e)))
-            },
+
+                Ok(Config::new(terminal, foreground, background, logging))
+            }
+            Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
         }
     }
 

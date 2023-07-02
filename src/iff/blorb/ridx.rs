@@ -10,7 +10,11 @@ pub struct Index {
 
 impl fmt::Display for Index {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Index: {} [{}] @ {:08x}", self.number, self.usage, self.start)
+        write!(
+            f,
+            "Index: {} [{}] @ {:08x}",
+            self.number, self.usage, self.start
+        )
     }
 }
 

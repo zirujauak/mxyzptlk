@@ -162,8 +162,8 @@ pub fn test_attr(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let condition = operands[0] > 0
-        && attribute::value(zmachine, operands[0] as usize, operands[1] as u8)?;
+    let condition =
+        operands[0] > 0 && attribute::value(zmachine, operands[0] as usize, operands[1] as u8)?;
     branch(zmachine, instruction, condition)
 }
 
@@ -210,11 +210,8 @@ pub fn get_prop_addr(
     if operands[0] == 0 {
         store_result(zmachine, instruction, 0)?;
     } else {
-        let value = property::property_data_address(
-            zmachine,
-            operands[0] as usize,
-            operands[1] as u8,
-        )?;
+        let value =
+            property::property_data_address(zmachine, operands[0] as usize, operands[1] as u8)?;
         store_result(zmachine, instruction, value as u16)?;
     }
 
@@ -230,8 +227,7 @@ pub fn get_next_prop(
     if operands[0] == 0 {
         store_result(zmachine, instruction, 0)?;
     } else {
-        let value =
-            property::next_property(zmachine, operands[0] as usize, operands[1] as u8)?;
+        let value = property::next_property(zmachine, operands[0] as usize, operands[1] as u8)?;
         store_result(zmachine, instruction, value as u16)?;
     }
 

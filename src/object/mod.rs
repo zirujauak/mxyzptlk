@@ -1,4 +1,7 @@
-use crate::{error::*, zmachine::{ZMachine, state::header::HeaderField}};
+use crate::{
+    error::*,
+    zmachine::{state::header::HeaderField, ZMachine},
+};
 
 pub mod attribute;
 pub mod property;

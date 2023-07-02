@@ -32,7 +32,9 @@ impl From<&CMem> for Vec<u8> {
 
 impl CMem {
     pub fn new(data: &[u8]) -> CMem {
-        CMem { data: data.to_vec() }
+        CMem {
+            data: data.to_vec(),
+        }
     }
 
     pub fn data(&self) -> &Vec<u8> {

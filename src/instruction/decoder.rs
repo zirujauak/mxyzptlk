@@ -235,11 +235,7 @@ fn branch(
     }
 }
 
-fn opcode(
-    bytes: &[u8],
-    version: u8,
-    mut offset: usize,
-) -> Result<(usize, Opcode), RuntimeError> {
+fn opcode(bytes: &[u8], version: u8, mut offset: usize) -> Result<(usize, Opcode), RuntimeError> {
     let mut opcode = bytes[offset];
     let extended = opcode == 0xBE;
     offset += 1;

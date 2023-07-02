@@ -80,7 +80,7 @@ fn call_fn(
             if let Some(r) = result {
                 zmachine.set_variable(r.variable, address as u16)?
             }
-            
+
             Ok(return_addr)
         }
         _ => zmachine.call_routine(address, arguments, result, return_addr),

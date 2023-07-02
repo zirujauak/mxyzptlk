@@ -80,7 +80,7 @@ fn char_to_u16(c: char) -> InputEvent {
         _ => {
             error!(target: "app::input", "Unmapped input {:02x}", c as u8);
             InputEvent::no_input()
-        },
+        }
     }
 }
 

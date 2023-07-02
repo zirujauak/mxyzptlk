@@ -204,7 +204,7 @@ impl Memory {
         let mut data = Vec::new();
         let mut iter = cdata.iter();
         let mut done = false;
-    
+
         while !done {
             let b = iter.next();
             match b {
@@ -222,7 +222,7 @@ impl Memory {
                 None => done = true,
             }
         }
-    
+
         data
     }
 

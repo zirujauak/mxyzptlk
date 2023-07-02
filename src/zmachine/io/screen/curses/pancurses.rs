@@ -1,6 +1,6 @@
 use pancurses::*;
 
-use crate::zmachine::io::screen::{CellStyle, Color, InputEvent, Terminal, Style};
+use crate::zmachine::io::screen::{CellStyle, Color, InputEvent, Style, Terminal};
 
 pub struct PCTerminal {
     window: Window,
@@ -22,7 +22,7 @@ impl PCTerminal {
         pancurses::cbreak();
         pancurses::start_color();
         pancurses::mousemask(ALL_MOUSE_EVENTS, None);
-        
+
         window.keypad(true);
         window.clear();
         window.refresh();
@@ -69,29 +69,27 @@ impl PCTerminal {
             Input::KeyF10 => InputEvent::from_char(142),
             Input::KeyF11 => InputEvent::from_char(143),
             Input::KeyF12 => InputEvent::from_char(144),
-            Input::KeyMouse => {
-                match pancurses::getmouse() {
-                    Ok(event) => {
-                        if event.bstate & BUTTON1_CLICKED == BUTTON1_CLICKED {
-                            InputEvent::from_mouse(254, event.y as u16 + 1, event.x as u16 + 1)
-                        } else if event.bstate & BUTTON1_DOUBLE_CLICKED == BUTTON1_DOUBLE_CLICKED {
-                            InputEvent::from_mouse(253, event.y as u16 + 1, event.x as u16 + 1)
-                        } else {
-                            InputEvent::no_input()
-                        }
-                    },
-                    Err(e) => {
-                        error!(target: "app::input", "{}", e);
-                        InputEvent::no_input()}
+            Input::KeyMouse => match pancurses::getmouse() {
+                Ok(event) => {
+                    if event.bstate & BUTTON1_CLICKED == BUTTON1_CLICKED {
+                        InputEvent::from_mouse(254, event.y as u16 + 1, event.x as u16 + 1)
+                    } else if event.bstate & BUTTON1_DOUBLE_CLICKED == BUTTON1_DOUBLE_CLICKED {
+                        InputEvent::from_mouse(253, event.y as u16 + 1, event.x as u16 + 1)
+                    } else {
+                        InputEvent::no_input()
+                    }
                 }
-            }
+                Err(e) => {
+                    error!(target: "app::input", "{}", e);
+                    InputEvent::no_input()
+                }
+            },
             _ => {
                 info!(target: "app::input", "Input: {:?}", input);
                 InputEvent::no_input()
             }
         }
     }
-
 }
 
 impl Terminal for PCTerminal {
