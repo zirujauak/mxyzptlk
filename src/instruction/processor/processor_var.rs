@@ -385,7 +385,7 @@ pub fn input_stream(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
-    let operands = operand_values(zmachine, instruction)?;
+    let _operands = operand_values(zmachine, instruction)?;
     error!(target: "app::instruction", "INPUT_STREAM not implemented, instruction ignored");
     Ok(instruction.next_address())
 }
