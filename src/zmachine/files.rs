@@ -17,7 +17,7 @@ pub fn first_available(base: &str, suffix: &str) -> Result<Vec<u16>, RuntimeErro
             Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("{}", e)))
         }
 
-        n = n + 1;
+        n += 1;
     }
 }
 
@@ -36,6 +36,6 @@ pub fn last_existing(base: &str, suffix: &str) -> Result<Vec<u16>, RuntimeError>
             Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("{}", e)))
         }
 
-        n = n + 1;
+        n += 1;
     }
 }

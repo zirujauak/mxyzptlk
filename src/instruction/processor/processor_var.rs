@@ -594,7 +594,7 @@ pub fn encode_text(
         zchars.push(zmachine.read_byte(text_buffer + from + i)? as u16);
     }
 
-    let encoded_text = text::encode_text(&zchars, 3);
+    let encoded_text = text::encode_text(&mut zchars, 3);
 
     for i in 0..encoded_text.len() {
         zmachine.write_word(dest_buffer + (i * 2), encoded_text[i])?

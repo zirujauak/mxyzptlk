@@ -106,7 +106,6 @@ impl From<(&Vec<u8>, usize)> for Chunk {
         let length = vec_to_u32(&value, offset + 4, 4);
         let data = value[offset + 8..offset + 8 + length as usize].to_vec();
 
-        trace!(target: "app::trace", "{:?} {} {:06x} {}", form, id, length, data.len());
         Chunk::new(offset, form, id, &data)
     }
 }
@@ -148,7 +147,6 @@ impl From<Chunk> for Vec<u8> {
 impl Chunk {
     pub fn new(offset: usize, form: Option<String>, id: String, data: &Vec<u8>) -> Chunk {
         let length = data.len() as u32 + if data.len() % 2 == 1 { 1 } else { 0 };
-        trace!(target: "app::trace", "{:?} {} {:06x} {}", form, id, length, data.len());
         Chunk {
             offset,
             form,
