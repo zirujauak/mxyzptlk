@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use crate::{
     error::*,
     zmachine::{state::header::HeaderField, ZMachine},
@@ -25,13 +27,13 @@ fn address(zmachine: &ZMachine, object: usize, property: u8) -> Result<usize, Ru
         if zmachine.version() == 3 {
             let prop_num = size_byte & 0x1F;
             let prop_size = (size_byte as usize / 32) + 1;
-            if prop_num == property {
-                return Ok(property_address);
-            } else if prop_num < property {
-                return Ok(0);
-            } else {
-                property_address = property_address + 1 + prop_size;
-                size_byte = zmachine.read_byte(property_address)?;
+            match prop_num.cmp(&property) {
+                Ordering::Equal => return Ok(property_address),
+                Ordering::Less => return Ok(0),
+                _ => {
+                    property_address = property_address + 1 + prop_size;
+                    size_byte = zmachine.read_byte(property_address)?;
+                    }
             }
         } else {
             let prop_num = size_byte & 0x3F;
@@ -51,13 +53,13 @@ fn address(zmachine: &ZMachine, object: usize, property: u8) -> Result<usize, Ru
                     1
                 }
             };
-            if prop_num == property {
-                return Ok(property_address);
-            } else if prop_num < property {
-                return Ok(0);
-            } else {
-                property_address = property_address + prop_data + prop_size;
-                size_byte = zmachine.read_byte(property_address)?;
+            match prop_num.cmp(&property) {
+                Ordering::Equal => return Ok(property_address),
+                Ordering::Less => return Ok(0),
+                _ => {
+                    property_address = property_address + prop_data + prop_size;
+                    size_byte = zmachine.read_byte(property_address)?;
+                }
             }
         }
     }
@@ -225,7 +227,7 @@ pub fn set_property(
         };
 
         if property_size == 1 {
-            zmachine.write_byte(property_data, value as u8 & 0xFF)
+            zmachine.write_byte(property_data, value as u8)
         } else {
             zmachine.write_word(property_data, value)
         }

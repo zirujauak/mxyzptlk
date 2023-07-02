@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use crate::{
     error::{ErrorCode, RuntimeError},
     instruction::{processor::store_result, Instruction},
@@ -57,7 +59,7 @@ fn terminators(zmachine: &ZMachine) -> Result<Vec<u16>, RuntimeError> {
             let b = zmachine.read_byte(table_addr)?;
             if b == 0 {
                 break;
-            } else if (b >= 129 && b <= 154) || b >= 252 {
+            } else if (130..155).contains(&b) || b >= 252 {
                 terminators.push(b as u16);
             }
             table_addr = table_addr + 1;
@@ -86,7 +88,7 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
         zmachine.clear_read_interrupt();
         if r == 1 {
             zmachine.write_byte(text_buffer + 1, 0)?;
-            store_result(zmachine, &instruction, 0)?;
+            store_result(zmachine, instruction, 0)?;
             return Ok(instruction.next_address());
         }
     }
@@ -113,56 +115,59 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
     let mut existing_input = Vec::new();
 
-    if zmachine.version() < 4 {
-        // V3 show status line before input
-        zmachine.status_line()?;
-    } else if zmachine.version() > 4 {
-        // text buffer may contain existing input
-        let existing_len = zmachine.read_byte(text_buffer + 1)? as usize;
-        for i in 0..existing_len {
-            existing_input.push(zmachine.read_byte(text_buffer + 2 + i)? as u16);
-        }
-        if zmachine.input_interrupt_print() {
-            zmachine.print(&existing_input)?;
-        }
+    match zmachine.version().cmp(&4) {
+        Ordering::Less => zmachine.status_line()?,
+        Ordering::Greater => {
+            let existing_len = zmachine.read_byte(text_buffer + 1)? as usize;
+            for i in 0..existing_len {
+                existing_input.push(zmachine.read_byte(text_buffer + 2 + i)? as u16);
+            }
+            if zmachine.input_interrupt_print() {
+                zmachine.print(&existing_input)?;
+            }
+        },
+        _ => {}
     }
+    // if zmachine.version() < 4 {
+    //     // V3 show status line before input
+    //     zmachine.status_line()?;
+    // } else if zmachine.version() > 4 {
+    //     // text buffer may contain existing input
+    //     let existing_len = zmachine.read_byte(text_buffer + 1)? as usize;
+    //     for i in 0..existing_len {
+    //         existing_input.push(zmachine.read_byte(text_buffer + 2 + i)? as u16);
+    //     }
+    //     if zmachine.input_interrupt_print() {
+    //         zmachine.print(&existing_input)?;
+    //     }
+    // }
 
     zmachine.clear_input_interrupt_print();
 
     let terminators = terminators(zmachine)?;
     let input_buffer = zmachine.read_line(&existing_input, len, &terminators, timeout * 100)?;
-    let terminator = if let Some(c) = input_buffer.last() {
-        if terminators.contains(c) {
-            Some(c)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    let terminator = input_buffer.last().filter(|&x| terminators.contains(x));
+    //     c.filter
+    //     if terminators.contains(c) {
+    //         Some(c)
+    //     } else {
+    //         None
+    //     }
+    // } else {
+    //     None
+    // };
 
     // If there was no terminator, then input was interrupted
-    if let None = terminator {
+    if terminator.is_none() {
         // Store any input that was read before the interrupt
         zmachine.write_byte(text_buffer + 1, input_buffer.len() as u8)?;
-        for i in 0..input_buffer.len() {
-            zmachine.write_byte(text_buffer + 2 + i, input_buffer[i] as u8)?;
+        for (i, b) in input_buffer.iter().enumerate() {
+            zmachine.write_byte(text_buffer + 2 + i, *b as u8)?;
         }
 
         debug!(target: "app::input", "READ interrupted");
-        // Inconsistent behavior here:
-        // * When a sound with an interrupt is played, the runtime state interrupt is set when the sound plays
-        // * When a read is called with a timeout, the runtime state interrupt isn't set until if/when the interrupt fires
-        //
-        // This is due to a difference what happens when an interrupt finished.
-        // * Sound interrupts do not return a value and execution resumes as the instruction interrupted
-        // * Read interrupts do return a value, and the READ instruction needs to check this to determine whether
-        //   to continue reading or abort
-        //
-        // Also, sound and read interrupts will stomp all over each other, which is probably fine because games that
-        // use sound don't use timed input (that I know of), but annoying none the less
 
-        if let Some(_) = zmachine.sound_interrupt() {
+        if zmachine.sound_interrupt().is_some() {
             if !zmachine.is_sound_playing() {
                 debug!(target: "app::input", "Sound interrupt firing");
                 zmachine.clear_read_interrupt();
@@ -174,7 +179,7 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
         } else {
             return Err(RuntimeError::new(
                 ErrorCode::System,
-                format!("Read returned no terminator, but there is no interrupt to run"),
+                "Read returned no terminator, but there is no interrupt to run".to_string(),
             ));
         }
     }
@@ -188,16 +193,20 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
     // Store input to the text buffer
     if zmachine.version() < 5 {
         // Store the buffer contents
-        for i in 0..end {
-            zmachine.write_byte(text_buffer + 1 + i, to_lower_case(input_buffer[i]))?;
+        for (i, b) in input_buffer.iter().enumerate() {
+            if i < end {
+                zmachine.write_byte(text_buffer + 1 + i, to_lower_case(*b))?;
+            }
         }
         // Terminated by a 0
         zmachine.write_byte(text_buffer + 1 + end, 0)?;
     } else {
         // Store the buffer length
         zmachine.write_byte(text_buffer + 1, end as u8)?;
-        for i in 0..end {
-            zmachine.write_byte(text_buffer + 2 + i, to_lower_case(input_buffer[i]))?;
+        for (i, b) in input_buffer.iter().enumerate() {
+            if i < end {
+                zmachine.write_byte(text_buffer + 2 + i, to_lower_case(*b))?;
+            }
         }
     }
 
@@ -248,9 +257,9 @@ pub fn random(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usiz
     let range = operands[0] as i16;
     if range < 1 {
         if range == 0 || range.abs() >= 1000 {
-            zmachine.seed(range.abs() as u16)
+            zmachine.seed(range.unsigned_abs() as u16)
         } else if range.abs() < 1000 {
-            zmachine.predictable(range.abs() as u16)
+            zmachine.predictable(range.unsigned_abs() as u16)
         }
         store_result(zmachine, instruction, 0)?;
     } else {
@@ -437,7 +446,7 @@ pub fn read_char(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    if operands.len() > 0 && operands[0] != 1 {
+    if !operands.is_empty() && operands[0] != 1 {
         return Err(RuntimeError::new(
             ErrorCode::Instruction,
             format!("READ_CHAR argument 1 must be 1, was {}", operands[0]),
@@ -447,7 +456,7 @@ pub fn read_char(
     if let Some(v) = zmachine.read_interrupt_result() {
         zmachine.clear_read_interrupt();
         if v == 1 {
-            store_result(zmachine, &instruction, 0)?;
+            store_result(zmachine, instruction, 0)?;
             return Ok(instruction.next_address());
         }
     }
@@ -519,7 +528,7 @@ pub fn scan_table(
         }
     }
 
-    if condition == false {
+    if !condition {
         store_result(zmachine, instruction, 0)?;
     }
 
@@ -541,7 +550,7 @@ pub fn call_vn(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
         zmachine,
         address,
         instruction.next_address(),
-        &arguments,
+        arguments,
         instruction.store().copied(),
     )
 }
@@ -555,7 +564,7 @@ pub fn call_vn2(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
         zmachine,
         address,
         instruction.next_address(),
-        &arguments,
+        arguments,
         instruction.store().copied(),
     )
 }
@@ -596,8 +605,8 @@ pub fn encode_text(
 
     let encoded_text = text::encode_text(&mut zchars, 3);
 
-    for i in 0..encoded_text.len() {
-        zmachine.write_word(dest_buffer + (i * 2), encoded_text[i])?
+    for (i, w) in encoded_text.iter().enumerate() {
+        zmachine.write_word(dest_buffer + (i * 2), *w)?
     }
 
     Ok(instruction.next_address())
@@ -623,7 +632,7 @@ pub fn copy_table(
                 zmachine.write_byte(dst + i, zmachine.read_byte(src + i)?)?;
             }
         } else {
-            for i in 0..len.abs() as usize {
+            for i in 0..len.unsigned_abs() as usize {
                 zmachine.write_byte(dst + i, zmachine.read_byte(src + i)?)?;
             }
         }
@@ -647,7 +656,7 @@ pub fn print_table(
     for i in 0..height as usize {
         if origin.0 + i as u16 > zmachine.rows() {
             zmachine.new_line()?;
-            zmachine.set_cursor(rows as u16, origin.1)?;
+            zmachine.set_cursor(rows, origin.1)?;
         } else {
             zmachine.set_cursor(origin.0 + i as u16, origin.1)?;
         }

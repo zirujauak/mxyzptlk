@@ -73,8 +73,7 @@ pub fn as_text(zmachine: &ZMachine, address: usize) -> Result<Vec<u16>, RuntimeE
 pub fn from_vec(zmachine: &ZMachine, ztext: &Vec<u16>) -> Result<Vec<u16>, RuntimeError> {
     let mut alphabet_shift: usize = 0;
     let mut s = Vec::new();
-    let mut i = 0;
-
+    
     let mut abbrev = 0;
     let mut zscii_read1 = false;
     let mut zscii_read2 = false;
@@ -118,8 +117,6 @@ pub fn from_vec(zmachine: &ZMachine, ztext: &Vec<u16>) -> Result<Vec<u16>, Runti
                 alphabet_shift = 0;
             }
         }
-
-        i += 1;
     }
     Ok(s)
 }
