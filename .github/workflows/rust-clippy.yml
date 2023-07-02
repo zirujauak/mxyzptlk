@@ -30,7 +30,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Install pkg-config
+      - name: Install ALSA dev libs
         run: |
           sudo apt-get update
           sudo apt-get install libasound2-dev
@@ -50,7 +50,7 @@ jobs:
       - name: Run rust-clippy
         run:
           cargo clippy
-          --no-default-features
+          --all-features
           --message-format=json | clippy-sarif | tee rust-clippy-results.sarif | sarif-fmt
         continue-on-error: true
 
