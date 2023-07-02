@@ -47,20 +47,7 @@ fn abbreviation(
 /// * `v` - Version (1-8)
 /// * `a` - Address of the ZSCII-encoded string
 pub fn as_text(zmachine: &ZMachine, address: usize) -> Result<Vec<u16>, RuntimeError> {
-    let text = zmachine.string_literal(address)?;
-    // let mut d = Vec::new();
-    // // If the last word read has bit 15 set, then we're done reading
-    // while match d.last() {
-    //     Some(x) => *x,
-    //     _ => 0,
-    // } & 0x8000
-    //     == 0
-    // {
-    //     let w = zmachine.memory().read_word(address + (d.len() * 2))?;
-    //     d.push(w);
-    // }
-
-    from_vec(zmachine, &text)
+    from_vec(zmachine, &zmachine.string_literal(address)?)
 }
 
 /// Decode a vector of ZSCII words to a string
@@ -73,7 +60,7 @@ pub fn as_text(zmachine: &ZMachine, address: usize) -> Result<Vec<u16>, RuntimeE
 pub fn from_vec(zmachine: &ZMachine, ztext: &Vec<u16>) -> Result<Vec<u16>, RuntimeError> {
     let mut alphabet_shift: usize = 0;
     let mut s = Vec::new();
-    
+
     let mut abbrev = 0;
     let mut zscii_read1 = false;
     let mut zscii_read2 = false;
@@ -312,8 +299,7 @@ fn find_word(
     parse_buffer: usize,
     flag: bool,
     parse_index: usize,
-    word_count: usize,
-    word_start: usize,
+    (word_count, word_start): (usize, usize),
     word: &Vec<char>,
 ) -> Result<(usize, usize), RuntimeError> {
     let entry = from_dictionary(zmachine, dictionary, word)?;
@@ -418,8 +404,7 @@ pub fn parse_text(
                     parse_buffer,
                     flag,
                     word_count,
-                    words,
-                    word_start,
+                    (words, word_start),
                     &word,
                 )?;
             }
@@ -433,8 +418,7 @@ pub fn parse_text(
                     parse_buffer,
                     flag,
                     word_count,
-                    words,
-                    word_start + word.len(),
+                    (words, word_start + word.len()),
                     &sep,
                 )?;
             }
@@ -449,8 +433,7 @@ pub fn parse_text(
                     parse_buffer,
                     flag,
                     word_count,
-                    words,
-                    word_start,
+                    (words, word_start),
                     &word,
                 )?;
             }
@@ -469,8 +452,7 @@ pub fn parse_text(
             parse_buffer,
             flag,
             word_count,
-            words,
-            word_start,
+            (words, word_start),
             &word,
         )?;
     }

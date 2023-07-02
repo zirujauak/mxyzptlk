@@ -17,6 +17,10 @@ impl Default for Config {
     }
 }
 impl Config {
+    pub fn new(terminal: String, foreground: u8, background: u8, logging: bool) -> Self {
+        Config { terminal, foreground, background, logging}
+    }
+
     pub fn from_file(file: File) -> Result<Config, RuntimeError> {
         match serde_yaml::from_reader::<File, Value>(file) {
             Ok(data) => {
@@ -37,12 +41,12 @@ impl Config {
                     None => false
                 };
                 
-                Ok(Config {
+                Ok(Config::new(
                     terminal,
                     foreground,
                     background,
                     logging
-                })
+                ))
             },
             Err(e) => {
                 Err(RuntimeError::new(ErrorCode::System, format!("{}", e)))
