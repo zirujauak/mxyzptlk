@@ -602,7 +602,7 @@ impl ZMachine {
                         break;
                     } else {
                         if key == 0x08 {
-                            if input_buffer.is_empty() {
+                            if !input_buffer.is_empty() {
                                 input_buffer.pop();
                                 self.backspace()?;
                             }
