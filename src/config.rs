@@ -11,11 +11,12 @@ pub struct Config {
     logging: bool,
 }
 
-impl Config {
-    pub fn default() -> Config {
+impl Default for Config {
+    fn default() -> Self {
         Config { terminal: "pancurses".to_string(), foreground: 9, background: 2, logging: false}
     }
-
+}
+impl Config {
     pub fn from_file(file: File) -> Result<Config, RuntimeError> {
         match serde_yaml::from_reader::<File, Value>(file) {
             Ok(data) => {
@@ -32,11 +33,7 @@ impl Config {
                     None => 2
                 };
                 let logging = match data["logging"].as_str() {
-                    Some(t) => if t == "enabled" {
-                        true
-                    } else {
-                        false
-                    },
+                    Some(t) => t == "enabled",
                     None => false
                 };
                 

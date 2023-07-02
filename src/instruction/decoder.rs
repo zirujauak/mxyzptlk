@@ -27,7 +27,7 @@ fn long_operand_type(opcode: u8, index: u8) -> OperandType {
 }
 
 fn operand_types(
-    bytes: &Vec<u8>,
+    bytes: &[u8],
     opcode: &Opcode,
     mut offset: usize,
 ) -> Result<(usize, Vec<OperandType>), RuntimeError> {
@@ -44,7 +44,7 @@ fn operand_types(
         }
         OpcodeForm::Var | OpcodeForm::Ext => {
             let b = bytes[offset];
-            offset = offset + 1;
+            offset += 1;
             for i in 0..4 {
                 match operand_type(b, i) {
                     Some(t) => types.push(t),
@@ -54,7 +54,7 @@ fn operand_types(
             // 2VAR opcodes have another byte of operand types
             if opcode.opcode() == 0xEC || opcode.opcode() == 0xFA {
                 let b = bytes[offset];
-                offset = offset + 1;
+                offset += 1;
                 for i in 0..4 {
                     match operand_type(b, i) {
                         Some(t) => types.push(t),
@@ -69,7 +69,7 @@ fn operand_types(
 }
 
 fn operands(
-    bytes: &Vec<u8>,
+    bytes: &[u8],
     operand_types: &Vec<OperandType>,
     mut offset: usize,
 ) -> Result<(usize, Vec<Operand>), RuntimeError> {
@@ -82,11 +82,11 @@ fn operands(
                     *optype,
                     memory::word_value(bytes[offset], bytes[offset + 1]),
                 ));
-                offset = offset + 2;
+                offset += 2;
             }
             OperandType::SmallConstant | OperandType::Variable => {
                 operands.push(Operand::new(*optype, bytes[offset] as u16));
-                offset = offset + 1;
+                offset += 1;
             }
         }
     }
@@ -96,7 +96,7 @@ fn operands(
 
 fn result_variable(
     address: usize,
-    bytes: &Vec<u8>,
+    bytes: &[u8],
     opcode: &Opcode,
     version: u8,
     offset: usize,
@@ -117,31 +117,31 @@ fn result_variable(
             | 0x76 | 0xd6 | 0x17 | 0x37 | 0x57 | 0x77 | 0xd7 | 0x18 | 0x38 | 0x58 | 0x78 | 0xd8
             | 0x19 | 0x39 | 0x59 | 0x79 | 0xd9 | 0x81 | 0x91 | 0xa1 | 0x82 | 0x92 | 0xa2 | 0x83
             | 0x93 | 0xa3 | 0x84 | 0x94 | 0xa4 | 0x88 | 0x98 | 0xa8 | 0x8e | 0x9e | 0xae | 0xe0
-            | 0xe7 | 0xeC | 0xf6 | 0xf7 | 0xf8 => {
+            | 0xe7 | 0xec | 0xf6 | 0xf7 | 0xf8 => {
                 Ok((offset + 1, Some(StoreResult::new(address, bytes[offset]))))
             }
             // Version < 5
             0xbf => {
                 if version < 5 {
-                    return Ok((offset + 1, Some(StoreResult::new(address, bytes[offset]))));
+                    Ok((offset + 1, Some(StoreResult::new(address, bytes[offset]))))
                 } else {
-                    return Ok((offset, None));
+                    Ok((offset, None))
                 }
             }
             // Version 4
             0xb5 | 0xb6 => {
                 if version == 4 {
-                    return Ok((offset + 1, Some(StoreResult::new(address, bytes[offset]))));
+                    Ok((offset + 1, Some(StoreResult::new(address, bytes[offset]))))
                 } else {
-                    return Ok((offset, None));
+                    Ok((offset, None))
                 }
             }
             // Version > 4
             0xb9 | 0xe4 => {
                 if version > 4 {
-                    return Ok((offset + 1, Some(StoreResult::new(address, bytes[offset]))));
+                    Ok((offset + 1, Some(StoreResult::new(address, bytes[offset]))))
                 } else {
-                    return Ok((offset, None));
+                    Ok((offset, None))
                 }
             }
             _ => Ok((offset, None)),
@@ -153,13 +153,13 @@ fn branch_address(address: usize, offset: i16) -> usize {
     match offset {
         0 => 0,
         1 => 1,
-        _ => ((address as isize) + (offset as i16) as isize) as usize,
+        _ => ((address as isize) + offset as isize) as usize,
     }
 }
 
 fn branch_condition(
     address: usize,
-    bytes: &Vec<u8>,
+    bytes: &[u8],
     offset: usize,
 ) -> Result<(usize, Option<Branch>), RuntimeError> {
     let b = bytes[offset];
@@ -179,7 +179,7 @@ fn branch_condition(
         _ => {
             let mut b_offset = ((b as u16 & 0x3f) << 8) | (bytes[offset + 1] as u16) & 0xFF;
             if b_offset & 0x2000 == 0x2000 {
-                b_offset = b_offset | 0xC000;
+                b_offset |= 0xC000;
             }
             Ok((
                 offset + 2,
@@ -195,7 +195,7 @@ fn branch_condition(
 
 fn branch(
     address: usize,
-    bytes: &Vec<u8>,
+    bytes: &[u8],
     version: u8,
     opcode: &Opcode,
     offset: usize,
@@ -236,16 +236,16 @@ fn branch(
 }
 
 fn opcode(
-    bytes: &Vec<u8>,
+    bytes: &[u8],
     version: u8,
     mut offset: usize,
 ) -> Result<(usize, Opcode), RuntimeError> {
     let mut opcode = bytes[offset];
     let extended = opcode == 0xBE;
-    offset = offset + 1;
+    offset += 1;
     if extended {
         opcode = bytes[offset];
-        offset = offset + 1;
+        offset += 1;
     }
 
     let form = if extended {

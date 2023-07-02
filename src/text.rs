@@ -163,7 +163,7 @@ fn search_entry(
     address: usize,
     entry_count: usize,
     entry_size: usize,
-    word: &Vec<u16>,
+    word: &[u16],
 ) -> Result<usize, RuntimeError> {
     let mut min = 0;
     let mut max = entry_count - 1;
@@ -224,11 +224,11 @@ fn scan_entry(
     address: usize,
     entry_count: usize,
     entry_size: usize,
-    words: &Vec<u16>,
+    words: &[u16],
 ) -> Result<usize, RuntimeError> {
     // Scan the unsorted dictionary
     'outer: for i in 0..entry_count {
-        let entry_address = address + (i * entry_size as usize);
+        let entry_address = address + (i * entry_size);
         for (j, w) in words.iter().enumerate() {
             let ew = zmachine.read_word(entry_address + (j * 2))?;
             if ew != *w {

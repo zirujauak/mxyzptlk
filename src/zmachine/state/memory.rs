@@ -226,7 +226,7 @@ impl Memory {
         data
     }
 
-    pub fn restore_compressed(&mut self, cdata: &Vec<u8>) -> Result<(), RuntimeError> {
+    pub fn restore_compressed(&mut self, cdata: &[u8]) -> Result<(), RuntimeError> {
         let data = self.decompress(cdata);
         self.restore(&data)
     }

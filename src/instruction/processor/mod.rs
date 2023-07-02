@@ -77,15 +77,10 @@ fn call_fn(
 ) -> Result<usize, RuntimeError> {
     match address {
         0 | 1 => {
-            match result {
-                Some(r) => {
-                    if let Err(e) = zmachine.set_variable(r.variable, address as u16) {
-                        return Err(e);
-                    }
-                }
-                None => (),
+            if let Some(r) = result {
+                zmachine.set_variable(r.variable, address as u16)?
             }
-
+            
             Ok(return_addr)
         }
         _ => zmachine.call_routine(address, arguments, result, return_addr),

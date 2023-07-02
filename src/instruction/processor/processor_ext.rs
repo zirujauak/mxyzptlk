@@ -2,7 +2,7 @@ use super::*;
 
 pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    if operands.len() > 0 {
+    if !operands.is_empty() {
         error!(target: "app::instruction", "SAVE auxiliary data not implemented yet");
         store_result(zmachine, instruction, 0)?;
     } else {
@@ -21,7 +21,7 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
 pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    if operands.len() > 0 {
+    if !operands.is_empty() {
         error!(target: "app::instruction", "RESTORE auxiliary data not implemented yet");
         store_result(zmachine, instruction, 0)?;
         Ok(instruction.next_address())
@@ -55,7 +55,7 @@ pub fn log_shift(
     let value = operands[0];
     let places = operands[1] as i16;
     let new_value = if places < 0 && places > -16 {
-        u16::overflowing_shr(value, places.abs() as u32).0
+        u16::overflowing_shr(value, places.unsigned_abs() as u32).0
     } else if places > 0 && places < 16 {
         u16::overflowing_shl(value, places as u32).0
     } else if places == 0 {
@@ -77,7 +77,7 @@ pub fn art_shift(
     let value = operands[0] as i16;
     let places = operands[1] as i16;
     let new_value = if places < 0 && places > -16 {
-        i16::overflowing_shr(value, places.abs() as u32).0
+        i16::overflowing_shr(value, places.unsigned_abs() as u32).0
     } else if places > 0 && places < 16 {
         i16::overflowing_shl(value, places as u32).0
     } else if places == 0 {

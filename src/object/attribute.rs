@@ -54,7 +54,7 @@ pub fn clear(
     let object_address = object_address(zmachine, object)?;
     let offset = attribute as usize / 8;
     let address = object_address + offset;
-    let mask: u8 = 1 << 7 - (attribute % 8);
+    let mask: u8 = 1 << (7 - (attribute % 8));
     let max = match zmachine.version() {
         3 => 32,
         _ => 48

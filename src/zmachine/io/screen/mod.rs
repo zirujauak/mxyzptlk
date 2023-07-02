@@ -588,7 +588,7 @@ impl Screen {
         }
     }
 
-    pub fn print_at(&mut self, text: &Vec<u16>, at: (u32, u32), style: &CellStyle) {
+    pub fn print_at(&mut self, text: &[u16], at: (u32, u32), style: &CellStyle) {
         for (i, c) in text.iter().enumerate() {
             self.terminal.print_at(
                 *c,

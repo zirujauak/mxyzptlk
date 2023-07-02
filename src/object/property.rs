@@ -33,7 +33,7 @@ fn address(zmachine: &ZMachine, object: usize, property: u8) -> Result<usize, Ru
                 _ => {
                     property_address = property_address + 1 + prop_size;
                     size_byte = zmachine.read_byte(property_address)?;
-                    }
+                }
             }
         } else {
             let prop_num = size_byte & 0x3F;
@@ -46,13 +46,12 @@ fn address(zmachine: &ZMachine, object: usize, property: u8) -> Result<usize, Ru
                 } else {
                     size as usize & 0x3f
                 }
+            } else if size_byte & 0x40 == 0x40 {
+                2
             } else {
-                if size_byte & 0x40 == 0x40 {
-                    2
-                } else {
-                    1
-                }
+                1
             };
+
             match prop_num.cmp(&property) {
                 Ordering::Equal => return Ok(property_address),
                 Ordering::Less => return Ok(0),

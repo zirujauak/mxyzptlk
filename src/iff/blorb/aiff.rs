@@ -26,7 +26,7 @@ impl From<&AIFF> for Vec<u8> {
     fn from(value: &AIFF) -> Vec<u8> {
         // Reconstitute the AIFF FORM 
         let mut v = Vec::new();
-        v.append(&mut iff::id_as_vec(&"FORM"));
+        v.append(&mut iff::id_as_vec("FORM"));
         v.append(&mut iff::u32_to_vec(value.data.len() as u32, 4));
         v.append(&mut value.data.clone());
         if v.len() %2 == 1 {
@@ -37,8 +37,8 @@ impl From<&AIFF> for Vec<u8> {
 }
 
 impl AIFF {
-    pub fn new(id: &str, length: u32, data: &Vec<u8>) -> AIFF {
-        AIFF { _id: id.to_string(), _length: length, data: data.clone() }
+    pub fn new(id: &str, length: u32, data: &[u8]) -> AIFF {
+        AIFF { _id: id.to_string(), _length: length, data: data.to_vec() }
     }
 
     pub fn data(&self) -> &Vec<u8> {

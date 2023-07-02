@@ -69,8 +69,8 @@ pub fn test(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 pub fn or(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let mut result = operands[0];
-    for i in 1..operands.len() {
-        result = result | operands[i]
+    for w in operands[1..].iter() {
+        result |= *w
     }
 
     store_result(zmachine, instruction, result)?;
@@ -80,8 +80,8 @@ pub fn or(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, R
 pub fn and(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let mut result = operands[0];
-    for i in 1..operands.len() {
-        result = result & operands[i]
+    for w in operands[1..].iter() {
+        result &= *w
     }
 
     store_result(zmachine, instruction, result)?;
@@ -242,8 +242,8 @@ pub fn add(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, 
     let operands = operand_values(zmachine, instruction)?;
 
     let mut value = operands[0] as i16;
-    for i in 1..operands.len() {
-        value = i16::overflowing_add(value, operands[i] as i16).0;
+    for w in operands[1..].iter() {
+        value = i16::overflowing_add(value, *w as i16).0;
     }
 
     store_result(zmachine, instruction, value as u16)?;
@@ -254,8 +254,8 @@ pub fn sub(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, 
     let operands = operand_values(zmachine, instruction)?;
 
     let mut value = operands[0] as i16;
-    for i in 1..operands.len() {
-        value = i16::overflowing_sub(value, operands[i] as i16).0;
+    for w in operands[1..].iter() {
+        value = i16::overflowing_sub(value, *w as i16).0;
     }
 
     store_result(zmachine, instruction, value as u16)?;
@@ -266,8 +266,8 @@ pub fn mul(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, 
     let operands = operand_values(zmachine, instruction)?;
 
     let mut value = operands[0] as i16;
-    for i in 1..operands.len() {
-        value = i16::overflowing_mul(value, operands[i] as i16).0;
+    for w in operands[1..].iter() {
+        value = i16::overflowing_mul(value, *w as i16).0;
     }
 
     store_result(zmachine, instruction, value as u16)?;
@@ -278,8 +278,8 @@ pub fn div(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, 
     let operands = operand_values(zmachine, instruction)?;
 
     let mut value = operands[0] as i16;
-    for i in 1..operands.len() {
-        value = i16::overflowing_div(value, operands[i] as i16).0;
+    for w in operands[1..].iter() {
+        value = i16::overflowing_div(value, *w as i16).0;
     }
 
     store_result(zmachine, instruction, value as u16)?;
@@ -290,8 +290,8 @@ pub fn modulus(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
     let operands = operand_values(zmachine, instruction)?;
 
     let mut value = operands[0] as i16;
-    for i in 1..operands.len() {
-        value = i16::overflowing_rem(value, operands[i] as i16).0;
+    for w in operands[1..].iter() {
+        value = i16::overflowing_rem(value, *w as i16).0;
     }
 
     store_result(zmachine, instruction, value as u16)?;

@@ -83,7 +83,7 @@ impl ZMachine {
             rng: Box::new(rng),
             input_interrupt: None,
             input_interrupt_print: false,
-            sound_manager: sound_manager,
+            sound_manager,
             sound_interrupt: None,
         })
     }
@@ -134,31 +134,31 @@ impl ZMachine {
 
     pub fn write_byte(&mut self, address: usize, value: u8) -> Result<(), RuntimeError> {
         // Check if the transcript bit is being changed in Flags 2
-        if address == 0x11 {
-            if self
+        if address == 0x11
+            && self
                 .update_transcript_bit(self.state.read_byte(0x11)? as u16, value as u16)
                 .is_err()
-            {
-                // Starting the transcript failed, so skip writing to memory
-                warn!(target: "app::memory", "Staring transcript failed, not writing data to Flags 2");
-                return Ok(());
-            }
+        {
+            // Starting the transcript failed, so skip writing to memory
+            warn!(target: "app::memory", "Staring transcript failed, not writing data to Flags 2");
+            return Ok(());
         }
+
         self.state.write_byte(address, value)
     }
 
     pub fn write_word(&mut self, address: usize, value: u16) -> Result<(), RuntimeError> {
         // Check if the transcript bit is being set in Flags 2
-        if address == 0x10 {
-            if self
+        if address == 0x10
+            && self
                 .update_transcript_bit(self.state.read_word(0x10)?, value)
                 .is_err()
-            {
-                // Starting the transcript failed, so skip writing to memory
-                warn!(target: "app::memory", "Staring transcript failed, not writing data to Flags 2");
-                return Ok(());
-            }
+        {
+            // Starting the transcript failed, so skip writing to memory
+            warn!(target: "app::memory", "Staring transcript failed, not writing data to Flags 2");
+            return Ok(());
         }
+
         self.state.write_word(address, value)
     }
 
@@ -550,7 +550,7 @@ impl ZMachine {
         terminators: &[u16],
         timeout: u16,
     ) -> Result<Vec<u16>, RuntimeError> {
-        let mut input_buffer = text.clone().to_vec();
+        let mut input_buffer = text.to_vec();
 
         let end = if timeout > 0 {
             self.now(Some(timeout))
@@ -600,16 +600,14 @@ impl ZMachine {
                             self.io.print_vec(&vec![key])?;
                         }
                         break;
-                    } else {
-                        if key == 0x08 {
-                            if !input_buffer.is_empty() {
-                                input_buffer.pop();
-                                self.backspace()?;
-                            }
-                        } else if input_buffer.len() < len && (0x20..0x7f).contains(&key) {
-                            input_buffer.push(key);
-                            self.io.print_vec(&vec![key])?;
+                    } else if key == 0x08 {
+                        if !input_buffer.is_empty() {
+                            input_buffer.pop();
+                            self.backspace()?;
                         }
+                    } else if input_buffer.len() < len && (0x20..0x7f).contains(&key) {
+                        input_buffer.push(key);
+                        self.io.print_vec(&vec![key])?;
                     }
                 }
                 None => thread::sleep(Duration::from_millis(10)),
@@ -635,7 +633,7 @@ impl ZMachine {
 
         self.print(&n)?;
 
-        let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
+        let f = self.read_line(&n, 32, &['\r' as u16], 0)?;
         let filename = match String::from_utf16(&f) {
             Ok(s) => s.trim().to_string(),
             Err(e) => {

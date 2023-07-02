@@ -43,7 +43,7 @@ impl From<(u32, &AIFF, Option<&u32>)> for Sound {
             Ok(sound) => Sound::new(number, &sound, repeats),
             Err(e) => {
                 error!(target: "app::sound", "Error converting AIFF resource: {}", e);
-                Sound::new(number, &vec![], repeats)
+                Sound::new(number, &[], repeats)
             }
         }
     }

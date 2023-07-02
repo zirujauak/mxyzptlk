@@ -19,8 +19,8 @@ impl From<Chunk> for OGGV {
 }
 
 impl OGGV {
-    pub fn new(data: &Vec<u8>) -> OGGV {
-        OGGV { data: data.clone() }
+    pub fn new(data: &[u8]) -> OGGV {
+        OGGV { data: data.to_vec() }
     }
 
     pub fn data(&self) -> &Vec<u8> {

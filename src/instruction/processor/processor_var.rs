@@ -62,7 +62,7 @@ fn terminators(zmachine: &ZMachine) -> Result<Vec<u16>, RuntimeError> {
             } else if (130..155).contains(&b) || b >= 252 {
                 terminators.push(b as u16);
             }
-            table_addr = table_addr + 1;
+            table_addr += 1;
         }
     }
 
@@ -125,7 +125,7 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
             if zmachine.input_interrupt_print() {
                 zmachine.print(&existing_input)?;
             }
-        },
+        }
         _ => {}
     }
     // if zmachine.version() < 4 {
@@ -257,9 +257,9 @@ pub fn random(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usiz
     let range = operands[0] as i16;
     if range < 1 {
         if range == 0 || range.abs() >= 1000 {
-            zmachine.seed(range.unsigned_abs() as u16)
+            zmachine.seed(range.unsigned_abs())
         } else if range.abs() < 1000 {
-            zmachine.predictable(range.unsigned_abs() as u16)
+            zmachine.predictable(range.unsigned_abs())
         }
         store_result(zmachine, instruction, 0)?;
     } else {
@@ -626,15 +626,13 @@ pub fn copy_table(
         for i in 0..len as usize {
             zmachine.write_byte(src + i, 0)?;
         }
+    } else if len > 0 && dst > src && dst < src + len as usize {
+        for i in (0..len as usize).rev() {
+            zmachine.write_byte(dst + i, zmachine.read_byte(src + i)?)?;
+        }
     } else {
-        if len > 0 && dst > src && dst < src + len as usize {
-            for i in (0..len as usize).rev() {
-                zmachine.write_byte(dst + i, zmachine.read_byte(src + i)?)?;
-            }
-        } else {
-            for i in 0..len.unsigned_abs() as usize {
-                zmachine.write_byte(dst + i, zmachine.read_byte(src + i)?)?;
-            }
+        for i in 0..len.unsigned_abs() as usize {
+            zmachine.write_byte(dst + i, zmachine.read_byte(src + i)?)?;
         }
     }
 

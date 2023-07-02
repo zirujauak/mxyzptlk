@@ -250,7 +250,7 @@ impl State {
 
         if self.frames.is_empty() {
             let pc = header::field_word(self, HeaderField::InitialPC)? as usize;
-            let f = Frame::new(pc, pc, &vec![], 0, &vec![], None, 0);
+            let f = Frame::new(pc, pc, &[], 0, &[], None, 0);
             self.frames.clear();
             self.frames.push(f);
         }
@@ -552,11 +552,8 @@ impl State {
                 if self.read_interrupt_pending {
                     self.read_interrupt_result = Some(value);
                 }
-            } else {
-                match f.result() {
-                    Some(r) => self.set_variable(r.variable(), value)?,
-                    None => (),
-                }
+            } else if let Some(r) = f.result() {
+                self.set_variable(r.variable(), value)?
             }
 
             Ok(self.current_frame()?.pc())

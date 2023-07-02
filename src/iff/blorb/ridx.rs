@@ -62,7 +62,7 @@ impl fmt::Display for RIdx {
 
 impl From<Chunk> for RIdx {
     fn from(value: Chunk) -> RIdx {
-        let n = vec_to_u32(&value.data(), 0, 4);
+        let n = vec_to_u32(value.data(), 0, 4);
         let mut entries = Vec::new();
 
         for i in 0..n as usize {
