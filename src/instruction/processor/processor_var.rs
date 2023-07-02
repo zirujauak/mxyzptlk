@@ -128,34 +128,12 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
         }
         _ => {}
     }
-    // if zmachine.version() < 4 {
-    //     // V3 show status line before input
-    //     zmachine.status_line()?;
-    // } else if zmachine.version() > 4 {
-    //     // text buffer may contain existing input
-    //     let existing_len = zmachine.read_byte(text_buffer + 1)? as usize;
-    //     for i in 0..existing_len {
-    //         existing_input.push(zmachine.read_byte(text_buffer + 2 + i)? as u16);
-    //     }
-    //     if zmachine.input_interrupt_print() {
-    //         zmachine.print(&existing_input)?;
-    //     }
-    // }
 
     zmachine.clear_input_interrupt_print();
 
     let terminators = terminators(zmachine)?;
     let input_buffer = zmachine.read_line(&existing_input, len, &terminators, timeout * 100)?;
     let terminator = input_buffer.last().filter(|&x| terminators.contains(x));
-    //     c.filter
-    //     if terminators.contains(c) {
-    //         Some(c)
-    //     } else {
-    //         None
-    //     }
-    // } else {
-    //     None
-    // };
 
     // If there was no terminator, then input was interrupted
     if terminator.is_none() {

@@ -356,26 +356,6 @@ impl ZMachine {
                 format!("Output stream {} is not valid: [-4..4]", stream),
             )),
         }
-        // if stream > 0 {
-        //     info!(target: "app::stream", "Enabling output stream {}", stream);
-        //     if stream == 2 && !self.io.is_stream_2_open() {
-        //         if let Err(e) = self.start_stream_2() {
-        //             error!(target: "app::stream", "Error starting stream 2: {}", e);
-        //         }
-        //         self.io.enable_output_stream(stream as u8, table)
-        //     } else {
-        //         self.io.enable_output_stream(stream as u8, table)
-        //     }
-        // } else if stream < 0 {
-        //     info!(target: "app::stream", "Disabling output stream {}", i16::abs(stream));
-        //     self.io
-        //         .disable_output_stream(&mut self.state, i16::abs(stream) as u8)
-        // } else {
-        //     Err(RuntimeError::new(
-        //         ErrorCode::System,
-        //         format!("Output stream {} is not valid: [-4..4]", stream),
-        //     ))
-        // }
     }
 
     pub fn print(&mut self, text: &Vec<u16>) -> Result<(), RuntimeError> {
