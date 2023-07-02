@@ -24,7 +24,7 @@ use crate::text;
 use crate::zmachine::io::screen::Interrupt;
 use regex::Regex;
 use rng::chacha_rng::ChaChaRng;
-use rng::RNG;
+use rng::ZRng;
 
 use self::io::screen::InputEvent;
 use self::io::IO;
@@ -39,7 +39,7 @@ pub struct ZMachine {
     version: u8,
     state: State,
     io: IO,
-    rng: Box<dyn RNG>,
+    rng: Box<dyn ZRng>,
     input_interrupt: Option<u16>,
     input_interrupt_print: bool,
     sound_manager: Option<Manager>,
@@ -83,7 +83,7 @@ impl ZMachine {
             rng: Box::new(rng),
             input_interrupt: None,
             input_interrupt_print: false,
-            sound_manager: sound_manager,
+            sound_manager,
             sound_interrupt: None,
         })
     }
@@ -134,27 +134,31 @@ impl ZMachine {
 
     pub fn write_byte(&mut self, address: usize, value: u8) -> Result<(), RuntimeError> {
         // Check if the transcript bit is being changed in Flags 2
-        if address == 0x11 {
-            if let Err(_) =
-                self.update_transcript_bit(self.state.read_byte(0x11)? as u16, value as u16)
-            {
-                // Starting the transcript failed, so skip writing to memory
-                warn!(target: "app::memory", "Staring transcript failed, not writing data to Flags 2");
-                return Ok(());
-            }
+        if address == 0x11
+            && self
+                .update_transcript_bit(self.state.read_byte(0x11)? as u16, value as u16)
+                .is_err()
+        {
+            // Starting the transcript failed, so skip writing to memory
+            warn!(target: "app::memory", "Staring transcript failed, not writing data to Flags 2");
+            return Ok(());
         }
+
         self.state.write_byte(address, value)
     }
 
     pub fn write_word(&mut self, address: usize, value: u16) -> Result<(), RuntimeError> {
         // Check if the transcript bit is being set in Flags 2
-        if address == 0x10 {
-            if let Err(_) = self.update_transcript_bit(self.state.read_word(0x10)?, value) {
-                // Starting the transcript failed, so skip writing to memory
-                warn!(target: "app::memory", "Staring transcript failed, not writing data to Flags 2");
-                return Ok(());
-            }
+        if address == 0x10
+            && self
+                .update_transcript_bit(self.state.read_word(0x10)?, value)
+                .is_err()
+        {
+            // Starting the transcript failed, so skip writing to memory
+            warn!(target: "app::memory", "Staring transcript failed, not writing data to Flags 2");
+            return Ok(());
         }
+
         self.state.write_word(address, value)
     }
 
@@ -303,8 +307,7 @@ impl ZMachine {
 
     // RNG
     pub fn random(&mut self, range: u16) -> u16 {
-        let v = self.rng.random(range);
-        v
+        self.rng.random(range)
     }
 
     pub fn seed(&mut self, seed: u16) {
@@ -326,29 +329,32 @@ impl ZMachine {
 
     fn start_stream_2(&mut self) -> Result<(), RuntimeError> {
         let file = self.prompt_and_create("Transcript file name: ", "txt", false)?;
-        Ok(self.io.set_stream_2(file))
+        self.io.set_stream_2(file);
+        Ok(())
     }
 
     pub fn output_stream(&mut self, stream: i16, table: Option<usize>) -> Result<(), RuntimeError> {
-        if stream > 0 {
-            info!(target: "app::stream", "Enabling output stream {}", stream);
-            if stream == 2 && !self.io.is_stream_2_open() {
-                if let Err(e) = self.start_stream_2() {
-                    error!(target: "app::stream", "Error starting stream 2: {}", e);
+        match stream {
+            1..=4 => {
+                info!(target: "app::stream", "Enabling output stream {}", stream);
+                if stream == 2 && !self.io.is_stream_2_open() {
+                    if let Err(e) = self.start_stream_2() {
+                        error!(target: "app::stream", "Error starting stream 2: {}", e);
+                    }
+                    self.io.enable_output_stream(stream as u8, table)
+                } else {
+                    self.io.enable_output_stream(stream as u8, table)
                 }
-                self.io.enable_output_stream(stream as u8, table)
-            } else {
-                self.io.enable_output_stream(stream as u8, table)
             }
-        } else if stream < 0 {
-            info!(target: "app::stream", "Disabling output stream {}", i16::abs(stream));
-            self.io
-                .disable_output_stream(&mut self.state, i16::abs(stream) as u8)
-        } else {
-            Err(RuntimeError::new(
+            -4..=-1 => {
+                info!(target: "app::stream", "Disabling output stream {}", i16::abs(stream));
+                self.io
+                    .disable_output_stream(&mut self.state, i16::abs(stream) as u8)
+            }
+            _ => Err(RuntimeError::new(
                 ErrorCode::System,
                 format!("Output stream {} is not valid: [-4..4]", stream),
-            ))
+            )),
         }
     }
 
@@ -380,7 +386,7 @@ impl ZMachine {
     pub fn erase_line(&mut self) -> Result<(), RuntimeError> {
         self.io.erase_line()
     }
-    
+
     pub fn status_line(&mut self) -> Result<(), RuntimeError> {
         let status_type = header::flag1(&self.state, Flags1v3::StatusLineType as u8)?;
         let object = self.state.variable(16)? as usize;
@@ -398,7 +404,7 @@ impl ZMachine {
             let hour = self.state.variable(17)?;
             let minute = self.state.variable(18)?;
             let suffix = if hour > 11 { "PM" } else { "AM" };
-            format!("{} ", format!("{}:{} {}", hour % 12, minute, suffix))
+            format!("{}:{} {}", hour % 12, minute, suffix)
                 .as_bytes()
                 .iter()
                 .map(|x| *x as u16)
@@ -470,16 +476,8 @@ impl ZMachine {
         };
 
         debug!(target: "app::input", "Storing mouse coordinates {},{}", column, row);
-        header::set_extension(
-            &mut self.state,
-            1,
-            column
-        )?;
-        header::set_extension(
-            &mut self.state,
-            2,
-            row
-        )?;
+        header::set_extension(&mut self.state, 1, column)?;
+        header::set_extension(&mut self.state, 2, row)?;
 
         Ok(())
     }
@@ -491,16 +489,12 @@ impl ZMachine {
             0
         };
 
-        let check_sound = if let Some(_) = self.sound_interrupt {
-            true
-        } else {
-            false
-        };
+        let check_sound = self.sound_interrupt.is_some();
 
         loop {
             // If a sound interrupt is set and there is no sound playing,
             // return buffer and clear any pending input_interrupt
-            if let Some(_) = self.sound_interrupt {
+            if self.sound_interrupt.is_some() {
                 if let Some(sounds) = self.sound_manager.as_mut() {
                     if !sounds.is_playing() {
                         info!(target: "app::input", "Sound interrupt firing");
@@ -531,12 +525,12 @@ impl ZMachine {
 
     pub fn read_line(
         &mut self,
-        text: &Vec<u16>,
+        text: &[u16],
         len: usize,
-        terminators: &Vec<u16>,
+        terminators: &[u16],
         timeout: u16,
     ) -> Result<Vec<u16>, RuntimeError> {
-        let mut input_buffer = text.clone();
+        let mut input_buffer = text.to_vec();
 
         let end = if timeout > 0 {
             self.now(Some(timeout))
@@ -544,18 +538,14 @@ impl ZMachine {
             0
         };
 
-        let check_sound = if let Some(_) = self.state.sound_interrupt() {
-            true
-        } else {
-            false
-        };
+        let check_sound = self.state.sound_interrupt().is_some();
 
         info!(target: "app::input", "Sound interrupt {:?}", check_sound);
 
         loop {
             // If a sound interrupt is set and there is no sound playing,
             // return buffer and clear any pending input_interrupt
-            if let Some(_) = self.state.sound_interrupt() {
+            if self.state.sound_interrupt().is_some() {
                 info!(target: "app::frame", "Interrupt pending");
                 if let Some(sounds) = self.sound_manager.as_mut() {
                     info!(target: "app::frame", "Sound playing? {}", sounds.is_playing());
@@ -590,16 +580,14 @@ impl ZMachine {
                             self.io.print_vec(&vec![key])?;
                         }
                         break;
-                    } else {
-                        if key == 0x08 {
-                            if input_buffer.len() > 0 {
-                                input_buffer.pop();
-                                self.backspace()?;
-                            }
-                        } else if input_buffer.len() < len && key >= 0x1f && key <= 0x7f {
-                            input_buffer.push(key);
-                            self.io.print_vec(&vec![key])?;
+                    } else if key == 0x08 {
+                        if !input_buffer.is_empty() {
+                            input_buffer.pop();
+                            self.backspace()?;
                         }
+                    } else if input_buffer.len() < len && (0x20..0x7f).contains(&key) {
+                        input_buffer.push(key);
+                        self.io.print_vec(&vec![key])?;
                     }
                 }
                 None => thread::sleep(Duration::from_millis(10)),
@@ -625,10 +613,15 @@ impl ZMachine {
 
         self.print(&n)?;
 
-        let f = self.read_line(&n, 32, &vec!['\r' as u16], 0)?;
+        let f = self.read_line(&n, 32, &['\r' as u16], 0)?;
         let filename = match String::from_utf16(&f) {
             Ok(s) => s.trim().to_string(),
-            Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("Error parsing user input: {}", e)))
+            Err(e) => {
+                return Err(RuntimeError::new(
+                    ErrorCode::System,
+                    format!("Error parsing user input: {}", e),
+                ))
+            }
         };
 
         if !overwrite {
@@ -696,7 +689,7 @@ impl ZMachine {
         &mut self,
         prompt: &str,
         suffix: &str,
-        data: &Vec<u8>,
+        data: &[u8],
         overwrite: bool,
     ) -> Result<(), RuntimeError> {
         let mut file = self.prompt_and_create(prompt, suffix, overwrite)?;
@@ -808,7 +801,7 @@ impl ZMachine {
                 return Ok(());
             }
 
-            if let Some(_) = self.state.sound_interrupt() {
+            if self.state.sound_interrupt().is_some() {
                 if let Some(sounds) = self.sound_manager.as_mut() {
                     if !sounds.is_playing() {
                         let pc = self.state.call_sound_interrupt(pc)?;
@@ -820,7 +813,7 @@ impl ZMachine {
             } else {
                 self.state.set_pc(pc)?;
             }
-            n = n + 1;
+            n += 1;
         }
     }
 }

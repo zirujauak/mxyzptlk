@@ -31,8 +31,8 @@ impl From<&UMem> for Vec<u8> {
 }
 
 impl UMem {
-    pub fn new(data: &Vec<u8>) -> UMem {
-        UMem { data: data.clone() }
+    pub fn new(data: &[u8]) -> UMem {
+        UMem { data: data.to_vec() }
     }
 
     pub fn data(&self) -> &Vec<u8> {

@@ -15,7 +15,7 @@ fn tempfile(data: Option<&Vec<u8>>) -> Result<(NamedTempFile, File), RuntimeErro
         Ok(mut tempfile) => match tempfile.reopen() {
             Ok(file) => {
                 if let Some(d) = data {
-                    match tempfile.write_all(&d) {
+                    match tempfile.write_all(d) {
                         Ok(_) => Ok((tempfile, file)),
                         Err(e) => Err(RuntimeError::new(
                             ErrorCode::System,
@@ -72,20 +72,20 @@ pub fn convert_aiff(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
                             }
                             Err(_) => Err(RuntimeError::new(
                                 ErrorCode::System,
-                                format!("sndfile: Error writing convered sound data:"),
+                                "sndfile: Error writing convered sound data:".to_string(),
                             )),
                         },
                         Err(_) => Err(RuntimeError::new(
                             ErrorCode::System,
-                            format!("sndfile: Error reading source sound data:"),
+                            "sndfile: Error reading source sound data:".to_string(),
                         )),
                     }
                 }
                 Err(e) => {
-                    return Err(RuntimeError::new(
+                    Err(RuntimeError::new(
                         ErrorCode::System,
                         format!("Error opening output tempfile: {:?}", e),
-                    ));
+                    ))
                 }
             }
         }

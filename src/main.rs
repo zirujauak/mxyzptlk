@@ -83,7 +83,7 @@ fn main() {
 
     let filename = &args[1];
     if config.logging() {
-        let name: Vec<&str> = filename.split("/").collect();
+        let name: Vec<&str> = filename.split('/').collect();
         let name = name[name.len() - 1].to_string();
         log4rs::init_file("log4rs.yml", Default::default()).unwrap();
         log_mdc::insert("instruction_count", format!("{:8x}", 0));
@@ -100,7 +100,7 @@ fn main() {
         error!(target: "app::variable", "Start variable log for '{}'", name);
     }
 
-    let name:Vec<&str> = filename.split(".").collect();
+    let name:Vec<&str> = filename.split('.').collect();
     let name = name[0].to_string();
     let config_file = File::open("config.yml");
     let config = if let Ok(f) = config_file {

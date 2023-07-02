@@ -43,7 +43,7 @@ impl From<(u32, &AIFF, Option<&u32>)> for Sound {
             Ok(sound) => Sound::new(number, &sound, repeats),
             Err(e) => {
                 error!(target: "app::sound", "Error converting AIFF resource: {}", e);
-                Sound::new(number, &vec![], repeats)
+                Sound::new(number, &[], repeats)
             }
         }
     }
@@ -57,18 +57,18 @@ impl From<(u32, &AIFF, Option<&u32>)> for Sound {
 }
 
 impl Sound {
-    pub fn new(number: u32, data: &Vec<u8>, repeats: Option<&u32>) -> Sound {
+    pub fn new(number: u32, data: &[u8], repeats: Option<&u32>) -> Sound {
         Sound {
             number,
             repeats: repeats.copied(),
-            data: data.clone(),
+            data: data.to_vec(),
         }
     }
 }
 
 pub trait Player {
     fn is_playing(&mut self) -> bool;
-    fn play_sound(&mut self, sound: &Vec<u8>, volume: u8, repeats: u8) -> Result<(), RuntimeError>;
+    fn play_sound(&mut self, sound: &[u8], volume: u8, repeats: u8) -> Result<(), RuntimeError>;
     fn stop_sound(&mut self);
     fn change_volume(&mut self, volume: u8);
 }

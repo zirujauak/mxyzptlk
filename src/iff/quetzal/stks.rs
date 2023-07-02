@@ -22,7 +22,7 @@ impl fmt::Display for StackFrame {
         for i in 0..self.local_variables.len() {
             write!(f, " {:04x}", self.local_variables[i])?;
         }
-        writeln!(f, "")?;
+        writeln!(f)?;
         write!(f, "\tStack:")?;
         for i in 0..self.stack.len() {
             write!(f, " {:04x}", self.stack[i])?;
@@ -56,16 +56,16 @@ impl StackFrame {
         flags: u8,
         result_variable: u8,
         arguments: u8,
-        local_variables: &Vec<u16>,
-        stack: &Vec<u16>,
+        local_variables: &[u16],
+        stack: &[u16],
     ) -> StackFrame {
         StackFrame {
             return_address,
             flags,
             result_variable,
             arguments,
-            local_variables: local_variables.clone(),
-            stack: stack.clone(),
+            local_variables: local_variables.to_vec(),
+            stack: stack.to_vec(),
         }
     }
 
@@ -117,23 +117,23 @@ impl From<Vec<u8>> for Stks {
             let result_variable = value[position + 4];
             let arguments = value[position + 5];
 
-            position = position + 6;
+            position += 6;
             let stack_size = vec_as_usize(value[position..position + 2].to_vec(), 2) as u16;
-            position = position + 2;
+            position += 2;
 
             let mut local_variables = Vec::new();
             for i in 0..flags as usize & 0xF {
                 let offset = position + (i * 2);
                 local_variables.push(vec_as_usize(value[offset..offset + 2].to_vec(), 2) as u16);
             }
-            position = position + (local_variables.len() * 2);
+            position += local_variables.len() * 2;
 
             let mut stack = Vec::new();
             for i in 0..stack_size as usize {
                 let offset = position + (i * 2);
                 stack.push(vec_as_usize(value[offset..offset + 2].to_vec(), 2) as u16)
             }
-            position = position + (stack_size as usize * 2);
+            position += stack_size as usize * 2;
 
             stks.push(StackFrame {
                 return_address,
@@ -153,28 +153,28 @@ impl From<Chunk> for Stks {
         let mut position = 0;
         let mut stks = Vec::new();
         while value.data.len() - position > 1 {
-            let return_address = vec_to_u32(&value.data, position, 3) as u32;
+            let return_address = vec_to_u32(&value.data, position, 3);
             let flags = value.data[position + 3];
             let result_variable = value.data[position + 4];
             let arguments = value.data[position + 5];
 
-            position = position + 6;
+            position += 6;
             let stack_size = vec_to_u32(&value.data, position, 2) as u16;
-            position = position + 2;
+            position += 2;
 
             let mut local_variables = Vec::new();
             for i in 0..flags as usize & 0xF {
                 let offset = position + (i * 2);
                 local_variables.push(vec_to_u32(&value.data, offset, 2) as u16);
             }
-            position = position + (local_variables.len() * 2);
+            position += local_variables.len() * 2;
 
             let mut stack = Vec::new();
             for i in 0..stack_size as usize {
                 let offset = position + (i * 2);
                 stack.push(vec_to_u32(&value.data, offset, 2) as u16);
             }
-            position = position + (stack_size as usize * 2);
+            position += stack_size as usize * 2;
 
             stks.push(StackFrame::new(
                 return_address,

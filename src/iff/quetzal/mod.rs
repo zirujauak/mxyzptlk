@@ -51,27 +51,25 @@ impl TryFrom<Vec<u8>> for Quetzal {
             }
         }
 
-        if let None = ifhd {
+        if ifhd.is_none() {
             return Err(RuntimeError::new(
                 ErrorCode::Restore,
                 "Quetzal is missing IFhd chunk".to_string(),
             ));
         }
 
-        if let None = stks {
+        if stks.is_none() {
             return Err(RuntimeError::new(
                 ErrorCode::Restore,
                 "Quetzal is missing Stks chunk".to_string(),
             ));
         }
 
-        if let None = cmem {
-            if let None = umem {
-                return Err(RuntimeError::new(
-                    ErrorCode::Restore,
-                    "Quetzal is missing memory (CMem or UMem) chunk".to_string(),
-                ));
-            }
+        if cmem.is_none() && umem.is_none() {
+            return Err(RuntimeError::new(
+                ErrorCode::Restore,
+                "Quetzal is missing memory (CMem or UMem) chunk".to_string(),
+            ));
         }
 
         Ok(Quetzal::new(ifhd.unwrap(), umem, cmem, stks.unwrap()))
@@ -84,15 +82,14 @@ impl From<Quetzal> for Vec<u8> {
 
         let mut ifzs = id_as_vec("IFZS");
         ifzs.append(&mut Vec::from(value.ifhd()));
-        // ifzs.append(&mut value.ifhd().to_chunk());
-        match value.umem() {
-            Some(u) => ifzs.append(&mut Vec::from(u)),
-            None => (),
-        };
-        match value.cmem() {
-            Some(c) => ifzs.append(&mut Vec::from(c)),
-            None => (),
-        };
+        if let Some(u) = value.umem() {
+            ifzs.append(&mut Vec::from(u))
+        }
+
+        if let Some(c) = value.cmem() {
+            ifzs.append(&mut Vec::from(c))
+        }
+
         ifzs.append(&mut Vec::from(value.stks()));
 
         form.append(&mut usize_as_vec(ifzs.len(), 4));
@@ -109,8 +106,8 @@ impl Quetzal {
     pub fn new(ifhd: IFhd, umem: Option<UMem>, cmem: Option<CMem>, stks: Stks) -> Quetzal {
         Quetzal {
             ifhd,
-            umem: umem,
-            cmem: cmem,
+            umem,
+            cmem,
             stks,
         }
     }

@@ -72,10 +72,7 @@ impl IO {
 
     // Output streams
     pub fn is_stream_2_open(&self) -> bool {
-        match self.stream_2 {
-            Some(_) => true,
-            None => false,
-        }
+        self.stream_2.is_some()
     }
 
     pub fn set_stream_2(&mut self, file: File) {
@@ -83,7 +80,7 @@ impl IO {
     }
 
     pub fn is_stream_enabled(&self, stream: u8) -> bool {
-        let mask = (1 << stream - 1) & 0xF;
+        let mask = (1 << (stream - 1)) & 0xF;
         self.output_streams & mask == mask
     }
 
@@ -92,11 +89,11 @@ impl IO {
         stream: u8,
         table: Option<usize>,
     ) -> Result<(), RuntimeError> {
-        let mask = (1 << stream - 1) & 0xF;
-        self.output_streams = self.output_streams | mask;
-        trace!(target: "app::target", "Enable output stream {} => {:04b}", stream, self.output_streams);
+        let mask = (1 << (stream - 1)) & 0xF;
+        self.output_streams |= mask;
+        debug!(target: "app::stream", "Enable output stream {} => {:04b}", stream, self.output_streams);
         match stream {
-            1| 2 => Ok(()),
+            1 | 2 => Ok(()),
             3 => {
                 if let Some(address) = table {
                     self.stream_3.push(Stream3::new(address));
@@ -121,9 +118,9 @@ impl IO {
         state: &mut State,
         stream: u8,
     ) -> Result<(), RuntimeError> {
-        let mask = (1 << stream - 1) & 0xF;
-        self.output_streams = self.output_streams & !mask;
-        trace!(target: "app::target", "Disable output stream {} => {:04b}", stream, self.output_streams);
+        let mask = (1 << (stream - 1)) & 0xF;
+        self.output_streams &= !mask;
+        debug!(target: "app::stream", "Disable output stream {} => {:04b}", stream, self.output_streams);
         match stream {
             1 | 2 => Ok(()),
             3 => {
@@ -147,10 +144,13 @@ impl IO {
     }
 
     // Output
-    pub fn transcript(&mut self, text: &Vec<u16>) -> Result<(), RuntimeError> {
+    pub fn transcript(&mut self, text: &[u16]) -> Result<(), RuntimeError> {
         if self.is_stream_enabled(2) {
             if let Some(f) = self.stream_2.as_mut() {
-                let t:Vec<u8> = text.iter().map(|c| if *c == 0x0d { 0x0a } else { *c as u8 }).collect();
+                let t: Vec<u8> = text
+                    .iter()
+                    .map(|c| if *c == 0x0d { 0x0a } else { *c as u8 })
+                    .collect();
                 if let Err(e) = f.write_all(&t) {
                     error!(target: "app::io", "Error writing to transcript file: {}", e);
                 }
@@ -167,9 +167,9 @@ impl IO {
             if let Some(s) = self.stream_3.last_mut() {
                 for c in text {
                     match *c {
-                        0 => {},
+                        0 => {}
                         0xa => s.buffer.push(0xd),
-                        _ => s.buffer.push(*c)
+                        _ => s.buffer.push(*c),
                     }
                 }
             } else {
@@ -178,25 +178,23 @@ impl IO {
                     "Stream 3 enabled, but no table to write to".to_string(),
                 ));
             }
-        } else {
-            if self.is_stream_enabled(1) {
-                if self.screen.selected_window() == 1 || !self.buffered {
-                    self.screen.print(text);
-                    if self.screen.selected_window() == 0 {
-                        self.transcript(text)?;
+        } else if self.is_stream_enabled(1) {
+            if self.screen.selected_window() == 1 || !self.buffered {
+                self.screen.print(text);
+                if self.screen.selected_window() == 0 {
+                    self.transcript(text)?;
+                }
+            } else {
+                let words = text.split_inclusive(|c| *c == 0x20);
+                for word in words {
+                    if self.screen.columns() - self.screen.cursor().1 < word.len() as u32 {
+                        self.screen.new_line();
+                        self.transcript(&[0x0a])?;
                     }
-                } else {
-                    let words = text.split_inclusive(|c| *c == 0x20);
-                    for word in words {
-                        if self.screen.columns() - self.screen.cursor().1 < word.len() as u32 {
-                            self.screen.new_line();
-                            self.transcript(&vec![0x0a as u16])?;
-                        }
 
-                        let w = word.to_vec();
-                        self.screen.print(&w);
-                        self.transcript(&w)?;
-                    }
+                    let w = word.to_vec();
+                    self.screen.print(&w);
+                    self.transcript(&w)?;
                 }
             }
         }
@@ -214,18 +212,10 @@ impl IO {
                     "Stream 3 enabled, but no table to write to".to_string(),
                 ));
             }
-        } else {
-            if self.is_stream_enabled(1) {
-                self.screen.new_line();
-                self.transcript(&vec![0x0a as u16])?;
-            }
+        } else if self.is_stream_enabled(1) {
+            self.screen.new_line();
+            self.transcript(&[0x0a])?;
         }
-        // if self.output_streams & 0x5 == 0x1 {
-        //     self.screen.new_line();
-        //     if self.output_streams & 0x2 == 0x2 {
-        //         self.transcript(&vec![0x0a as u16].to_vec())?;
-        //     }
-        // }
 
         Ok(())
     }
@@ -291,8 +281,8 @@ impl IO {
             left.push('.' as u16);
         }
 
-        let mut spaces = vec![0x20 as u16; width - left.len() - right.len() - 1];
-        let mut status_line = vec![0x20 as u16];
+        let mut spaces = vec![0x20; width - left.len() - right.len() - 1];
+        let mut status_line = vec![0x20];
         status_line.append(left);
         status_line.append(&mut spaces);
         status_line.append(right);
@@ -318,7 +308,8 @@ impl IO {
     }
 
     pub fn set_cursor(&mut self, row: u16, column: u16) -> Result<(), RuntimeError> {
-        Ok(self.screen.move_cursor(row as u32, column as u32))
+        self.screen.move_cursor(row as u32, column as u32);
+        Ok(())
     }
 
     pub fn buffer_mode(&mut self, mode: u16) -> Result<(), RuntimeError> {
@@ -327,7 +318,8 @@ impl IO {
     }
 
     pub fn beep(&mut self) -> Result<(), RuntimeError> {
-        Ok(self.screen.beep())
+        self.screen.beep();
+        Ok(())
     }
 
     pub fn set_colors(&mut self, foreground: u16, background: u16) -> Result<(), RuntimeError> {

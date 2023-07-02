@@ -22,7 +22,7 @@ impl ChaChaRng {
     }
 }
 
-impl RNG for ChaChaRng {
+impl ZRng for ChaChaRng {
     fn seed(&mut self, seed: u16) {
         if seed == 0 {
             self.rng = ChaCha8Rng::from_entropy();
@@ -45,7 +45,7 @@ impl RNG for ChaChaRng {
                 if self.predictable_next == self.predictable_range {
                     self.predictable_next = 1;
                 } else {
-                    self.predictable_next = self.predictable_next + 1
+                    self.predictable_next += 1
                 }
                 v
             }

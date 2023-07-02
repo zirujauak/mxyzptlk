@@ -48,19 +48,19 @@ impl Frame {
     pub fn new(
         address: usize,
         pc: usize,
-        local_variables: &Vec<u16>,
+        local_variables: &[u16],
         argument_count: u8,
-        stack: &Vec<u16>,
+        stack: &[u16],
         result: Option<StoreResult>,
         return_address: usize,
     ) -> Frame {
         Frame {
             address,
             pc,
-            local_variables: local_variables.clone(),
+            local_variables: local_variables.to_vec(),
             argument_count,
-            stack: stack.clone(),
-            result: result.clone(),
+            stack: stack.to_vec(),
+            result,
             return_address,
             input_interrupt: false,
             sound_interrupt: false,
@@ -118,7 +118,7 @@ impl Frame {
         } else {
             Err(RuntimeError::new(
                 ErrorCode::StackUnderflow,
-                format!("Poppped an empty stack"),
+                "Poppped an empty stack".to_string(),
             ))
         }
     }
@@ -129,7 +129,7 @@ impl Frame {
         } else {
             Err(RuntimeError::new(
                 ErrorCode::StackUnderflow,
-                format!("Peeked an empty stack"),
+                "Peeked an empty stack".to_string(),
             ))
         }
     }
@@ -231,18 +231,18 @@ impl Frame {
         result: Option<StoreResult>,
         return_address: usize,
     ) -> Result<Frame, RuntimeError> {
-        let mut local_variables = local_variables.clone();
+        let mut lv = local_variables;
 
         for i in 0..arguments.len() {
-            if local_variables.len() > i {
-                local_variables[i] = arguments[i]
+            if lv.len() > i {
+                lv[i] = arguments[i]
             }
         }
 
         Ok(Frame::new(
             address,
             initial_pc,
-            &local_variables,
+            &lv,
             arguments.len() as u8,
             &Vec::new(),
             result,

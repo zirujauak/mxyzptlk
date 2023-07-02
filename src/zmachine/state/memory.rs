@@ -15,8 +15,8 @@ pub fn word_value(hb: u8, lb: u8) -> u16 {
 }
 
 fn byte_values(w: u16) -> (u8, u8) {
-    let hb = ((w >> 8) as u8) & 0xFF;
-    let lb = (w as u8) & 0xFF;
+    let hb = (w >> 8) as u8;
+    let lb = w as u8;
     (hb, lb)
 }
 
@@ -54,13 +54,17 @@ impl Memory {
         self.map.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
     pub fn slice(&self, start: usize, length: usize) -> Vec<u8> {
         let end = usize::min(start + length, self.map.len());
         self.map[start..end].to_vec()
     }
 
     pub fn checksum(&self) -> Result<u16, RuntimeError> {
-        let mut checksum = 0 as u16;
+        let mut checksum = 0;
         let size = self.read_word(HeaderField::FileLength as usize)? as usize
             * match self.version {
                 1 | 2 | 3 => 2,
@@ -156,7 +160,7 @@ impl Memory {
                     cdata.push(run_length);
                     run_length = 0;
                 } else {
-                    run_length = run_length + 1;
+                    run_length += 1;
                 }
             } else {
                 if run_length > 0 {
@@ -196,7 +200,7 @@ impl Memory {
         }
     }
 
-    fn decompress(&self, cdata: &Vec<u8>) -> Vec<u8> {
+    fn decompress(&self, cdata: &[u8]) -> Vec<u8> {
         let mut data = Vec::new();
         let mut iter = cdata.iter();
         let mut done = false;
@@ -222,7 +226,7 @@ impl Memory {
         data
     }
 
-    pub fn restore_compressed(&mut self, cdata: &Vec<u8>) -> Result<(), RuntimeError> {
+    pub fn restore_compressed(&mut self, cdata: &[u8]) -> Result<(), RuntimeError> {
         let data = self.decompress(cdata);
         self.restore(&data)
     }

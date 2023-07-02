@@ -15,17 +15,17 @@ fn usize_as_vec(d: usize, bytes: usize) -> Vec<u8> {
 
 fn vec_as_usize(v: Vec<u8>, bytes: usize) -> usize {
     let mut u: usize = 0;
-    for i in 0..bytes {
-        u = u | ((v[i] as usize) << ((bytes - 1 - i) * 8));
+    for(i, b) in v.iter().enumerate() {
+        u |= (*b as usize) << ((bytes - 1 - i) * 8);
     }
 
     u
 }
 
-fn vec_to_u32(v: &Vec<u8>, offset: usize, bytes: usize) -> u32 {
+fn vec_to_u32(v: &[u8], offset: usize, bytes: usize) -> u32 {
     let mut u: u32 = 0;
-    for i in 0..bytes {
-        u = u | ((v[offset + i] as u32) << ((bytes - i - 1) * 8));
+    for (i, b) in v[offset..offset + bytes].iter().enumerate() {
+        u |= (*b as u32) << ((bytes - i - 1) * 8);
     }
     u
 }
@@ -38,7 +38,7 @@ fn u32_to_vec(d: u32, bytes: usize) -> Vec<u8> {
     v
 }
 
-fn vec_to_id(v: &Vec<u8>, offset: usize) -> String {
+fn vec_to_id(v: &[u8], offset: usize) -> String {
     let mut id = String::new();
     for i in 0..4 {
         id.push(v[offset + i] as char);
@@ -74,7 +74,7 @@ pub struct Chunk {
 
 impl fmt::Display for Chunk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(_) = self.form {
+        if self.form.is_some() {
             write!(
                 f,
                 "FORM: {} {:06x} {}",
@@ -97,16 +97,15 @@ impl fmt::Display for Chunk {
 impl From<(&Vec<u8>, usize)> for Chunk {
     fn from((value, offset): (&Vec<u8>, usize)) -> Self {
         let mut form = None;
-        let mut id = vec_to_id(&value, offset);
+        let mut id = vec_to_id(value, offset);
         if id == "FORM" {
             form = Some(id);
-            id = vec_to_id(&value, offset + 8);
+            id = vec_to_id(value, offset + 8);
         }
 
-        let length = vec_to_u32(&value, offset + 4, 4);
+        let length = vec_to_u32(value, offset + 4, 4);
         let data = value[offset + 8..offset + 8 + length as usize].to_vec();
 
-        trace!(target: "app::trace", "{:?} {} {:06x} {}", form, id, length, data.len());
         Chunk::new(offset, form, id, &data)
     }
 }
@@ -148,7 +147,6 @@ impl From<Chunk> for Vec<u8> {
 impl Chunk {
     pub fn new(offset: usize, form: Option<String>, id: String, data: &Vec<u8>) -> Chunk {
         let length = data.len() as u32 + if data.len() % 2 == 1 { 1 } else { 0 };
-        trace!(target: "app::trace", "{:?} {} {:06x} {}", form, id, length, data.len());
         Chunk {
             offset,
             form,
@@ -201,7 +199,7 @@ impl From<&Vec<u8>> for IFF {
             chunks.push(chunk);
             offset = offset + 8 + l;
             if l % 2 == 1 {
-                offset = offset + 1;
+                offset += 1;
             }
         }
 

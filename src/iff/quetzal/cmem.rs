@@ -20,7 +20,7 @@ impl From<Vec<u8>> for CMem {
 
 impl From<Chunk> for CMem {
     fn from(value: Chunk) -> CMem {
-        CMem::new(&value.data())
+        CMem::new(value.data())
     }
 }
 
@@ -31,8 +31,8 @@ impl From<&CMem> for Vec<u8> {
 }
 
 impl CMem {
-    pub fn new(data: &Vec<u8>) -> CMem {
-        CMem { data: data.clone() }
+    pub fn new(data: &[u8]) -> CMem {
+        CMem { data: data.to_vec() }
     }
 
     pub fn data(&self) -> &Vec<u8> {

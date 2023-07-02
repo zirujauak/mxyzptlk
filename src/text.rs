@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use crate::{
     error::*,
     zmachine::{state::header::HeaderField, ZMachine},
@@ -45,20 +47,7 @@ fn abbreviation(
 /// * `v` - Version (1-8)
 /// * `a` - Address of the ZSCII-encoded string
 pub fn as_text(zmachine: &ZMachine, address: usize) -> Result<Vec<u16>, RuntimeError> {
-    let text = zmachine.string_literal(address)?;
-    // let mut d = Vec::new();
-    // // If the last word read has bit 15 set, then we're done reading
-    // while match d.last() {
-    //     Some(x) => *x,
-    //     _ => 0,
-    // } & 0x8000
-    //     == 0
-    // {
-    //     let w = zmachine.memory().read_word(address + (d.len() * 2))?;
-    //     d.push(w);
-    // }
-
-    from_vec(zmachine, &text)
+    from_vec(zmachine, &zmachine.string_literal(address)?)
 }
 
 /// Decode a vector of ZSCII words to a string
@@ -71,7 +60,6 @@ pub fn as_text(zmachine: &ZMachine, address: usize) -> Result<Vec<u16>, RuntimeE
 pub fn from_vec(zmachine: &ZMachine, ztext: &Vec<u16>) -> Result<Vec<u16>, RuntimeError> {
     let mut alphabet_shift: usize = 0;
     let mut s = Vec::new();
-    let mut i = 0;
 
     let mut abbrev = 0;
     let mut zscii_read1 = false;
@@ -116,8 +104,6 @@ pub fn from_vec(zmachine: &ZMachine, ztext: &Vec<u16>) -> Result<Vec<u16>, Runti
                 alphabet_shift = 0;
             }
         }
-
-        i = i + 1;
     }
     Ok(s)
 }
@@ -152,7 +138,7 @@ fn find_char(zchar: u16) -> Vec<u16> {
 
     let z1 = (c as u8 >> 5) & 0x1f;
     let z2 = c as u8 & 0x1f;
-    return vec![5, 6, z1 as u16, z2 as u16];
+    vec![5, 6, z1 as u16, z2 as u16]
 }
 
 fn as_word(z1: u16, z2: u16, z3: u16) -> u16 {
@@ -164,7 +150,7 @@ fn search_entry(
     address: usize,
     entry_count: usize,
     entry_size: usize,
-    word: &Vec<u16>,
+    word: &[u16],
 ) -> Result<usize, RuntimeError> {
     let mut min = 0;
     let mut max = entry_count - 1;
@@ -178,35 +164,39 @@ fn search_entry(
     // If min exceeds max, the entry was not found
     'outer: loop {
         let addr = address + (pivot * entry_size);
-        for i in 0..word.len() {
+        for (i, wrd) in word.iter().enumerate() {
             let w = zmachine.read_word(addr + (i * 2))?;
-            if w > word[i] {
-                if pivot == min {
-                    break 'outer;
+            match w.cmp(wrd) {
+                Ordering::Greater => {
+                    if pivot == min {
+                        break 'outer;
+                    }
+                    max = pivot - 1;
+                    let new_pivot = min + ((max - min) / 2);
+                    if new_pivot == pivot {
+                        pivot = new_pivot - 1;
+                    } else {
+                        pivot = new_pivot;
+                    }
+                    continue 'outer;
                 }
-                max = pivot - 1;
-                let new_pivot = min + ((max - min) / 2);
-                if new_pivot == pivot {
-                    pivot = new_pivot - 1;
-                } else {
-                    pivot = new_pivot;
+                Ordering::Less => {
+                    if pivot == max {
+                        break 'outer;
+                    }
+                    min = pivot + 1;
+                    let new_pivot = min + ((max - min) / 2);
+                    if new_pivot == pivot {
+                        pivot = new_pivot + 1;
+                    } else {
+                        pivot = new_pivot
+                    }
+                    if pivot > max {
+                        break 'outer;
+                    }
+                    continue 'outer;
                 }
-                continue 'outer;
-            } else if w < word[i] {
-                if pivot == max {
-                    break 'outer;
-                }
-                min = pivot + 1;
-                let new_pivot = min + ((max - min) / 2);
-                if new_pivot == pivot {
-                    pivot = new_pivot + 1;
-                } else {
-                    pivot = new_pivot
-                }
-                if pivot > max {
-                    break 'outer;
-                }
-                continue 'outer;
+                Ordering::Equal => {}
             }
         }
 
@@ -221,15 +211,14 @@ fn scan_entry(
     address: usize,
     entry_count: usize,
     entry_size: usize,
-    words: &Vec<u16>,
+    words: &[u16],
 ) -> Result<usize, RuntimeError> {
     // Scan the unsorted dictionary
-    let word_count = words.len();
     'outer: for i in 0..entry_count {
-        let entry_address = address + (i * entry_size as usize);
-        for j in 0..word_count {
+        let entry_address = address + (i * entry_size);
+        for (j, w) in words.iter().enumerate() {
             let ew = zmachine.read_word(entry_address + (j * 2))?;
-            if ew != words[j] {
+            if ew != *w {
                 continue 'outer;
             }
         }
@@ -240,23 +229,17 @@ fn scan_entry(
     Ok(0)
 }
 
-pub fn encode_text(word: &Vec<u16>, words: usize) -> Vec<u16> {
+pub fn encode_text(word: &mut Vec<u16>, words: usize) -> Vec<u16> {
     let mut zchars = Vec::new();
 
     // Read at most words * 3 characters from word
-    let c = usize::min(word.len(), words * 3);
-    for i in 0..c {
-        zchars.append(&mut find_char(word[i]));
+    word.truncate(words * 3);
+    for c in word {
+        zchars.append(&mut find_char(*c));
     }
 
     // Truncate or pad characters
-    if zchars.len() > words * 3 {
-        zchars.truncate(words * 3);
-    } else {
-        for _ in zchars.len()..words * 3 {
-            zchars.push(5);
-        }
-    }
+    zchars.resize(words * 3, 5);
 
     info!(target: "app::input", "LEXICAL ANALYSIS: zchars: {:?}", zchars);
 
@@ -266,7 +249,7 @@ pub fn encode_text(word: &Vec<u16>, words: usize) -> Vec<u16> {
         let index = i * 3;
         let mut w = as_word(zchars[index], zchars[index + 1], zchars[index + 2]);
         if i == words - 1 {
-            w = w | 0x8000;
+            w |= 0x8000;
         }
         zwords.push(w);
     }
@@ -277,7 +260,7 @@ pub fn encode_text(word: &Vec<u16>, words: usize) -> Vec<u16> {
 pub fn from_dictionary(
     zmachine: &ZMachine,
     dictionary_address: usize,
-    word: &Vec<char>,
+    word: &[char],
 ) -> Result<usize, RuntimeError> {
     let separator_count = zmachine.read_byte(dictionary_address)? as usize;
     let entry_size = zmachine.read_byte(dictionary_address + separator_count + 1)? as usize;
@@ -286,8 +269,8 @@ pub fn from_dictionary(
 
     info!(target: "app::input", "LEXICAL ANALYSIS: dictionary @ {:04x}, {} separators, {} entries of size {}", dictionary_address, separator_count, entry_count, entry_size);
 
-    let zchars = word.iter().map(|c| *c as u16).collect::<Vec<u16>>();
-    let words = encode_text(&zchars, word_count);
+    let mut zchars = word.iter().map(|c| *c as u16).collect::<Vec<u16>>();
+    let words = encode_text(&mut zchars, word_count);
 
     info!(target: "app::input", "LEXICAL ANALYSIS: encoded text: {:?}", words);
 
@@ -303,7 +286,7 @@ pub fn from_dictionary(
         scan_entry(
             zmachine,
             dictionary_address + separator_count + 4,
-            (entry_count * -1) as usize,
+            i16::abs(entry_count) as usize,
             entry_size,
             &words,
         )
@@ -316,8 +299,7 @@ fn find_word(
     parse_buffer: usize,
     flag: bool,
     parse_index: usize,
-    word_count: usize,
-    word_start: usize,
+    (word_count, word_start): (usize, usize),
     word: &Vec<char>,
 ) -> Result<(usize, usize), RuntimeError> {
     let entry = from_dictionary(zmachine, dictionary, word)?;
@@ -328,7 +310,7 @@ fn find_word(
     if !flag {
         store_parsed_entry(
             zmachine,
-            &word,
+            word,
             word_start + offset,
             parse_address,
             entry as u16,
@@ -340,7 +322,7 @@ fn find_word(
         if e == 0 {
             store_parsed_entry(
                 zmachine,
-                &word,
+                word,
                 word_start + offset,
                 parse_address,
                 entry as u16,
@@ -363,7 +345,7 @@ fn store_parsed_entry(
     entry: u16,
 ) -> Result<(), RuntimeError> {
     info!(target: "app::input", "LEXICAL_ANALYSIS: dictionary for {:?} => stored to ${:04x}: {:#04x}/{}/{}", word, entry_address, entry, word.len(), word_start);
-    zmachine.write_word(entry_address, entry as u16)?;
+    zmachine.write_word(entry_address, entry)?;
     zmachine.write_byte(entry_address + 2, word.len() as u8)?;
     zmachine.write_byte(entry_address + 3, word_start as u8)?;
     Ok(())
@@ -393,7 +375,7 @@ pub fn parse_text(
                 break;
             } else {
                 data.push(b);
-                i = i + 1;
+                i += 1;
             }
         }
     } else {
@@ -407,23 +389,22 @@ pub fn parse_text(
     let max_words = zmachine.read_byte(parse_buffer)? as usize;
 
     // let data = input_buffer[0..end].to_vec();
-    for i in 0..data.len() {
-        let c = ((data[i] as u8) as char).to_ascii_lowercase();
+    for (i, b) in data.iter().enumerate() {
+        let c = (*b as char).to_ascii_lowercase();
         if word_count > max_words {
             break;
         }
 
         if separators.contains(&c) {
             // Store the word
-            if word.len() > 0 {
+            if !word.is_empty() {
                 (word_count, words) = find_word(
                     zmachine,
                     dictionary,
                     parse_buffer,
                     flag,
                     word_count,
-                    words,
-                    word_start,
+                    (words, word_start),
                     &word,
                 )?;
             }
@@ -437,8 +418,7 @@ pub fn parse_text(
                     parse_buffer,
                     flag,
                     word_count,
-                    words,
-                    word_start + word.len(),
+                    (words, word_start + word.len()),
                     &sep,
                 )?;
             }
@@ -446,15 +426,14 @@ pub fn parse_text(
             word_start = i + 1;
         } else if c == ' ' {
             // Store the word but not the space
-            if word.len() > 0 {
+            if !word.is_empty() {
                 (word_count, words) = find_word(
                     zmachine,
                     dictionary,
                     parse_buffer,
                     flag,
                     word_count,
-                    words,
-                    word_start,
+                    (words, word_start),
                     &word,
                 )?;
             }
@@ -466,15 +445,14 @@ pub fn parse_text(
     }
 
     // End of input, parse anything collected
-    if word.len() > 0 && word_count < max_words {
+    if !word.is_empty() && word_count < max_words {
         (_, words) = find_word(
             zmachine,
             dictionary,
             parse_buffer,
             flag,
             word_count,
-            words,
-            word_start,
+            (words, word_start),
             &word,
         )?;
     }

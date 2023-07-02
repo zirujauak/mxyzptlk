@@ -168,21 +168,13 @@ impl State {
         self.frames.len()
     }
 
-    // pub fn interrupt(&self) -> Option<&Interrupt> {
-    //     self.interrupt.as_ref()
-    // }
-
-    // pub fn clear_interrupt(&mut self) {
-    //     self.interrupt = None;
-    // }
-
     fn current_frame(&self) -> Result<&Frame, RuntimeError> {
         if let Some(frame) = self.frames.last() {
             Ok(frame)
         } else {
             Err(RuntimeError::new(
                 ErrorCode::StackUnderflow,
-                format!("No runtime frame"),
+                "No runtime frame".to_string(),
             ))
         }
     }
@@ -193,7 +185,7 @@ impl State {
         } else {
             Err(RuntimeError::new(
                 ErrorCode::StackUnderflow,
-                format!("No runtime frame"),
+                "No runtime frame".to_string(),
             ))
         }
     }
@@ -221,8 +213,8 @@ impl State {
         if self.version > 3 {
             header::set_byte(self, HeaderField::DefaultBackground, default_colors.1)?;
             header::set_byte(self, HeaderField::DefaultForeground, default_colors.0)?;
-            header::set_byte(self, HeaderField::ScreenLines, rows as u8)?;
-            header::set_byte(self, HeaderField::ScreenColumns, columns as u8)?;
+            header::set_byte(self, HeaderField::ScreenLines, rows)?;
+            header::set_byte(self, HeaderField::ScreenColumns, columns)?;
 
             header::set_flag1(self, Flags1v4::SoundEffectsAvailable as u8)?;
         }
@@ -250,7 +242,7 @@ impl State {
 
         // Interpreter # and version
         self.write_byte(0x1E, 6)?;
-        self.write_byte(0x1F, 'Z' as u8)?;
+        self.write_byte(0x1F, b'Z')?;
 
         // Z-Machine standard compliance
         self.write_byte(0x32, 1)?;
@@ -258,7 +250,7 @@ impl State {
 
         if self.frames.is_empty() {
             let pc = header::field_word(self, HeaderField::InitialPC)? as usize;
-            let f = Frame::new(pc, pc, &vec![], 0, &vec![], None, 0);
+            let f = Frame::new(pc, pc, &[], 0, &[], None, 0);
             self.frames.clear();
             self.frames.push(f);
         }
@@ -384,17 +376,16 @@ impl State {
 
     fn routine_header(&self, address: usize) -> Result<(usize, Vec<u16>), RuntimeError> {
         let variable_count = self.memory.read_byte(address)? as usize;
-        let mut local_variables = vec![0 as u16; variable_count];
-
-        let initial_pc = if self.version < 5 {
+        let (initial_pc, local_variables) = if self.version < 5 {
+            let mut l = Vec::new();
             for i in 0..variable_count {
                 let a = address + 1 + (i * 2);
-                local_variables[i] = self.memory.read_word(a)?;
+                l.push(self.memory.read_word(a)?);
             }
 
-            address + 1 + (variable_count * 2)
+            (address + 1 + (variable_count * 2), l)
         } else {
-            address + 1
+            (address + 1, vec![0; variable_count])
         };
 
         Ok((initial_pc, local_variables))
@@ -446,11 +437,7 @@ impl State {
 
     // Routines/Interrupts
     pub fn is_input_interrupt(&self) -> bool {
-        if let Some(_) = self.read_interrupt_result {
-            true
-        } else {
-            false
-        }
+        self.read_interrupt_result.is_some()
     }
 
     pub fn call_routine(
@@ -500,7 +487,7 @@ impl State {
         } else {
             Err(RuntimeError::new(
                 ErrorCode::System,
-                format!("No read interrupt pending"),
+                "No read interrupt pending".to_string(),
             ))
         }
     }
@@ -561,14 +548,12 @@ impl State {
             let n = self.current_frame_mut()?;
             n.set_pc(f.return_address());
             debug!(target: "app::frame", "Return to ${:06x} -> {:?}", f.return_address(), f.result());
-            match f.input_interrupt() {
-                false => match f.result() {
-                    Some(r) => self.set_variable(r.variable(), value)?,
-                    None => (),
-                },
-                true => if self.read_interrupt_pending {
+            if f.input_interrupt() {
+                if self.read_interrupt_pending {
                     self.read_interrupt_result = Some(value);
-                },
+                }
+            } else if let Some(r) = f.result() {
+                self.set_variable(r.variable(), value)?
             }
 
             Ok(self.current_frame()?.pc())

@@ -10,8 +10,7 @@ fn cp(fg: i16, bg: i16) -> i16 {
     // color range 0-7, so 3 bits each
     // color pair index is 6 bits, 00ff fbbb + 1
     // pairs 1 - 64 are used by the basic colors, leaving 191 for "true" colors
-    let cp = ((fg << 3) & 0x38) + (bg & 0x07) + 1;
-    cp
+    ((fg << 3) & 0x38) + (bg & 0x07) + 1
 }
 
 impl PCTerminal {
@@ -29,7 +28,7 @@ impl PCTerminal {
         // Initialize fg/bg color pairs
         for fg in 0..8 {
             for bg in 0..8 {
-                pancurses::init_pair(cp(fg as i16, bg as i16), fg, bg);
+                pancurses::init_pair(cp(fg, bg), fg, bg);
             }
         }
 
@@ -112,13 +111,13 @@ impl Terminal for PCTerminal {
         let cp = cp(self.as_color(colors.0), self.as_color(colors.1));
         let mut attributes = 0;
         if style.is_style(Style::Bold) {
-            attributes = attributes | A_BOLD;
+            attributes |= A_BOLD;
         }
         if style.is_style(Style::Italic) {
-            attributes = attributes | A_UNDERLINE;
+            attributes |= A_UNDERLINE;
         }
         if style.is_style(Style::Reverse) {
-            attributes = attributes | A_REVERSE;
+            attributes |= A_REVERSE;
         }
         self.window.mv(row as i32 - 1, column as i32 - 1);
         self.window.addstr(format!("{}", c));

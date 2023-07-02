@@ -11,9 +11,14 @@ pub struct Config {
     logging: bool,
 }
 
-impl Config {
-    pub fn default() -> Config {
+impl Default for Config {
+    fn default() -> Self {
         Config { terminal: "pancurses".to_string(), foreground: 9, background: 2, logging: false}
+    }
+}
+impl Config {
+    pub fn new(terminal: String, foreground: u8, background: u8, logging: bool) -> Self {
+        Config { terminal, foreground, background, logging}
     }
 
     pub fn from_file(file: File) -> Result<Config, RuntimeError> {
@@ -32,20 +37,16 @@ impl Config {
                     None => 2
                 };
                 let logging = match data["logging"].as_str() {
-                    Some(t) => if t == "enabled" {
-                        true
-                    } else {
-                        false
-                    },
+                    Some(t) => t == "enabled",
                     None => false
                 };
                 
-                Ok(Config {
+                Ok(Config::new(
                     terminal,
                     foreground,
                     background,
                     logging
-                })
+                ))
             },
             Err(e) => {
                 Err(RuntimeError::new(ErrorCode::System, format!("{}", e)))

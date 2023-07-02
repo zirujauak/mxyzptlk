@@ -23,10 +23,10 @@ impl Player for RodioPlayer {
         }
     }
 
-    fn play_sound(&mut self, sound: &Vec<u8>, volume: u8, repeats: u8) -> Result<(), RuntimeError> {
+    fn play_sound(&mut self, sound: &[u8], volume: u8, repeats: u8) -> Result<(), RuntimeError> {
         match NamedTempFile::new() {
             Ok(mut write) => match write.reopen() {
-                Ok(read) => match write.write_all(&sound) {
+                Ok(read) => match write.write_all(sound) {
                     Ok(_) => {
                         match Decoder::new(read) {
                             Ok(source) => {

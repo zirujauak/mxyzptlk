@@ -17,7 +17,7 @@ impl fmt::Display for IFhd {
         for i in 0..6 {
             write!(f, "{}", self.serial_number[i as usize] as char)?;
         }
-        writeln!(f, "")?;
+        writeln!(f)?;
         writeln!(f, "\tChecksum: {:04x}", self.checksum)?;
         write!(f, "\tPC: ${:06x}", self.pc)
     }
@@ -25,10 +25,10 @@ impl fmt::Display for IFhd {
 
 impl From<Chunk> for IFhd {
     fn from(value: Chunk) -> IFhd {
-        let release_number = vec_to_u32(&value.data(), 0, 2) as u16;
+        let release_number = vec_to_u32(value.data(), 0, 2) as u16;
         let serial_number = value.data()[2..8].to_vec();
-        let checksum = vec_to_u32(&value.data(), 8, 2) as u16;
-        let pc = vec_to_u32(&value.data(), 10, 3);
+        let checksum = vec_to_u32(value.data(), 8, 2) as u16;
+        let pc = vec_to_u32(value.data(), 10, 3);
 
         IFhd {
             release_number,
@@ -72,10 +72,10 @@ impl PartialEq for IFhd {
 }
 
 impl IFhd {
-    pub fn new(release_number: u16, serial_number: &Vec<u8>, checksum: u16, pc: u32) -> IFhd {
+    pub fn new(release_number: u16, serial_number: &[u8], checksum: u16, pc: u32) -> IFhd {
         IFhd {
             release_number,
-            serial_number: serial_number.clone(),
+            serial_number: serial_number.to_vec(),
             checksum,
             pc,
         }

@@ -23,14 +23,14 @@ fn operand_values(
     let mut v = Vec::new();
     let mut l = "Operand values: ".to_string();
     for o in instruction.operands() {
-        let value = operand_value(zmachine, &o)?;
+        let value = operand_value(zmachine, o)?;
         match o.operand_type {
             OperandType::SmallConstant => l.push_str(&format!(" #{:02x}", value as u8)),
             _ => l.push_str(&format!(" #{:04x}", value)),
         }
         v.push(value)
     }
-    if v.len() > 0 {
+    if !v.is_empty() {
         info!(target: "app::instruction", "{}", l);
     }
     Ok(v)
@@ -77,14 +77,10 @@ fn call_fn(
 ) -> Result<usize, RuntimeError> {
     match address {
         0 | 1 => {
-            match result {
-                Some(r) => match zmachine.set_variable(r.variable, address as u16) {
-                    Ok(_) => (),
-                    Err(e) => return Err(e),
-                },
-                None => (),
+            if let Some(r) = result {
+                zmachine.set_variable(r.variable, address as u16)?
             }
-
+            
             Ok(return_addr)
         }
         _ => zmachine.call_routine(address, arguments, result, return_addr),
