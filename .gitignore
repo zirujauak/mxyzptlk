@@ -12,9 +12,13 @@ Cargo.lock
 # Macos
 .DS_Store
 
+# VScode
+*.code-workspace
+
 # Zmachine
 /*.z[0-9]
 *.ifzs
 *.log
 *.txt
 *.blorb
+*.blb
