@@ -9,13 +9,13 @@ use std::panic;
 
 pub mod config;
 pub mod error;
+pub mod files;
 pub mod iff;
 pub mod instruction;
 pub mod object;
 pub mod sound;
 pub mod text;
 pub mod zmachine;
-pub mod files;
 
 use crate::config::Config;
 use crate::log::*;
@@ -25,7 +25,7 @@ use zmachine::state::memory::Memory;
 use zmachine::ZMachine;
 
 fn initialize_sound_engine(name: &str) -> Option<Manager> {
-    if let Some(filename) = files::check_existing(name, &["blorb", "blb"]) {
+    if let Some(filename) = files::find_existing(name, &["blorb", "blb"]) {
         match File::open(&filename) {
             Ok(mut f) => {
                 let mut data = Vec::new();
@@ -59,7 +59,7 @@ fn initialize_sound_engine(name: &str) -> Option<Manager> {
 }
 
 fn initialize_config() -> Config {
-    if let Some(filename) = files::check_existing("~/.mxyzptlk/config", &["yml"]) {
+    if let Some(filename) = files::config_file("config.yml") {
         match File::open(&filename) {
             Ok(f) => match Config::try_from(f) {
                 Ok(config) => config,
@@ -82,28 +82,28 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
     let name: Vec<&str> = filename.split('.').collect();
-
     let name = name[0].to_string();
     let config = initialize_config();
 
     if config.logging() {
-        let name: Vec<&str> = filename.split('/').collect();
-        let name = name[name.len() - 1].to_string();
-        if log4rs::init_file("~/.mxyzptlk/log4rs.yml", Default::default()).is_ok() {
-            log_mdc::insert("instruction_count", format!("{:8x}", 0));
+        if let Some(filename) = files::config_file("log4rs.yml") {
+            if log4rs::init_file(filename, Default::default()).is_ok() {
+                log_mdc::insert("instruction_count", format!("{:8x}", 0));
+            }
+
+            error!(target: "app::blorb", "Start blorb log for '{}'", name);
+            error!(target: "app::frame", "Start frame log for '{}'", name);
+            error!(target: "app::input", "Start input log for '{}'", name);
+            error!(target: "app::instruction", "Start instruction log for '{}'", name);
+            error!(target: "app::memory", "Start memory log for '{}'", name);
+            error!(target: "app::object", "Start object log for '{}'", name);
+            error!(target: "app::quetzal", "Start quetzal log for '{}'", name);
+            error!(target: "app::sound", "Start sound log for '{}'", name);
+            error!(target: "app::stack", "Start stack log for '{}'", name);
+            error!(target: "app::trace", "Start trace log for '{}'", name);
+            error!(target: "app::variable", "Start variable log for '{}'", name);
+            info!(target: "app::trace", "{:?}", config);
         }
-        
-        error!(target: "app::blorb", "Start blorb log for '{}'", name);
-        error!(target: "app::frame", "Start frame log for '{}'", name);
-        error!(target: "app::input", "Start input log for '{}'", name);
-        error!(target: "app::instruction", "Start instruction log for '{}'", name);
-        error!(target: "app::memory", "Start memory log for '{}'", name);
-        error!(target: "app::object", "Start object log for '{}'", name);
-        error!(target: "app::quetzal", "Start quetzal log for '{}'", name);
-        error!(target: "app::sound", "Start sound log for '{}'", name);
-        error!(target: "app::stack", "Start stack log for '{}'", name);
-        error!(target: "app::trace", "Start trace log for '{}'", name);
-        error!(target: "app::variable", "Start variable log for '{}'", name);
     }
 
     let prev = panic::take_hook();
