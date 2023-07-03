@@ -8,7 +8,7 @@ edition = "2021"
 default = ["sndfile","pancurses"]
 sndfile = ["dep:sndfile"]
 pancurses = ["dep:pancurses"]
-easycurses = ["dep:easycurses"]
+easycurses = ["dep:easycurses", "dep:pancurses"]
 
 [dependencies]
 time = "0.3.20"
