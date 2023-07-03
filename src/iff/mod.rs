@@ -51,11 +51,11 @@ fn id_as_vec(id: &str) -> Vec<u8> {
     id.as_bytes()[0..4].to_vec()
 }
 
-fn chunk(id: &str, data: &mut Vec<u8>) -> Vec<u8> {
+fn chunk(id: &str, data: &[u8]) -> Vec<u8> {
     let mut chunk = id_as_vec(id);
     let data_length = data.len();
     chunk.append(&mut usize_as_vec(data.len(), 4));
-    chunk.append(data);
+    chunk.append(&mut data.to_vec());
     if data_length % 2 == 1 {
         // Padding byte, not included in chunk length
         chunk.push(0);

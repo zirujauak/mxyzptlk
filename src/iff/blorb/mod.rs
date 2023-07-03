@@ -15,6 +15,7 @@ pub mod aiff;
 pub mod oggv;
 pub mod ridx;
 pub mod sloop;
+
 pub struct Blorb {
     ridx: Option<RIdx>,
     ifhd: Option<IFhd>,
@@ -135,6 +136,45 @@ impl Blorb {
 
     pub fn sloop(&self) -> Option<&Loop> {
         self.sloop.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ridx::Index;
+    use sloop::Entry;
+
+    #[test]
+    fn test_new() {
+        let ridx = RIdx::new(&[Index::new("Snd ".to_string(), 1, 2)]);
+        let ifhd = IFhd::new(1, &[1, 2, 3, 4, 5, 6], 0x1122, 0x654321);
+        let mut oggv = HashMap::new();
+        oggv.insert(1, OGGV::new(&[1, 2, 3, 4]));
+        let mut aiff = HashMap::new();
+        aiff.insert(2, AIFF::new(&[5, 6, 7, 8]));
+        let sloop = Loop::new(&[Entry::new(10, 11)]);
+        let blorb = Blorb::new(Some(ridx), Some(ifhd), oggv, aiff, Some(sloop));
+        assert!(blorb.ridx().is_some());
+        assert_eq!(blorb.ridx().unwrap().entries().len(), 1);
+        assert_eq!(blorb.ridx().unwrap().entries()[0].usage(), "Snd ");
+        assert_eq!(blorb.ridx().unwrap().entries()[0].number(), 1);
+        assert_eq!(blorb.ridx().unwrap().entries()[0].start(), 2);
+        assert_eq!(blorb.oggv().len(), 1);
+        assert!(blorb.oggv().get(&1).is_some());
+        assert_eq!(blorb.oggv().get(&1).unwrap().data(), &[1, 2, 3, 4]);
+        assert_eq!(blorb.aiff().len(), 1);
+        assert!(blorb.aiff().get(&2).is_some());
+        assert_eq!(blorb.aiff().get(&2).unwrap().data(), &[5, 6, 7, 8]);
+        assert!(blorb.ifhd().is_some());
+        assert_eq!(blorb.ifhd().unwrap().release_number(), 1);
+        assert_eq!(blorb.ifhd().unwrap().serial_number(), &[1, 2, 3, 4, 5, 6]);
+        assert_eq!(blorb.ifhd().unwrap().checksum(), 0x1122);
+        assert_eq!(blorb.ifhd().unwrap().pc(), 0x654321);
+        assert!(blorb.sloop().is_some());
+        assert_eq!(blorb.sloop().unwrap().entries().len(), 1);
+        assert_eq!(blorb.sloop().unwrap().entries()[0].number(), 10);
+        assert_eq!(blorb.sloop().unwrap().entries()[0].repeats(), 11);
     }
 }
 

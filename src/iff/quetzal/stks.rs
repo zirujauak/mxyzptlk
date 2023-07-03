@@ -195,7 +195,7 @@ impl From<&Stks> for Vec<u8> {
         for stk in value.stks() {
             data.append(&mut Vec::from(stk));
         }
-        chunk("Stks", &mut data)
+        chunk("Stks", &data)
     }
 }
 

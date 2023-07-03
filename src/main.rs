@@ -81,8 +81,15 @@ fn initialize_config() -> Config {
 fn main() {
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
-    let name: Vec<&str> = filename.split('.').collect();
-    let name = name[0].to_string();
+    // full_name includes any path info and will be used to look for Blorb resources
+    // co-located with the game file
+    let full_name = filename.split('.').collect::<Vec<&str>>()[0].to_string();
+    let name = full_name
+        .split('/')
+        .collect::<Vec<&str>>()
+        .last()
+        .unwrap()
+        .to_string();
     let config = initialize_config();
 
     if config.logging() {
@@ -91,17 +98,17 @@ fn main() {
                 log_mdc::insert("instruction_count", format!("{:8x}", 0));
             }
 
-            error!(target: "app::blorb", "Start blorb log for '{}'", name);
-            error!(target: "app::frame", "Start frame log for '{}'", name);
-            error!(target: "app::input", "Start input log for '{}'", name);
-            error!(target: "app::instruction", "Start instruction log for '{}'", name);
-            error!(target: "app::memory", "Start memory log for '{}'", name);
-            error!(target: "app::object", "Start object log for '{}'", name);
-            error!(target: "app::quetzal", "Start quetzal log for '{}'", name);
-            error!(target: "app::sound", "Start sound log for '{}'", name);
-            error!(target: "app::stack", "Start stack log for '{}'", name);
-            error!(target: "app::trace", "Start trace log for '{}'", name);
-            error!(target: "app::variable", "Start variable log for '{}'", name);
+            error!(target: "app::blorb", "Start blorb log for '{}'", full_name);
+            error!(target: "app::frame", "Start frame log for '{}'", full_name);
+            error!(target: "app::input", "Start input log for '{}'", full_name);
+            error!(target: "app::instruction", "Start instruction log for '{}'", full_name);
+            error!(target: "app::memory", "Start memory log for '{}'", full_name);
+            error!(target: "app::object", "Start object log for '{}'", full_name);
+            error!(target: "app::quetzal", "Start quetzal log for '{}'", full_name);
+            error!(target: "app::sound", "Start sound log for '{}'", full_name);
+            error!(target: "app::stack", "Start stack log for '{}'", full_name);
+            error!(target: "app::trace", "Start trace log for '{}'", full_name);
+            error!(target: "app::variable", "Start variable log for '{}'", full_name);
             info!(target: "app::trace", "{:?}", config);
         }
     }

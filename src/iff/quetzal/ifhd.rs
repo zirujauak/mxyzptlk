@@ -59,7 +59,7 @@ impl From<&IFhd> for Vec<u8> {
         data.append(&mut usize_as_vec(value.checksum() as usize, 2));
         data.append(&mut usize_as_vec(value.pc() as usize, 3));
 
-        chunk("IFhd", &mut data)
+        chunk("IFhd", &data)
     }
 }
 

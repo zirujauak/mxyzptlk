@@ -26,7 +26,7 @@ impl From<Chunk> for UMem {
 
 impl From<&UMem> for Vec<u8> {
     fn from(value: &UMem) -> Vec<u8> {
-        chunk("UMem", &mut value.data.clone())
+        chunk("UMem", value.data())
     }
 }
 
