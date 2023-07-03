@@ -48,3 +48,18 @@ pub fn last_existing(base: &str, suffix: &str) -> Result<Vec<u16>, RuntimeError>
         n += 1;
     }
 }
+
+pub fn check_existing(base: &str, extensions: &[&str]) -> Option<String> {
+    for ext in extensions {
+        let filename = format!("{}.{}", base, ext);
+        let p = Path::new(&filename);
+        match p.try_exists() {
+            Ok(b) => if b { return Some(filename) },
+            Err(e) => {
+                info!(target: "app::trace", "Error checking existence of {}: {}", filename, e)
+            }
+        }
+    }
+
+    None
+}

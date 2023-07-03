@@ -3,7 +3,10 @@ mod curses;
 use crate::config::Config;
 use crate::error::*;
 
+#[cfg(feature = "easycurses")]
 use curses::easy_curses::ECTerminal;
+
+#[cfg(feature = "pancurses")]
 use curses::pancurses::PCTerminal;
 
 #[derive(Clone, Copy, Debug)]
@@ -165,19 +168,19 @@ pub struct Screen {
     lines_since_input: u32,
 }
 
+#[cfg(feature = "easycurses")]
+fn new_terminal() -> Box<dyn Terminal> {
+    Box::new(ECTerminal::new())
+}
+
+#[cfg(feature = "pancurses")]
+fn new_terminal() -> Box<dyn Terminal> {
+    Box::new(PCTerminal::new())
+}
+
 impl Screen {
     pub fn new_v3(config: Config) -> Result<Screen, RuntimeError> {
-        //foreground: Color, background: Color) -> Screen {
-        let terminal: Box<dyn Terminal> = if config.terminal().eq("pancurses") {
-            Box::new(PCTerminal::new())
-        } else if config.terminal().eq("easycurses") {
-            Box::new(ECTerminal::new())
-        } else {
-            return Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Invalid terminal '{}'", config.terminal()),
-            ));
-        };
+        let terminal = new_terminal();
 
         let (rows, columns) = terminal.as_ref().size();
         let colors = map_colors(config.foreground(), config.background())?;
@@ -203,16 +206,7 @@ impl Screen {
     }
 
     pub fn new_v4(config: Config) -> Result<Screen, RuntimeError> {
-        let terminal: Box<dyn Terminal> = if config.terminal().eq("pancurses") {
-            Box::new(PCTerminal::new())
-        } else if config.terminal().eq("easycurses") {
-            Box::new(ECTerminal::new())
-        } else {
-            return Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Invalid terminal '{}'", config.terminal()),
-            ));
-        };
+        let terminal = new_terminal();
 
         let (rows, columns) = terminal.as_ref().size();
         let colors = map_colors(config.foreground(), config.background())?;
@@ -238,16 +232,7 @@ impl Screen {
     }
 
     pub fn new_v5(config: Config) -> Result<Screen, RuntimeError> {
-        let terminal: Box<dyn Terminal> = if config.terminal().eq("pancurses") {
-            Box::new(PCTerminal::new())
-        } else if config.terminal().eq("easycurses") {
-            Box::new(ECTerminal::new())
-        } else {
-            return Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Invalid terminal '{}'", config.terminal()),
-            ));
-        };
+        let terminal = new_terminal();
 
         let (rows, columns) = terminal.as_ref().size();
         let colors = map_colors(config.foreground(), config.background())?;

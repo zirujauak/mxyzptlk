@@ -1,6 +1,8 @@
 use super::InputEvent;
 
+#[cfg(feature = "easycurses")]
 pub mod easy_curses;
+#[cfg(feature = "pancurses")]
 pub mod pancurses;
 
 fn char_to_u16(c: char) -> InputEvent {

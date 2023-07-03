@@ -1,5 +1,3 @@
-# Valid terminals are "pancurses" and "easycurses"
-terminal: "pancurses"
 # Valid colors:
 #  2 = BLACK
 #  3 = RED
