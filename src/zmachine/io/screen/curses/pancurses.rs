@@ -13,6 +13,10 @@ fn cp(fg: i16, bg: i16) -> i16 {
     ((fg << 3) & 0x38) + (bg & 0x07) + 1
 }
 
+#[cfg(feature = "pancurses")]
+pub fn new_terminal() -> Box<dyn Terminal> {
+    Box::new(PCTerminal::new())
+}
 impl PCTerminal {
     pub fn new() -> PCTerminal {
         info!(target: "app::input", "Initialize pancurses terminal");

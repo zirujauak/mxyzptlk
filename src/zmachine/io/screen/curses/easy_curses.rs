@@ -12,6 +12,11 @@ pub struct ECTerminal {
     easycurses: EasyCurses,
 }
 
+#[cfg(feature = "easycurses")]
+pub fn new_terminal() -> Box<dyn Terminal> {
+    Box::new(ECTerminal::new())
+}
+
 impl ECTerminal {
     pub fn new() -> ECTerminal {
         info!(target: "app::input", "Initialize easycurses terminal");

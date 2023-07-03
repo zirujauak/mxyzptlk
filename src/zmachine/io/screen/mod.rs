@@ -4,10 +4,10 @@ use crate::config::Config;
 use crate::error::*;
 
 #[cfg(feature = "easycurses")]
-use curses::easy_curses::ECTerminal;
+use curses::easy_curses::{new_terminal};
 
 #[cfg(feature = "pancurses")]
-use curses::pancurses::PCTerminal;
+use curses::pancurses::{new_terminal};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Color {
@@ -166,16 +166,6 @@ pub struct Screen {
     cursor_1: Option<(u32, u32)>,
     terminal: Box<dyn Terminal>,
     lines_since_input: u32,
-}
-
-#[cfg(feature = "easycurses")]
-fn new_terminal() -> Box<dyn Terminal> {
-    Box::new(ECTerminal::new())
-}
-
-#[cfg(feature = "pancurses")]
-fn new_terminal() -> Box<dyn Terminal> {
-    Box::new(PCTerminal::new())
 }
 
 impl Screen {
