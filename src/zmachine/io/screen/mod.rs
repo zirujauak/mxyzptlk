@@ -3,11 +3,15 @@ mod curses;
 use crate::config::Config;
 use crate::error::*;
 
+
+#[cfg(all(feature = "pancurses", feature="easycurses"))]
+compile_error!("Both the 'pancurses' and 'easycureses features are enabled.  Pick one.");
+
 #[cfg(feature = "easycurses")]
-use curses::easy_curses::{new_terminal};
+use curses::easy_curses::new_terminal;
 
 #[cfg(feature = "pancurses")]
-use curses::pancurses::{new_terminal};
+use curses::pancurses::new_terminal;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Color {
