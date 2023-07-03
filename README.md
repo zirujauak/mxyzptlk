@@ -22,7 +22,8 @@ The current release is `1.0.0-beta.1`
 
 
     Platforms:
-    * `aarch64-apple-darwin` for ARM-based (M1, M2) Macs running macos
+    * `aarch64-apple-darwin` for ARM-based (M1, M2) Macs
+    * `x86_64-apple-darwin` for Intel-based Macs
     * ... More platforms to be added later
 2. Decompress the tar/gzip archive using your favorite decompression tool:
     * `tar -xzvf mxyzptlk-1.0-beta.1-aarch64-apple-darwin.tar.gz` for Mac/Linux
