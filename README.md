@@ -4,7 +4,7 @@ An Infocom(tm) ZMachine virtual machine implemented in Rust.
 
 All source code is Copyright (c) 2023 by Evan Day.  All rights reserved.
 
-This program and source code are licensed under the Creative Commmons Attribution-ShareAlike 4.0 International license. See `LICENSE.md` for the full text of the license.  Source code is available [here](https://github.com/zirujauak/mxyzptlk).
+This program and source code are licensed under the GNU General Public License V3 (GPLv3). See `LICENSE.md` for the full text of the license.  Full source code is available [here](https://github.com/zirujauak/mxyzptlk).
 
 This software is free to use and provided without any warranty or assurance of correctness or promise of support.  However, please feel free send any bug reports, feedback, or requests for features [here](https://github.com/zirujauak/mxyzptlk/issues).
 
