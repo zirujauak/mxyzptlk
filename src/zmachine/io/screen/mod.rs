@@ -7,7 +7,7 @@ use crate::error::*;
 compile_error!("Both the 'pancurses' and 'easycureses features are enabled.  Pick one.");
 
 #[cfg(feature = "easycurses")]
-use curses::easy_curses::new_terminal;
+use curses::easy_curses::*;
 
 #[cfg(feature = "pancurses")]
 use curses::pancurses::new_terminal;
