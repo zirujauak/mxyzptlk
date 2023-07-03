@@ -24,6 +24,7 @@ The current release is `1.0.0-beta.1`
     Platforms:
     * `aarch64-apple-darwin` for ARM-based (M1, M2) Macs
     * `x86_64-apple-darwin` for Intel-based Macs
+    * `x86_64-pc-windows-msvc` for 64-bit X86 Windows
     * ... More platforms to be added later
 2. Decompress the tar/gzip archive using your favorite decompression tool:
     * `tar -xzvf mxyzptlk-1.0-beta.1-aarch64-apple-darwin.tar.gz` for Mac/Linux
@@ -35,9 +36,11 @@ The current release is `1.0.0-beta.1`
 
 ### `libsndfile`
 
-For `-libsndfile` binaries, `libsndfile` must be available.  
-* Linux: many distros already include `libsndfile` in base installs, but if not you can use the package manager to install it.  Specific instructions vary by package manager
-* Mac: Sample instructions provided for using Homebrew:
+The generally available Blorb files all have AIFF sound resources.  AIFF is an antiquated format that isn't supported by any of the Rust audio crates that I've been able to find.  To get around this limitation, `libsndfile` is used to convert the AIFF sounds to another format (FLAC or Ogg/Vorbis) that can be played.  To get around the `libsndfile` dependencey, one can extract the AIFF resources from the Blorb IFF file, convert them to Ogg/Vorbis, then rebuild the Blorb file, which is probably more work than it's worth.
+
+For the `-libsndfile` binaries, `libsndfile` must be available, obviously.
+* **Linux**: many distros already include `libsndfile` in base installs, but if not you can use the package manager to install it.  Specific instructions vary by package manager
+* **Mac**: Sample instructions provided for using Homebrew:
     1. Install the `libsndfile` formula
     ```
     brew install libsndfile
@@ -45,8 +48,12 @@ For `-libsndfile` binaries, `libsndfile` must be available.
 
     2. Edit `~/.zshenv` and add the following line:  
     ```
-    export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib```
-* Windows: There are 32- and 64-bit Windows [installers](http://www.mega-nerd.com/libsndfile/#Download) available, but I haven't (yet) tested them.
+    export LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib
+    ```
+* **Windows**: 
+    [`sndfile.dll`](https://github.com/libsndfile/libsndfile/releases) needs to be in the `PATH` environment variable.  If you keep the DLL in the same directory where you run `mxzyptlk.exe`, then it should get loaded.  If you install the binary somewhere and add it to the `PATH`, then copying the DLL to the same location should work fine.  If the DLL can't be located, execution will terminate immediately with an error.
+
+    It's worth pointing out that sound-enabled games will run with a non-libsndfile binary, you just may not hear any sounds play.  Sounds are a gimmick, really, and you don't miss much without them.  It was fun to code.
 
 ### Games
 
@@ -56,12 +63,15 @@ There are a couple of places to get game files:
 
     The if-archive has quite a number of free games.  This interpreter is for "zcode" games only, generally those with names ending in ".z{version}".  Only `version`s 3, 4, 5, 7, and 8 are supported, though version 7 is somewhat rare and I haven't tried running one yet.
 
-    Download a zcode file ([Curses](https://www.ifarchive.org/if-archive/games/zcode/curses.z5), for example) and try it out:
+    Download a zcode file ([Curses](htt
+    ps://www.ifarchive.org/if-archive/games/zcode/curses.z5), for example) and try it out:
     ```
     mxyzptlk curses.z5
     ```
 
     Further, the if-archive has Blorb resource [files](https://www.ifarchive.org/indexes/if-archive/infocom/media/blorb/) with sounds for both `The Lurking Horror` and `Sherlock`.  It may be necessary to [patch](https://www.ifarchive.org/indexes/if-archive/infocom/patches/) your zcode file to take advantage of these resources.
+
+    **NOTE**: The windows binary may segfault on exit.  I'm still investigating why this is, but it doesn't seem to hurt anything.
 
 * The [Masterpieces Of Infocom](https://en.wikipedia.org/wiki/Classic_Text_Adventure_Masterpieces_of_Infocom) CD-ROM
 
