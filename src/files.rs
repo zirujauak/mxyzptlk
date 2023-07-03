@@ -49,15 +49,48 @@ pub fn last_existing(base: &str, suffix: &str) -> Result<Vec<u16>, RuntimeError>
     }
 }
 
-pub fn check_existing(base: &str, extensions: &[&str]) -> Option<String> {
+pub fn config_file(name: &str) -> Option<String> {
+    if let Some(home) = dirs::home_dir() {
+        let filename = format!("{}/.mxyzptlk/{}", home.to_str().unwrap(), name);
+        match Path::new(&filename).try_exists() {
+            Ok(b) => {
+                if b {
+                    Some(filename.to_string())
+                } else {
+                    None
+                }
+            }
+            Err(e) => {
+                info!(target: "app::trace", "Error checking existence of {}: {}", filename, e);
+                None
+            }
+        }
+    } else {
+        None
+    }
+}
+
+pub fn check_existing(filename: &str) -> Option<String> {
+    match Path::new(&filename).try_exists() {
+        Ok(b) => {
+            if b {
+                Some(filename.to_string())
+            } else {
+                None
+            }
+        }
+        Err(e) => {
+            info!(target: "app::trace", "Error checking existence of {}: {}", filename, e);
+            None
+        }
+    }
+}
+
+pub fn find_existing(base: &str, extensions: &[&str]) -> Option<String> {
     for ext in extensions {
         let filename = format!("{}.{}", base, ext);
-        let p = Path::new(&filename);
-        match p.try_exists() {
-            Ok(b) => if b { return Some(filename) },
-            Err(e) => {
-                info!(target: "app::trace", "Error checking existence of {}: {}", filename, e)
-            }
+        if let Some(filename) = check_existing(&filename) {
+            return Some(filename);
         }
     }
 

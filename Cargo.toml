@@ -11,6 +11,7 @@ pancurses = ["dep:pancurses"]
 easycurses = ["dep:easycurses", "dep:pancurses"]
 
 [dependencies]
+dirs = "4.0.0"
 time = "0.3.20"
 log = "0.4.17"
 rand = "0.8.5"
