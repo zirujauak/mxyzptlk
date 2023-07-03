@@ -7,6 +7,7 @@ pub mod pancurses;
 
 fn char_to_u16(c: char) -> InputEvent {
     match c {
+        // Mac | Windows - slight differences in character values for backspace and return
         '\u{7f}' | '\u{08}' => InputEvent::from_char(0x08),
         '\u{0a}' | '\u{0d}' => InputEvent::from_char(0x0d),
         ' '..='~' => InputEvent::from_char(c as u16),
