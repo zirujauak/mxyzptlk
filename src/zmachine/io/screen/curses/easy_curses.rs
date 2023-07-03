@@ -58,6 +58,7 @@ impl ECTerminal {
             Input::KeyF10 => InputEvent::from_char(142),
             Input::KeyF11 => InputEvent::from_char(143),
             Input::KeyF12 => InputEvent::from_char(144),
+            Input::KeyBackspace => InputEvent::from_char(8),
             Input::KeyMouse => match pancurses::getmouse() {
                 Ok(event) => {
                     if event.bstate & BUTTON1_CLICKED == BUTTON1_CLICKED {

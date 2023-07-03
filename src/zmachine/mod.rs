@@ -1,4 +1,3 @@
-mod files;
 pub mod io;
 mod rng;
 pub mod state;
@@ -15,6 +14,7 @@ use std::time::UNIX_EPOCH;
 
 use crate::config::Config;
 use crate::error::*;
+use crate::files;
 use crate::instruction::decoder;
 use crate::instruction::processor;
 use crate::instruction::StoreResult;

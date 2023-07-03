@@ -6,7 +6,6 @@ use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 use std::panic;
-use std::path::Path;
 
 pub mod config;
 pub mod error;
@@ -16,9 +15,9 @@ pub mod object;
 pub mod sound;
 pub mod text;
 pub mod zmachine;
+pub mod files;
 
 use crate::config::Config;
-//use crate::iff::Chunk;
 use crate::log::*;
 use iff::blorb::Blorb;
 use sound::Manager;
@@ -26,67 +25,74 @@ use zmachine::state::memory::Memory;
 use zmachine::ZMachine;
 
 fn initialize_sound_engine(name: &str) -> Option<Manager> {
-    let filename = format!("{}.blorb", name);
-    match Path::new(&filename).try_exists() {
-        Ok(b) => {
-            if b {
-                match File::open(&filename) {
-                    Ok(mut f) => {
-                        let mut data = Vec::new();
-                        match f.read_to_end(&mut data) {
-                            Ok(_) => {
-                                if let Ok(blorb) = Blorb::try_from(data) {
-                                    info!(target: "app::sound", "{}", blorb);
-                                    if let Ok(manager) = Manager::new(blorb) {
-                                        Some(manager)
-                                    } else {
-                                        None
-                                    }
-                                } else {
-                                    None
-                                }
-                            }
-                            Err(e) => {
-                                error!(target: "app::blorb", "Error reading {}: {}", &filename, e);
+    if let Some(filename) = files::check_existing(name, &["blorb", "blb"]) {
+        match File::open(&filename) {
+            Ok(mut f) => {
+                let mut data = Vec::new();
+                match f.read_to_end(&mut data) {
+                    Ok(_) => {
+                        if let Ok(blorb) = Blorb::try_from(data) {
+                            info!(target: "app::sound", "{}", blorb);
+                            if let Ok(manager) = Manager::new(blorb) {
+                                Some(manager)
+                            } else {
                                 None
                             }
+                        } else {
+                            None
                         }
                     }
                     Err(e) => {
-                        error!(target: "app::blorb", "Error opening {}: {}", &filename, e);
+                        error!(target: "app::blorb", "Error reading {}: {}", &filename, e);
                         None
                     }
                 }
-            } else {
+            }
+            Err(e) => {
+                error!(target: "app::blorb", "Error opening {}: {}", &filename, e);
                 None
             }
         }
-        Err(e) => {
-            error!(target: "app::blorb", "Error checking for {}: {}", &filename, e);
-            None
-        }
+    } else {
+        None
     }
 }
-fn main() {
-    let args: Vec<String> = env::args().collect();
 
-    let config_file = File::open("config.yml");
-    let config = if let Ok(f) = config_file {
-        if let Ok(c) = Config::from_file(f) {
-            c
-        } else {
-            Config::default()
+fn initialize_config() -> Config {
+    if let Some(filename) = files::check_existing("~/.mxyzptlk/config", &["yml"]) {
+        match File::open(&filename) {
+            Ok(f) => match Config::try_from(f) {
+                Ok(config) => config,
+                Err(e) => {
+                    info!(target: "app::trace", "Error parsing configuration from {}: {}", filename, e);
+                    Config::default()
+                }
+            },
+            Err(e) => {
+                info!(target: "app::trace", "Error reading configuration from {}: {}", filename, e);
+                Config::default()
+            }
         }
     } else {
         Config::default()
-    };
+    }
+}
 
+fn main() {
+    let args: Vec<String> = env::args().collect();
     let filename = &args[1];
+    let name: Vec<&str> = filename.split('.').collect();
+
+    let name = name[0].to_string();
+    let config = initialize_config();
+
     if config.logging() {
         let name: Vec<&str> = filename.split('/').collect();
         let name = name[name.len() - 1].to_string();
-        log4rs::init_file("log4rs.yml", Default::default()).unwrap();
-        log_mdc::insert("instruction_count", format!("{:8x}", 0));
+        if log4rs::init_file("~/.mxyzptlk/log4rs.yml", Default::default()).is_ok() {
+            log_mdc::insert("instruction_count", format!("{:8x}", 0));
+        }
+        
         error!(target: "app::blorb", "Start blorb log for '{}'", name);
         error!(target: "app::frame", "Start frame log for '{}'", name);
         error!(target: "app::input", "Start input log for '{}'", name);
@@ -99,19 +105,6 @@ fn main() {
         error!(target: "app::trace", "Start trace log for '{}'", name);
         error!(target: "app::variable", "Start variable log for '{}'", name);
     }
-
-    let name: Vec<&str> = filename.split('.').collect();
-    let name = name[0].to_string();
-    let config_file = File::open("config.yml");
-    let config = if let Ok(f) = config_file {
-        if let Ok(c) = Config::from_file(f) {
-            c
-        } else {
-            Config::default()
-        }
-    } else {
-        Config::default()
-    };
 
     let prev = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
