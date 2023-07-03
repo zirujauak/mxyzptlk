@@ -12,6 +12,10 @@ pub struct ECTerminal {
     easycurses: EasyCurses,
 }
 
+pub fn new_terminal() -> Box<dyn Terminal> {
+    Box::new(ECTerminal::new())
+}
+
 impl ECTerminal {
     pub fn new() -> ECTerminal {
         info!(target: "app::input", "Initialize easycurses terminal");
