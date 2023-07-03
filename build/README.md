@@ -12,8 +12,17 @@ will build and create the following packages:
 
 **NOTE**: `cargo clean` is run before each package is built.
     
-
-There will eventually be three scripts to build each platform:
+Each release package will contain:
+* `mxyzptlk-pancurses-sndfile` binary
+* `mxyzptlk-pancurses` binary
+* `mxyzptlk-easycurses-sndfile` binary
+* `mxyzptlk-easycurses` binary
+* CHANGELOG.md
+* LICENSE.md
+* README.md
+* RELEASES.md
+* config.yml
+* log4rs.yml
 
 ## Mac
 * `release-mac.sh {release-semver}`
