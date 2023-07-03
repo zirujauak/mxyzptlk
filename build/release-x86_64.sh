@@ -1,3 +1,4 @@
+#!/bin/zsh
 # Point this at your homebrew install, which is usually /opt/homebrew/bin/brew
 # However, the author cross-compiles from a M1 and the x86_64 homebrew is 
 # installed to /usr/local/homebrew/bin/brew
