@@ -128,3 +128,10 @@ $ cargo run -- zcode/etude.z5
 
 Some are interactive, like TerpEtude, and others just run a sequence of tests and output results.
 
+## Security Advisories
+
+\*sigh\* Full disclosure ... there are security advisories on a couple of dependencies that are rather old and probably won't get fixed upstream.  I can probably patch these locally for release packages in the future, but the actual risk is, IMHO, neglible.
+
+* [`RUSTSEC-2019-0005`](https://rustsec.org/advisories/RUSTSEC-2019-0005) for `pancurses`, related to the `mvprintw` and `printw` functions in `ncurses`, which are not used.
+* ['RUSTSEC-2019-0006'](https://rustsec.org/advisories/RUSTSEC-2019-0006) for `ncurses`, related to the above
+* ['RUSTSEC-2020-0071`](https://rustsec.org/advisories/RUSTSEC-2020-0071) for `time` via `chrono` via `log4rs`
