@@ -3,8 +3,7 @@ mod curses;
 use crate::config::Config;
 use crate::error::*;
 
-
-#[cfg(all(feature = "pancurses", feature="easycurses"))]
+#[cfg(all(feature = "pancurses", feature = "easycurses"))]
 compile_error!("Both the 'pancurses' and 'easycureses features are enabled.  Pick one.");
 
 #[cfg(feature = "easycurses")]
