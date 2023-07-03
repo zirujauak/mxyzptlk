@@ -79,6 +79,9 @@ There are a couple of places to get game files:
 
     *\* Except `The Hitchhiker's Guide To The Galaxy` and `James Clavell's Shogun` due to licensing issues.  `Shogun` is a graphical V6 game that won't run anyway, but `HHGTTG` is a classic that is sorely missed.*
 
+#### **A Note About Blorb Resource Files**
+Certain revisions of `The Lurking Horror` and `Sherlock` support sound effects.  In order to use them, a Blorb file with the sound resources needs to be located in the same directory as the game file, with same filename and a `.blorb` or `.blb` extension in order for `mxyzptlk` to locate it. In other words, when playing `the-lurking-horror.z3`, the Blorb file should be named `the-lurking-horror.blorb` or `the-lurking-horror.blb`.
+
 #### **A Note About Files (Saves And Transcripts)**
 When saving or restoring game state, `mxyzptlk` will prompt for a filename.  When saving, the default name is `{zcode-file-minus-extension}-##.ifzs`, where `##` starts at "01" and will count upwards to the first filename not present on disk.  When restoring, the prompt defaults to the last (numerically) file found on disk.  
 
