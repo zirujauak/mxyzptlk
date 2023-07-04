@@ -176,6 +176,76 @@ mod tests {
         assert_eq!(blorb.sloop().unwrap().entries()[0].number(), 10);
         assert_eq!(blorb.sloop().unwrap().entries()[0].repeats(), 11);
     }
+
+    #[test]
+    fn test_try_from_vec_u8() {
+        let v = vec![
+            /* 0000 */ b'F', b'O', b'R', b'M', /* 0004 */ 0x00, 0x00, 0x00, 0x4e,
+            /* 0008 */ b'I', b'F', b'R', b'S', /* 000c */ b'R', b'I', b'd', b'x',
+            /* 0010 */ 0x00, 0x00, 0x00, 0x1c, /* 0014 */ 0x00, 0x00, 0x00, 0x02,
+            /* 0018 */ b'S', b'n', b'd', b' ', /* 001c */ 0x01, 0x00, 0x00, 0x01,
+            /* 0020 */ 0x00, 0x00, 0x00, 0x46, /* 0024 */ b'S', b'n', b'd', b' ',
+            /* 0028 */ 0x01, 0x00, 0x00, 0x02, /* 002c */ 0x00, 0x00, 0x00, 0x5a,
+            /* 0x30 */ b'I', b'F', b'h', b'd', /* 0x34 */ 0x00, 0x00, 0x00, 0x0d,
+            /* 0x38 */ 0x11, 0x22, b'1', b'2', /* 0x3C */ b'3', b'4', b'5', b'6',
+            /* 0x40 */ 0x33, 0x44, 0x55, 0x66, /* 0x44 */ 0x77, 0x00, b'O', b'G',
+            /* 0x48 */ b'G', b'V', 0x00, 0x00, /* 0x4c */ 0x00, 0x0c, 0x10, 0x20,
+            /* 0x50 */ 0x30, 0x40, b'O', b'g', /* 0x54 */ b'g', b's', 0x11, 0x22,
+            /* 0x58 */ 0x33, 0x44, b'F', b'O', /* 0x5c */ b'R', b'M', 0x00, 0x00,
+            /* 0x60 */ 0x00, 0x0c, b'A', b'I', /* 0x64 */ b'F', b'F', b'C', b'O',
+            /* 0x68 */ b'M', b'M', 0x00, 0x00, /* 0x6c */ 0x00, 0x03, b'L', b'o',
+            /* 0x70 */ b'o', b'p', 0x00, 0x00, /* 0x74 */ 0x00, 0x10, 0x00, 0x00,
+            /* 0x78 */ 0x00, 0x01, 0x00, 0x00, /* 0x7c */ 0x00, 0x10, 0x00, 0x00,
+            /* 0x80 */ 0x00, 0x02, 0x00, 0x00, /* 0x84 */ 0x00, 0x20,
+        ];
+        let blorb = Blorb::try_from(v);
+        assert!(blorb.is_ok());
+        let b = blorb.unwrap();
+        assert!(b.ridx().is_some());
+        assert_eq!(b.ridx().unwrap().entries().len(), 2);
+        assert_eq!(b.ridx().unwrap().entries()[0].usage(), "Snd ");
+        assert_eq!(b.ridx().unwrap().entries()[0].number(), 0x01000001);
+        assert_eq!(b.ridx().unwrap().entries()[0].start(), 0x46);
+        assert_eq!(b.ridx().unwrap().entries()[1].usage(), "Snd ");
+        assert_eq!(b.ridx().unwrap().entries()[1].number(), 0x01000002);
+        assert_eq!(b.ridx().unwrap().entries()[1].start(), 0x5a);
+        assert_eq!(b.oggv().len(), 1);
+        assert!(b.oggv().get(&0x46).is_some());
+        assert_eq!(
+            b.oggv().get(&0x46).unwrap().data(),
+            &[0x10, 0x20, 0x30, 0x40, b'O', b'g', b'g', b's', 0x11, 0x22, 0x33, 0x44]
+        );
+        assert_eq!(b.aiff().len(), 1);
+        assert!(b.aiff().get(&0x5a).is_some());
+        assert_eq!(
+            b.aiff().get(&0x5a).unwrap().data(),
+            &[b'A', b'I', b'F', b'F', b'C', b'O', b'M', b'M', 0, 0, 0, 3]
+        );
+        assert!(b.ifhd().is_some());
+        assert_eq!(b.ifhd().unwrap().release_number(), 0x1122);
+        assert_eq!(
+            b.ifhd().unwrap().serial_number(),
+            &[b'1', b'2', b'3', b'4', b'5', b'6']
+        );
+        assert_eq!(b.ifhd().unwrap().checksum(), 0x3344);
+        assert_eq!(b.ifhd().unwrap().pc(), 0x556677);
+        assert!(b.sloop().is_some());
+        assert_eq!(b.sloop().unwrap().entries().len(), 2);
+        assert_eq!(b.sloop().unwrap().entries()[0].number(), 1);
+        assert_eq!(b.sloop().unwrap().entries()[0].repeats(), 0x10);
+        assert_eq!(b.sloop().unwrap().entries()[1].number(), 2);
+        assert_eq!(b.sloop().unwrap().entries()[1].repeats(), 0x20);
+    }
+
+    #[test]
+    fn test_try_from_vec_u8_error() {
+        let v = vec![
+            /* 0000 */ b'F', b'O', b'R', b'M', /* 0004 */ 0x00, 0x00, 0x00, 0x4e,
+            /* 0008 */ b'I', b'F', b'Z', b'S',
+        ];
+        let blorb = Blorb::try_from(v);
+        assert!(blorb.is_err());
+    }
 }
 
 // pub fn rebuild_blorb(name: String) {

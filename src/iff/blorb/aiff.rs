@@ -21,7 +21,7 @@ impl From<Chunk> for AIFF {
 }
 
 impl From<&AIFF> for Vec<u8> {
-    /// Reconstitutes a full AIFF file as a Vec<u8> from an AIFF struct.
+    /// Reconstitutes a full AIFF file as a `Vec<u8>` from an AIFF struct.
     fn from(value: &AIFF) -> Vec<u8> {
         let mut v = Vec::new();
         v.append(&mut iff::id_as_vec("FORM"));
