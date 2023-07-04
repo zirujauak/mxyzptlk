@@ -20,7 +20,7 @@ impl TryFrom<Vec<u8>> for Quetzal {
     type Error = RuntimeError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        if !IFF::form_from_vec(&value)?.eq("FORM") {
+        if !vec_to_id(&value, 0).eq("FORM") {
             error!(target: "app::quetzal", "Not an IFF file");
             return Err(RuntimeError::new(
                 ErrorCode::IFF,
