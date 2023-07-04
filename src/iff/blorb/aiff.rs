@@ -73,7 +73,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_vec_u8() {
+    fn test_vec_u8_from() {
         let aiff = AIFF::new(&[0, 1, 2, 3, 4, 5, 6, 7]);
         let v = Vec::from(&aiff);
         assert_eq!(

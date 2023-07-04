@@ -208,3 +208,49 @@ impl Stks {
         &self.stks
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stackframe_new() {
+        let sf = StackFrame::new(
+            0x123456,
+            0x1F,
+            0xFE,
+            4,
+            &[0x1, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33],
+        );
+        assert_eq!(sf.return_address(), 0x123456);
+        assert_eq!(sf.flags(), 0x1F);
+        assert_eq!(sf.result_variable(), 0xFE);
+        assert_eq!(sf.arguments(), 4);
+        assert_eq!(sf.local_variables(), &[1, 2, 3, 4]);
+        assert_eq!(sf.stack(), &[0x11, 0x22, 0x33]);
+    }
+
+    #[test]
+    fn test_vec_u8_from_stackframe() {
+        let sf = StackFrame::new(
+            0x123456,
+            0x1F,
+            0xFE,
+            4,
+            &[0x1, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33],
+        );
+        let v = Vec::from(&sf);
+        assert_eq!(
+            v,
+            &[
+                0x12, 0x34, 0x56, 0x1F, 0xFE, 0x04, 0x00, 0x03, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03,
+                0x00, 0x04, 0x00, 0x11, 0x00, 0x22, 0x00, 0x33
+            ]
+        );
+    }
+
+    #[test]
+    fn test_stks_new() {}
+}

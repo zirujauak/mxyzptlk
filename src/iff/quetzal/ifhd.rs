@@ -2,6 +2,7 @@ use std::fmt;
 
 use super::super::*;
 
+#[derive(Debug)]
 pub struct IFhd {
     release_number: u16,
     serial_number: Vec<u8>,
@@ -65,6 +66,7 @@ impl From<&IFhd> for Vec<u8> {
 
 impl PartialEq for IFhd {
     fn eq(&self, other: &Self) -> bool {
+        // Don't test the PC, as that's not an identifying characteristic of an IFhd chunk
         self.release_number == other.release_number
             && self.serial_number == other.serial_number
             && self.checksum == other.checksum
@@ -99,5 +101,71 @@ impl IFhd {
 
     pub fn set_pc(&mut self, pc: u32) {
         self.pc = pc;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new() {
+        let ifhd = IFhd::new(0x1234, &[1, 2, 3, 4, 5, 6], 0x5678, 0x112233);
+        assert_eq!(ifhd.release_number(), 0x1234);
+        assert_eq!(ifhd.serial_number(), &[1, 2, 3, 4, 5, 6]);
+        assert_eq!(ifhd.checksum(), 0x5678);
+        assert_eq!(ifhd.pc(), 0x112233);
+    }
+
+    #[test]
+    fn test_partial_eq() {
+        let i1 = IFhd::new(0x1234, &[1, 2, 3, 4, 5, 6], 0x5678, 0x112233);
+        let i2 = IFhd::new(0x1234, &[1, 2, 3, 4, 5, 6], 0x5678, 0x445566);
+        let i3 = IFhd::new(0x1235, &[1, 2, 3, 4, 5, 6], 0x5678, 0x112233);
+        let i4 = IFhd::new(0x1234, &[0, 2, 3, 4, 5, 6], 0x5678, 0x112233);
+        let i5 = IFhd::new(0x1234, &[1, 2, 3, 4, 5, 6], 0x5679, 0x112233);
+        assert_eq!(i1, i2);
+        assert_eq!(i2, i1);
+        assert_ne!(i1, i3);
+        assert_ne!(i1, i4);
+        assert_ne!(i1, i5);
+    }
+
+    #[test]
+    fn test_from_chunk() {
+        let chunk = Chunk::new(
+            0,
+            None,
+            "IFhd".to_string(),
+            &vec![
+                0x12, 0x34, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x56, 0x78, 0x11, 0x22, 0x33,
+            ],
+        );
+        let ifhd = IFhd::from(chunk);
+        assert_eq!(ifhd.release_number(), 0x1234);
+        assert_eq!(ifhd.serial_number(), &[1, 2, 3, 4, 5, 6]);
+        assert_eq!(ifhd.checksum(), 0x5678);
+        assert_eq!(ifhd.pc(), 0x112233);
+    }
+
+    #[test]
+    fn test_vec_u8_from() {
+        let ifhd = IFhd::new(0x1234, &[1, 2, 3, 4, 5, 6], 0x5678, 0x112233);
+        let v: Vec<u8> = Vec::from(&ifhd);
+        assert_eq!(
+            v,
+            &[
+                b'I', b'F', b'h', b'd', 0, 0, 0, 0xd, 0x12, 0x34, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6,
+                0x56, 0x78, 0x11, 0x22, 0x33, 0
+            ]
+        );
+    }
+
+    #[test]
+    fn test_chunk_from() {
+        let ifhd = IFhd::new(0x1234, &[1, 2, 3, 4, 5, 6], 0x5678, 0x112233);
+        let chunk = Chunk::from(ifhd);
+        assert!(chunk.form().is_none());
+        assert_eq!(chunk.id(), "IFhd");
     }
 }
