@@ -2,7 +2,7 @@ use std::fmt;
 
 use super::super::*;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct IFhd {
     release_number: u16,
     serial_number: Vec<u8>,
