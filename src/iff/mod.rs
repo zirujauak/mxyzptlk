@@ -147,12 +147,11 @@ impl From<Chunk> for Vec<u8> {
 
 impl Chunk {
     pub fn new(offset: usize, form: Option<String>, id: String, data: &Vec<u8>) -> Chunk {
-        let length = data.len() as u32 + if data.len() % 2 == 1 { 1 } else { 0 };
         Chunk {
             offset,
             form,
             id,
-            length,
+            length: data.len() as u32,
             data: data.clone(),
         }
     }
@@ -331,6 +330,31 @@ mod tests {
         assert_eq!(
             v,
             &[b'I', b'D', b' ', b' ', 0x00, 0x00, 0x00, 0x04, 0x01, 0x02, 0x03, 0x04]
+        );
+
+        let chunk = Chunk::new(
+            0x1234,
+            Some("FORM".to_string()),
+            "ID  ".to_string(),
+            &vec![0x1, 0x2, 0x3, 0x4],
+        );
+        let v = Vec::from(chunk);
+        assert_eq!(
+            v,
+            &[
+                b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x08, b'I', b'D', b' ', b' ', 0x01, 0x02,
+                0x03, 0x04
+            ]
+        );
+    }
+
+    #[test]
+    fn test_vec_u8_from_chunk_padding() {
+        let chunk = Chunk::new(0x1234, None, "ID  ".to_string(), &vec![0x1, 0x2, 0x3]);
+        let v = Vec::from(chunk);
+        assert_eq!(
+            v,
+            &[b'I', b'D', b' ', b' ', 0x00, 0x00, 0x00, 0x03, 0x01, 0x02, 0x03, 0x00]
         );
 
         let chunk = Chunk::new(

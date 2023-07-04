@@ -98,10 +98,6 @@ impl IFhd {
     pub fn pc(&self) -> u32 {
         self.pc
     }
-
-    pub fn set_pc(&mut self, pc: u32) {
-        self.pc = pc;
-    }
 }
 
 #[cfg(test)]

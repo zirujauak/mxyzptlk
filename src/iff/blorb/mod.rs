@@ -245,6 +245,13 @@ mod tests {
         ];
         let blorb = Blorb::try_from(v);
         assert!(blorb.is_err());
+
+        let v = vec![
+            /* 0000 */ b'F', b'R', b'O', b'B', /* 0004 */ 0x00, 0x00, 0x00, 0x4e,
+            /* 0008 */ b'I', b'F', b'R', b'S',
+        ];
+        let blorb = Blorb::try_from(v);
+        assert!(blorb.is_err());
     }
 }
 

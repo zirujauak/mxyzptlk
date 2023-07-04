@@ -199,6 +199,23 @@ mod tests {
     }
 
     #[test]
+    fn test_try_from_vec_u8_error() {
+        let v = vec![
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x50,
+            b'I', b'F', b'R', b'S'
+        ];
+        let quetzal = Quetzal::try_from(v);
+        assert!(quetzal.is_err());
+
+        let v = vec![
+            b'F', b'R', b'O', b'B', 0x00, 0x00, 0x00, 0x50,
+            b'I', b'F', b'Z', b'S'
+        ];
+        let quetzal = Quetzal::try_from(v);
+        assert!(quetzal.is_err());
+    }
+
+    #[test]
     fn test_vec_u8_from_quetzal() {
         let ifhd = IFhd::new(0x1234, &[1, 2, 3, 4, 5, 6], 0x4321, 0xFEDCBA);
         let cmem = CMem::new(&[5, 6, 7, 8]);

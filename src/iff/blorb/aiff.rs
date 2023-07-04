@@ -81,4 +81,14 @@ mod tests {
             vec![0x46, 0x4F, 0x52, 0x4D, 0, 0, 0, 8, 0, 1, 2, 3, 4, 5, 6, 7]
         );
     }
+
+    #[test]
+    fn test_vec_u8_from_padding() {
+        let aiff = AIFF::new(&[0, 1, 2, 3, 4, 5, 6]);
+        let v = Vec::from(&aiff);
+        assert_eq!(
+            v,
+            vec![0x46, 0x4F, 0x52, 0x4D, 0, 0, 0, 7, 0, 1, 2, 3, 4, 5, 6, 0]
+        );
+    }
 }
