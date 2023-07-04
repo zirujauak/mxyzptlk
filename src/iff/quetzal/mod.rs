@@ -20,7 +20,7 @@ impl TryFrom<Vec<u8>> for Quetzal {
     type Error = RuntimeError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        if !IFF::form_from_vec(&value)?.eq("FORM") {
+        if !vec_to_id(&value, 0).eq("FORM") {
             error!(target: "app::quetzal", "Not an IFF file");
             return Err(RuntimeError::new(
                 ErrorCode::IFF,
@@ -126,5 +126,122 @@ impl Quetzal {
 
     pub fn stks(&self) -> &Stks {
         &self.stks
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{stks::StackFrame, *};
+
+    #[test]
+    fn test_new() {
+        let ifhd = IFhd::new(0x1234, &[1, 2, 3, 4, 5, 6], 0x4321, 0xFEDCBA);
+        let umem = UMem::new(&[1, 2, 3, 4]);
+        let cmem = CMem::new(&[5, 6, 7, 8]);
+        let sf = StackFrame::new(
+            0x123456,
+            0x13,
+            0x34,
+            2,
+            &[0x11, 0x22, 0x33, 0x44, 0x55, 0x66],
+            &[0x88, 0x99, 0xAA, 0xBB],
+        );
+        let stks = Stks::new(vec![sf.clone()]);
+        let quetzal = Quetzal::new(ifhd.clone(), Some(umem), Some(cmem), stks);
+        assert_eq!(quetzal.ifhd(), &ifhd);
+        assert!(quetzal.umem().is_some());
+        assert_eq!(quetzal.umem().unwrap().data(), &[1, 2, 3, 4]);
+        assert!(quetzal.cmem().is_some());
+        assert_eq!(quetzal.cmem().unwrap().data(), &[5, 6, 7, 8]);
+        assert_eq!(quetzal.stks().stks().len(), 1);
+        assert_eq!(quetzal.stks().stks()[0], sf);
+    }
+
+    #[test]
+    fn test_try_from_vec_u8() {
+        let v = vec![
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x50,
+            b'I', b'F', b'Z', b'S',
+            b'I', b'F', b'h', b'd', 0x00, 0x00, 0x00, 0x0d,
+            0x12, 0x34, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+            0x56, 0x78, 0x11, 0x22, 0x33, 0x00,
+            b'C', b'M', b'e', b'm', 0x00, 0x00, 0x00, 0x08,
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+            b'S', b't', b'k', b's', 0x00, 0x00, 0x00, 0x1E,
+            0x12, 0x34, 0x56, 0x14, 0xFE, 0x04, 0x00, 0x03,
+            0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04,
+            0x00, 0x11, 0x00, 0x22, 0x00, 0x33, 0x65, 0x43,
+            0x21, 0x00, 0x00, 0x00, 0x00, 0x00
+        ];
+        let quetzal = Quetzal::try_from(v);
+        assert!(quetzal.is_ok());
+        let q = quetzal.unwrap();
+        assert_eq!(q.ifhd().release_number(), 0x1234);
+        assert_eq!(q.ifhd().serial_number(), &[1, 2, 3, 4, 5, 6]);
+        assert_eq!(q.ifhd().checksum(), 0x5678);
+        assert_eq!(q.ifhd().pc(), 0x112233);
+        assert!(q.cmem().is_some());
+        assert_eq!(q.cmem().unwrap().data(), &[1, 2, 3, 4, 5, 6, 7, 8]);
+        assert!(q.umem().is_none());
+        assert_eq!(q.stks().stks().len(), 2);
+        assert_eq!(q.stks().stks()[0].return_address(), 0x123456);
+        assert_eq!(q.stks().stks()[0].flags(), 0x14);
+        assert_eq!(q.stks().stks()[0].result_variable(), 0xFE);
+        assert_eq!(q.stks().stks()[0].arguments(), 4);
+        assert_eq!(q.stks().stks()[0].local_variables(), &[0x01, 0x02, 0x03, 0x04]);
+        assert_eq!(q.stks().stks()[0].stack(), &[0x11, 0x22, 0x33]);
+        assert_eq!(q.stks().stks()[1].return_address(), 0x654321);
+        assert_eq!(q.stks().stks()[1].flags(), 0);
+        assert_eq!(q.stks().stks()[1].result_variable(), 0);
+        assert_eq!(q.stks().stks()[1].arguments(), 0);
+        assert!(q.stks().stks()[1].local_variables().is_empty());
+        assert!(q.stks().stks()[1].stack().is_empty());
+    }
+
+    #[test]
+    fn test_try_from_vec_u8_error() {
+        let v = vec![
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x50,
+            b'I', b'F', b'R', b'S'
+        ];
+        let quetzal = Quetzal::try_from(v);
+        assert!(quetzal.is_err());
+
+        let v = vec![
+            b'F', b'R', b'O', b'B', 0x00, 0x00, 0x00, 0x50,
+            b'I', b'F', b'Z', b'S'
+        ];
+        let quetzal = Quetzal::try_from(v);
+        assert!(quetzal.is_err());
+    }
+
+    #[test]
+    fn test_vec_u8_from_quetzal() {
+        let ifhd = IFhd::new(0x1234, &[1, 2, 3, 4, 5, 6], 0x4321, 0xFEDCBA);
+        let cmem = CMem::new(&[5, 6, 7, 8]);
+        let sf = StackFrame::new(
+            0x123456,
+            0x13,
+            0x34,
+            2,
+            &[0x11, 0x22, 0x33, 0x44, 0x55, 0x66],
+            &[0x88, 0x99, 0xAA, 0xBB],
+        );
+        let stks = Stks::new(vec![sf]);
+        let quetzal = Quetzal::new(ifhd, None, Some(cmem), stks);    
+        let v = Vec::from(quetzal);
+        assert_eq!(v, &[
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x4a,
+            b'I', b'F', b'Z', b'S',
+            b'I', b'F', b'h', b'd', 0x00, 0x00, 0x00, 0x0d,
+            0x12, 0x34, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 
+            0x43, 0x21, 0xFE, 0xDC, 0xBA, 0x00,
+            b'C', b'M', b'e', b'm', 0x00, 0x00, 0x00, 0x04,
+            0x05, 0x06, 0x07, 0x08,
+            b'S', b't', b'k', b's', 0x00, 0x00, 0x00, 0x1C,
+            0x12, 0x34, 0x56, 0x13, 0x34, 0x02, 0x00, 0x04,
+            0x00, 0x11, 0x00, 0x22, 0x00, 0x33, 0x00, 0x44,
+            0x00, 0x55, 0x00, 0x66, 0x00, 0x88, 0x00, 0x99,
+            0x00, 0xAA, 0x00, 0xBB])
     }
 }

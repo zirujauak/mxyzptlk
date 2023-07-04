@@ -2,6 +2,7 @@ use std::fmt;
 
 use super::super::*;
 
+#[derive(Clone, Debug)]
 pub struct StackFrame {
     return_address: u32,
     flags: u8,
@@ -9,6 +10,17 @@ pub struct StackFrame {
     arguments: u8,
     local_variables: Vec<u16>,
     stack: Vec<u16>,
+}
+
+impl PartialEq for StackFrame {
+    fn eq(&self, other: &Self) -> bool {
+        self.return_address == other.return_address
+            && self.flags == other.flags
+            && self.result_variable == other.result_variable
+            && self.arguments == other.arguments
+            && self.local_variables == other.local_variables
+            && self.stack == other.stack
+    }
 }
 
 impl fmt::Display for StackFrame {
@@ -195,7 +207,7 @@ impl From<&Stks> for Vec<u8> {
         for stk in value.stks() {
             data.append(&mut Vec::from(stk));
         }
-        chunk("Stks", &mut data)
+        chunk("Stks", &data)
     }
 }
 
@@ -206,5 +218,219 @@ impl Stks {
 
     pub fn stks(&self) -> &Vec<StackFrame> {
         &self.stks
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stackframe_new() {
+        let sf = StackFrame::new(
+            0x123456,
+            0x1F,
+            0xFE,
+            4,
+            &[0x1, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33],
+        );
+        assert_eq!(sf.return_address(), 0x123456);
+        assert_eq!(sf.flags(), 0x1F);
+        assert_eq!(sf.result_variable(), 0xFE);
+        assert_eq!(sf.arguments(), 4);
+        assert_eq!(sf.local_variables(), &[1, 2, 3, 4]);
+        assert_eq!(sf.stack(), &[0x11, 0x22, 0x33]);
+    }
+
+    #[test]
+    fn test_stackrame_partial_eq() {
+        let sf1 = StackFrame::new(
+            0x123456,
+            0x1F,
+            0xFE,
+            4,
+            &[0x1, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33],
+        );
+        let sf2 = StackFrame::new(
+            0x123456,
+            0x1F,
+            0xFE,
+            4,
+            &[0x1, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33],
+        );
+        let sf3 = StackFrame::new(
+            0x123457,
+            0x1F,
+            0xFE,
+            4,
+            &[0x1, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33],
+        );
+        let sf4 = StackFrame::new(
+            0x123456,
+            0x10,
+            0xFE,
+            4,
+            &[0x1, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33],
+        );
+        let sf5 = StackFrame::new(
+            0x123456,
+            0x1F,
+            0xFE,
+            0,
+            &[0x1, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33],
+        );
+        let sf6 = StackFrame::new(
+            0x123456,
+            0x1F,
+            0xFE,
+            4,
+            &[0x11, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33],
+        );
+        let sf7 = StackFrame::new(
+            0x123456,
+            0x1F,
+            0xFE,
+            4,
+            &[0x1, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33, 0x44],
+        );
+        assert_eq!(sf1, sf2);
+        assert_eq!(sf2, sf1);
+        assert_ne!(sf1, sf3);
+        assert_ne!(sf1, sf4);
+        assert_ne!(sf1, sf5);
+        assert_ne!(sf1, sf6);
+        assert_ne!(sf1, sf7);
+    }
+
+    #[test]
+    fn test_vec_u8_from_stackframe() {
+        let sf = StackFrame::new(
+            0x123456,
+            0x1F,
+            0xFE,
+            4,
+            &[0x1, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33],
+        );
+        let v = Vec::from(&sf);
+        assert_eq!(
+            v,
+            &[
+                0x12, 0x34, 0x56, 0x1F, 0xFE, 0x04, 0x00, 0x03, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03,
+                0x00, 0x04, 0x00, 0x11, 0x00, 0x22, 0x00, 0x33
+            ]
+        );
+    }
+
+    #[test]
+    fn test_stks_new() {
+        let sf1 = StackFrame::new(
+            0x123456,
+            0x1F,
+            0xFE,
+            4,
+            &[0x1, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33],
+        );
+        let sf2 = StackFrame::new(0x654321, 0, 0, 0, &[], &[]);
+        let stks = Stks::new(vec![sf1.clone(), sf2.clone()]);
+        assert_eq!(stks.stks()[0], sf1);
+        assert_eq!(stks.stks()[1], sf2);
+    }
+
+    #[test]
+    fn test_stks_from_vec_u8() {
+        let v = vec![
+            0x12, 0x34, 0x56, 0x14, 0xFE, 0x04, 0x00, 0x03, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03,
+            0x00, 0x04, 0x00, 0x11, 0x00, 0x22, 0x00, 0x33, 0x78, 0x9A, 0xBC, 0x03, 0, 0, 0x00,
+            0x01, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x11, 0x00, 0xF0, 0xAD, 0x00, 0xFE,
+            0x00, 0x00, 0x00,
+        ];
+        let stks = Stks::from(v);
+        assert_eq!(stks.stks().len(), 3);
+        assert_eq!(stks.stks()[0].return_address(), 0x123456);
+        assert_eq!(stks.stks()[0].flags(), 0x14);
+        assert_eq!(stks.stks()[0].result_variable(), 0xFE);
+        assert_eq!(stks.stks()[0].arguments(), 4);
+        assert_eq!(stks.stks()[0].local_variables(), &[0x01, 0x02, 0x03, 0x04]);
+        assert_eq!(stks.stks()[0].stack(), &[0x11, 0x22, 0x33]);
+        assert_eq!(stks.stks()[1].return_address(), 0x789ABC);
+        assert_eq!(stks.stks()[1].flags(), 0x3);
+        assert_eq!(stks.stks()[1].result_variable(), 0);
+        assert_eq!(stks.stks()[1].arguments(), 0);
+        assert_eq!(stks.stks()[1].local_variables(), &[0x01, 0x02, 0x03]);
+        assert_eq!(stks.stks()[1].stack(), &[0x11]);
+        assert_eq!(stks.stks()[2].return_address(), 0xF0AD);
+        assert_eq!(stks.stks()[2].flags(), 0x0);
+        assert_eq!(stks.stks()[2].result_variable(), 0xFE);
+        assert_eq!(stks.stks()[2].arguments(), 0);
+        assert!(stks.stks()[2].local_variables().is_empty());
+        assert!(stks.stks()[2].stack().is_empty());
+    }
+
+    #[test]
+    fn test_stks_from_chunk() {
+        let chunk = Chunk::new(
+            0,
+            None,
+            "Stks".to_string(),
+            &vec![
+                0x12, 0x34, 0x56, 0x14, 0xFE, 0x04, 0x00, 0x03, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03,
+                0x00, 0x04, 0x00, 0x11, 0x00, 0x22, 0x00, 0x33, 0x78, 0x9A, 0xBC, 0x03, 0, 0, 0x00,
+                0x01, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x11, 0x00, 0xF0, 0xAD, 0x00, 0xFE,
+                0x00, 0x00, 0x00,
+            ],
+        );
+        let stks = Stks::from(chunk);
+        assert_eq!(stks.stks().len(), 3);
+        assert_eq!(stks.stks()[0].return_address(), 0x123456);
+        assert_eq!(stks.stks()[0].flags(), 0x14);
+        assert_eq!(stks.stks()[0].result_variable(), 0xFE);
+        assert_eq!(stks.stks()[0].arguments(), 4);
+        assert_eq!(stks.stks()[0].local_variables(), &[0x01, 0x02, 0x03, 0x04]);
+        assert_eq!(stks.stks()[0].stack(), &[0x11, 0x22, 0x33]);
+        assert_eq!(stks.stks()[1].return_address(), 0x789ABC);
+        assert_eq!(stks.stks()[1].flags(), 0x3);
+        assert_eq!(stks.stks()[1].result_variable(), 0);
+        assert_eq!(stks.stks()[1].arguments(), 0);
+        assert_eq!(stks.stks()[1].local_variables(), &[0x01, 0x02, 0x03]);
+        assert_eq!(stks.stks()[1].stack(), &[0x11]);
+        assert_eq!(stks.stks()[2].return_address(), 0xF0AD);
+        assert_eq!(stks.stks()[2].flags(), 0x0);
+        assert_eq!(stks.stks()[2].result_variable(), 0xFE);
+        assert_eq!(stks.stks()[2].arguments(), 0);
+        assert!(stks.stks()[2].local_variables().is_empty());
+        assert!(stks.stks()[2].stack().is_empty());
+    }
+
+    #[test]
+    fn test_vec_u8_from_stks() {
+        let sf1 = StackFrame::new(
+            0x123456,
+            0x14,
+            0xFE,
+            4,
+            &[0x1, 0x2, 0x3, 0x4],
+            &[0x11, 0x22, 0x33],
+        );
+        let sf2 = StackFrame::new(0x654321, 0, 0, 0, &[], &[]);
+        let stks = Stks::new(vec![sf1, sf2]);
+        let v:Vec<u8> = Vec::from(&stks);
+        assert_eq!(
+            v,
+            [
+                b'S', b't', b'k', b's', 0x00, 0x00, 0x00, 0x1E,
+                0x12, 0x34, 0x56, 0x14, 0xFE, 4, 0x00, 0x03, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03,
+                0x00, 0x04, 0x00, 0x11, 0x00, 0x22, 0x00, 0x33, 0x65, 0x43, 0x21, 0x00, 0x00, 0x00, 0x00, 0x00
+            ]
+        )
     }
 }

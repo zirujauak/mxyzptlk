@@ -1,3 +1,16 @@
+# Test coverage scripts
+
+These scripts are Mac-specific and require XCode command line tools.  Additionally, `rustfilt` must be installed:
+```
+cargo install rustfilt
+```
+
+Two scripts are supplied to evaluate unit test coverage:
+* `report.sh` - outputs a summary report of test coverage
+* `profile.sh` - outputs source coverage detail, file by file.
+
+These are experimental and may not work out-of-the-box.  I suspect the `--target ...` argument may need to be updated, depending on the filenames cargo puts in `target/debug/deps`.
+
 # Build scripts
 
 These should be run from the repo root:
