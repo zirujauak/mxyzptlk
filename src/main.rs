@@ -124,7 +124,7 @@ fn main() {
     match File::open(filename) {
         Ok(mut f) => match Memory::try_from(&mut f) {
             Ok(memory) => {
-                let sound_manager = initialize_sound_engine(&name);
+                let sound_manager = initialize_sound_engine(&full_name);
                 let mut zmachine = ZMachine::new(memory, config, sound_manager, &name)
                     .expect("Error creating state");
 
