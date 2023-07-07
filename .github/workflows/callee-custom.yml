@@ -6,11 +6,6 @@ jobs:
   cache-checkmate:
     runs-on: ubuntu-latest
     steps:
-      - name: Install ALSA dev libs
-        run: |
-          sudo apt-get update
-          sudo apt-get install libasound2-dev libudev-dev
-
       - uses: taiki-e/cache-cargo-install-action@v1
         with:
           tool: cargo-checkmate
@@ -22,6 +17,11 @@ jobs:
     needs: cache-checkmate
     runs-on: ubuntu-latest
     steps:
+      - name: Install ALSA dev libs
+        run: |
+          sudo apt-get update
+          sudo apt-get install libasound2-dev libudev-dev
+
       - uses: taiki-e/cache-cargo-install-action@v1
         with:
           tool: cargo-checkmate
