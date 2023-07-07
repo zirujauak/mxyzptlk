@@ -3,4 +3,4 @@ name: cargo-checkmate Continuous Integration
 on: pull_request
 jobs:
   phases:
-    uses: .github/workflows/callee.yaml@gh-callee-v1
+    uses: ./callee-custom.yaml@gh-callee-v1
