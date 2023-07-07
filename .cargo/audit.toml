@@ -1,0 +1,14 @@
+[advisories]
+ignore = [
+    # `pancurses` printw mvprintw
+    # These functions are not used
+    "RUSTSEC-2019-0005",
+
+    # `ncurses` printw mvprintw
+    # These functions are not used
+    "RUSTSEC-2019-0006",
+
+    # `time` segfault 
+    # Doesn't seem to be a problem
+    "RUSTSEC-2020-0071"
+]
