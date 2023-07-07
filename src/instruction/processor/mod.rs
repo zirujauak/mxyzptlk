@@ -391,17 +391,14 @@ pub mod tests {
     pub fn mock_object(map: &mut [u8], object: usize, short_name: Vec<u16>) {
         let version = map[0];
         let object_table = ((map[0x0a] as usize) << 8) + map[0x0b] as usize;
-        println!("{:04x}", object_table);
         let object_address = if version < 4 {
             object_table + 62 + ((object - 1) * 9)
         } else {
             object_table + 126 + ((object - 1) * 14)
         };
-        println!("{:04x}", object_address);
 
         // Property tables will be placed at 0x300
         let property_table_address = 0x300 + ((object - 1) * 20);
-        println!("{:04x}", property_table_address);
         map[object_address + 7] = (property_table_address >> 8) as u8;
         map[object_address + 8] = property_table_address as u8;
 
