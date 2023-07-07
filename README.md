@@ -1,5 +1,5 @@
 # mxyzptlk
-![example branch parameter](https://github.com/zirujauak/mxyzptlk/actions/workflows/rust-clippy.yml/badge.svg?branch=main)
+![example branch parameter](https://github.com/zirujauak/mxyzptlk/actions/workflows/cargo-checkmate.yaml/badge.svg?branch=main)
 
 An Infocom(tm) ZMachine virtual machine implemented in Rust.
 
