@@ -1,6 +1,10 @@
 name: cargo-checkmate Continuous Integration
 
-on: pull_request
+on: 
+  push:
+    branches: ["main"]
+  pull_request:
+  
 jobs:
   phases:
     uses: ./.github/workflows/callee-custom.yaml
