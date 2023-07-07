@@ -20,7 +20,7 @@ jobs:
       - name: Install ALSA dev libs
         run: |
           sudo apt-get update
-          sudo apt-get install binutils libsndfile1 libasound2-dev libudev-dev
+          sudo apt-get install binutils libsndfile1-dev libasound2-dev libudev-dev
 
       - uses: taiki-e/cache-cargo-install-action@v1
         with:
