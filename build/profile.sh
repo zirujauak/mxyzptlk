@@ -2,7 +2,7 @@
 
 ## Build and run tests with instrumentation
 cargo clean
-RUSTFLAGS="-C instrument-coverage" cargo --quiet test --no-default-features --tests -- --test-threads=1
+RUSTFLAGS="-C instrument-coverage" cargo --quiet test --tests
 
 ## Find the target binary
 target=$(find target/debug/deps -regex ".*/mxyzptlk-[^.]*")

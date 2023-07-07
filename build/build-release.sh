@@ -11,16 +11,16 @@ if [ -f ${base}.tar.gz ]; then
 fi
 
 cargo clean
-cargo build --quiet --release --target $1
+cargo build --quiet --release --target $1 --features pancurses,sndfile
 cp target/$1/release/mxyzptlk $base/mxyzptlk-pancurses-libsndfile
 
-cargo build --quiet --release --target $1 --no-default-features --features pancurses
+cargo build --quiet --release --target $1 --features pancurses
 cp target/$1/release/mxyzptlk $base/mxyzptlk-pancurses
 
-cargo build --quiet --release --target $1 --no-default-features --features easycurses,sndfile
+cargo build --quiet --release --target $1 --features easycurses,sndfile
 cp target/$1/release/mxyzptlk $base/mxyzptlk-easycurses-libsndfile
 
-cargo build --quiet --release --target $1 --no-default-features --features easycurses
+cargo build --quiet --release --target $1 --features easycurses
 cp target/$1/release/mxyzptlk $base/mxyzptlk-easycurses
 
 cp CHANGELOG.md $base
