@@ -10,10 +10,10 @@ compile_error!("Both the 'pancurses' and 'easycureses features are enabled.  Pic
 use curses::easy_curses::*;
 
 #[cfg(feature = "pancurses")]
-use curses::pancurses::new_terminal;
+use curses::pancurses::*;
 
 #[cfg(test)]
-use curses::test_terminal::*;
+use curses::test_terminal::new_terminal;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Color {

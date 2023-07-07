@@ -1,4 +1,4 @@
-use crate::instruction::processor::tests::{INPUT, PRINT};
+use crate::instruction::processor::tests::{input_char, print_char, INPUT, PRINT};
 use crate::zmachine::io::screen::{CellStyle, Color, InputEvent, Terminal};
 
 pub fn new_terminal() -> Box<dyn Terminal> {
@@ -21,13 +21,13 @@ impl Terminal for TestTerminal {
         _style: &CellStyle,
         _font: u8,
     ) {
-        PRINT.lock().unwrap().push((zchar as u8) as char);
+        print_char((zchar as u8) as char);
     }
 
     fn flush(&mut self) {}
 
     fn read_key(&mut self, _wait: bool) -> InputEvent {
-        if let Some(c) = INPUT.lock().unwrap().pop_front() {
+        if let Some(c) = input_char() {
             InputEvent::from_char(c as u16)
         } else {
             InputEvent::from_char('\r' as u16)

@@ -258,10 +258,30 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
 pub mod tests {
     use super::*;
     use crate::{config::Config, zmachine::state::memory::Memory};
-    use std::{collections::VecDeque, sync::Mutex};
+    use std::{cell::RefCell, collections::VecDeque};
 
-    pub static PRINT: Mutex<String> = Mutex::new(String::new());
-    pub static INPUT: Mutex<VecDeque<char>> = Mutex::new(VecDeque::new());
+    thread_local! {
+        pub static PRINT:RefCell<String> = RefCell::new(String::new());
+        pub static INPUT:RefCell<VecDeque<char>> = RefCell::new(VecDeque::new());
+    }
+
+    pub fn print_char(c: char) {
+        PRINT.with(|x| x.borrow_mut().push(c));
+    }
+
+    pub fn print() -> String {
+        PRINT.with(|x| x.borrow().to_string())
+    }
+
+    pub fn input(i: &[char]) {
+        for c in i {
+            INPUT.with(|x| x.borrow_mut().push_back(*c));
+        }
+    }
+
+    pub fn input_char() -> Option<char> {
+        INPUT.with(|x| x.borrow_mut().pop_front())
+    }
 
     pub fn test_map(version: u8) -> Vec<u8> {
         let mut v = vec![0; 0x800];
@@ -291,60 +311,38 @@ pub mod tests {
     pub fn mock_instruction(
         address: usize,
         operands: Vec<Operand>,
-        form: OpcodeForm,
-        opcode: u8,
-        count: OperandCount,
+        opcode: Opcode,
         next_address: usize,
     ) -> Instruction {
-        Instruction::new(
-            address,
-            Opcode::new(5, opcode, opcode, form, count),
-            operands,
-            None,
-            None,
-            next_address,
-        )
+        Instruction::new(address, opcode, operands, None, None, next_address)
+    }
+
+    pub fn branch(byte_address: usize, condition: bool, branch_address: usize) -> Branch {
+        Branch::new(byte_address, condition, branch_address)
     }
 
     pub fn mock_branch_instruction(
         address: usize,
         operands: Vec<Operand>,
-        form: OpcodeForm,
-        opcode: u8,
-        count: OperandCount,
+        opcode: Opcode,
         next_address: usize,
-        branch_byte_address: usize,
-        condition: bool,
-        branch_address: usize,
+        branch: Branch,
     ) -> Instruction {
-        Instruction::new(
-            address,
-            Opcode::new(5, opcode, opcode, form, count),
-            operands,
-            None,
-            Some(Branch::new(branch_byte_address, condition, branch_address)),
-            next_address,
-        )
+        Instruction::new(address, opcode, operands, None, Some(branch), next_address)
+    }
+
+    pub fn store(byte_address: usize, variable: u8) -> StoreResult {
+        StoreResult::new(byte_address, variable)
     }
 
     pub fn mock_store_instruction(
         address: usize,
         operands: Vec<Operand>,
-        form: OpcodeForm,
-        opcode: u8,
-        count: OperandCount,
+        opcode: Opcode,
         next_address: usize,
-        store_byte_address: usize,
-        store_variable: u8,
+        result: StoreResult,
     ) -> Instruction {
-        Instruction::new(
-            address,
-            Opcode::new(5, opcode, opcode, form, count),
-            operands,
-            Some(StoreResult::new(store_byte_address, store_variable)),
-            None,
-            next_address,
-        )
+        Instruction::new(address, opcode, operands, Some(result), None, next_address)
     }
 
     pub fn mock_branch(condition: bool, branch_address: usize, next_address: usize) -> Instruction {
@@ -446,9 +444,7 @@ pub mod tests {
         let i = mock_instruction(
             0x480,
             vec![o_variable1, o_large_constant, o_small_constant, o_variable2],
-            OpcodeForm::Var,
-            0,
-            OperandCount::_VAR,
+            Opcode::new(5, 0, 0, OpcodeForm::Var, OperandCount::_VAR),
             0,
         );
 
@@ -460,7 +456,12 @@ pub mod tests {
         assert_eq!(o[2], 0x12);
         assert_eq!(o[3], 0x1357);
 
-        let i = mock_instruction(0x480, vec![], OpcodeForm::Var, 0, OperandCount::_VAR, 0);
+        let i = mock_instruction(
+            0x480,
+            vec![],
+            Opcode::new(5, 0, 0, OpcodeForm::Var, OperandCount::_VAR),
+            0,
+        );
         let operands = operand_values(&mut zmachine, &i);
         assert!(operands.is_ok());
         assert!(operands.unwrap().is_empty());
@@ -473,7 +474,7 @@ pub mod tests {
         let mut zmachine = mock_zmachine(v);
         mock_frame(&mut zmachine, 0x500, Some(0x80), 0x480);
         let i = mock_branch(true, 0, 0x502);
-        let a = branch(&mut zmachine, &i, true);
+        let a = processor::branch(&mut zmachine, &i, true);
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x480);
         let v = zmachine.variable(0x80);
@@ -488,7 +489,7 @@ pub mod tests {
         let mut zmachine = mock_zmachine(v);
         mock_frame(&mut zmachine, 0x500, Some(0x80), 0x480);
         let i = mock_branch(false, 0, 0x502);
-        let a = branch(&mut zmachine, &i, true);
+        let a = processor::branch(&mut zmachine, &i, true);
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x502);
         let v = zmachine.variable(0x80);
@@ -503,7 +504,7 @@ pub mod tests {
         let mut zmachine = mock_zmachine(v);
         mock_frame(&mut zmachine, 0x500, Some(0x80), 0x480);
         let i = mock_branch(true, 1, 0x502);
-        let a = branch(&mut zmachine, &i, true);
+        let a = processor::branch(&mut zmachine, &i, true);
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x480);
         let v = zmachine.variable(0x80);
@@ -518,7 +519,7 @@ pub mod tests {
         let mut zmachine = mock_zmachine(v);
         mock_frame(&mut zmachine, 0x500, Some(0x80), 0x480);
         let i = mock_branch(false, 1, 0x502);
-        let a = branch(&mut zmachine, &i, true);
+        let a = processor::branch(&mut zmachine, &i, true);
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x502);
         let v = zmachine.variable(0x80);
@@ -531,7 +532,7 @@ pub mod tests {
         let v = test_map(5);
         let mut zmachine = mock_zmachine(v);
         let i = mock_branch(true, 0x500, 0x482);
-        let a = branch(&mut zmachine, &i, true);
+        let a = processor::branch(&mut zmachine, &i, true);
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x500);
     }
@@ -541,7 +542,7 @@ pub mod tests {
         let v = test_map(5);
         let mut zmachine = mock_zmachine(v);
         let i = mock_branch(true, 0x500, 0x482);
-        let a = branch(&mut zmachine, &i, false);
+        let a = processor::branch(&mut zmachine, &i, false);
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x482);
     }
@@ -550,8 +551,13 @@ pub mod tests {
     fn test_branch_not_a_branch_instruction() {
         let v = test_map(5);
         let mut zmachine = mock_zmachine(v);
-        let i = mock_instruction(0x480, vec![], OpcodeForm::Var, 0, OperandCount::_VAR, 0x482);
-        let a = branch(&mut zmachine, &i, false);
+        let i = mock_instruction(
+            0x480,
+            vec![],
+            Opcode::new(5, 0, 0, OpcodeForm::Var, OperandCount::_VAR),
+            0x482,
+        );
+        let a = processor::branch(&mut zmachine, &i, false);
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x482);
     }
@@ -587,7 +593,12 @@ pub mod tests {
         let mut v = test_map(5);
         set_variable(&mut v, 0x80, 0xFF);
         let mut zmachine = mock_zmachine(v);
-        let i = mock_instruction(0x480, vec![], OpcodeForm::Var, 0, OperandCount::_VAR, 0x482);
+        let i = mock_instruction(
+            0x480,
+            vec![],
+            Opcode::new(5, 0, 0, OpcodeForm::Var, OperandCount::_VAR),
+            0x482,
+        );
         let a = store_result(&mut zmachine, &i, 0x12);
         assert!(a.is_ok());
     }

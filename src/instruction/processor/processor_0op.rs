@@ -18,7 +18,6 @@ pub fn rfalse(zmachine: &mut ZMachine, _instruction: &Instruction) -> Result<usi
 pub fn print(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let ztext = zmachine.string_literal(instruction.address() + 1)?;
     let text = text::from_vec(zmachine, &ztext)?;
-    println!("ztext len: {}", text.len());
     zmachine.print(&text)?;
     Ok(instruction.next_address() + (ztext.len() * 2))
 }
@@ -74,7 +73,7 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
     match zmachine.save(pc) {
         Ok(_) => save_result(zmachine, instruction, true),
-        Err(_) => save_result(zmachine, instruction, false),
+        Err(e) => save_result(zmachine, instruction, false),
     }
 }
 
@@ -84,13 +83,11 @@ pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
             match address {
                 Some(a) => {
                     let i = decoder::decode_instruction(zmachine, a - 1)?;
-                    println!("{}", i);
                     if zmachine.version() == 3 {
                         // V3 is a branch
                         branch(zmachine, &i, true)
                     } else {
                         // V4 is a store
-                        println!("{}", instruction);
                         store_result(zmachine, instruction, 2)?;
                         Ok(i.next_address())
                     }
@@ -172,12 +169,22 @@ pub fn piracy(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usiz
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::VecDeque, fs, path::Path};
+    use std::{fs, path::Path, thread, time::Duration};
 
     use crate::instruction::{
         processor::{dispatch, tests::*},
-        OpcodeForm, OperandCount,
+        Opcode, OpcodeForm, OperandCount,
     };
+
+    fn opcode(version: u8, instruction: u8) -> Opcode {
+        Opcode::new(
+            version,
+            instruction,
+            instruction,
+            OpcodeForm::Short,
+            OperandCount::_0OP,
+        )
+    }
 
     #[test]
     fn test_rtrue() {
@@ -186,14 +193,7 @@ mod tests {
         let mut zmachine = mock_zmachine(v);
         mock_frame(&mut zmachine, 0x500, Some(0x80), 0x482);
         assert_eq!(zmachine.frame_count(), 2);
-        let i = mock_instruction(
-            0x500,
-            vec![],
-            OpcodeForm::Short,
-            0,
-            OperandCount::_0OP,
-            0x501,
-        );
+        let i = mock_instruction(0x500, vec![], opcode(3, 0), 0x501);
         let a = dispatch(&mut zmachine, &i);
         assert_eq!(zmachine.frame_count(), 1);
         assert!(a.is_ok());
@@ -210,14 +210,7 @@ mod tests {
         let mut zmachine = mock_zmachine(v);
         mock_frame(&mut zmachine, 0x500, Some(0x80), 0x482);
         assert_eq!(zmachine.frame_count(), 2);
-        let i = mock_instruction(
-            0x500,
-            vec![],
-            OpcodeForm::Short,
-            1,
-            OperandCount::_0OP,
-            0x501,
-        );
+        let i = mock_instruction(0x500, vec![], opcode(3, 1), 0x501);
         let a = dispatch(&mut zmachine, &i);
         assert_eq!(zmachine.frame_count(), 1);
         assert!(a.is_ok());
@@ -229,8 +222,6 @@ mod tests {
 
     #[test]
     fn test_print() {
-        PRINT.lock().unwrap().clear();
-
         let mut v = test_map(5);
         // H e l l o
         v[0x481] = 0x11;
@@ -239,25 +230,15 @@ mod tests {
         v[0x484] = 0x34;
 
         let mut zmachine = mock_zmachine(v);
-        let i = mock_instruction(
-            0x480,
-            vec![],
-            OpcodeForm::Short,
-            2,
-            OperandCount::_0OP,
-            0x481,
-        );
+        let i = mock_instruction(0x480, vec![], opcode(3, 2), 0x481);
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x485);
-        assert_eq!(*PRINT.lock().unwrap(), "Hello");
-        PRINT.lock().unwrap().clear();
+        assert_eq!(print(), "Hello");
     }
 
     #[test]
     fn test_print_ret() {
-        PRINT.lock().unwrap().clear();
-
         let mut v = test_map(5);
         set_variable(&mut v, 0x80, 0xFF);
 
@@ -269,79 +250,57 @@ mod tests {
 
         let mut zmachine = mock_zmachine(v);
         mock_frame(&mut zmachine, 0x500, Some(0x80), 0x482);
-        let i = mock_instruction(
-            0x501,
-            vec![],
-            OpcodeForm::Short,
-            3,
-            OperandCount::_0OP,
-            0x502,
-        );
+        let i = mock_instruction(0x501, vec![], opcode(3, 3), 0x502);
         assert_eq!(zmachine.frame_count(), 2);
         let a = dispatch(&mut zmachine, &i);
         assert_eq!(zmachine.frame_count(), 1);
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x482);
-        assert_eq!(*PRINT.lock().unwrap(), "Hello");
+        assert_eq!(print(), "Hello");
         let v = zmachine.variable(0x80);
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), 0x01);
-
-        PRINT.lock().unwrap().clear();
     }
 
     #[test]
     fn test_save_v3() {
-        // Accept default save file name
-        INPUT.lock().unwrap().clear();
+        input(&[
+            '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', 'v', '3', '.', 'i', 'f',
+            'z', 's',
+        ]);
+
         let map = test_map(3);
         let i = mock_branch_instruction(
             0x480,
             vec![],
-            OpcodeForm::Short,
-            5,
-            OperandCount::_0OP,
+            opcode(3, 5),
             0x482,
-            0x481,
-            true,
-            0x484,
+            branch(0x481, true, 0x484),
         );
         let mut zmachine = mock_zmachine(map);
         let a = dispatch(&mut zmachine, &i);
-        assert!(Path::new("test-01.ifzs").exists());
-        assert!(fs::remove_file(Path::new("test-01.ifzs")).is_ok());
+        assert!(Path::new("test-v3.ifzs").exists());
+        assert!(fs::remove_file(Path::new("test-v3.ifzs")).is_ok());
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x484);
     }
 
     #[test]
     fn test_save_v3_fail() {
-        // Accept default save file name
-        INPUT.lock().unwrap().clear();
-        INPUT
-            .lock()
-            .unwrap()
-            .append(&mut VecDeque::from(vec!['\u{8}'; 12]));
-        INPUT
-            .lock()
-            .unwrap()
-            .append(&mut VecDeque::from(vec!['/', 'x', '/', 'f']));
+        input(&[
+            '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}',
+            '\u{8}', '\u{8}', '\u{8}', '/', 'x', '/', 'x',
+        ]);
 
         let map = test_map(3);
         let i = mock_branch_instruction(
             0x480,
             vec![],
-            OpcodeForm::Short,
-            5,
-            OperandCount::_0OP,
+            opcode(3, 5),
             0x482,
-            0x481,
-            true,
-            0x484,
+            branch(0x481, true, 0x484),
         );
         let mut zmachine = mock_zmachine(map);
-
-        assert!(!Path::new("test-01.ifzs").exists());
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x482);
@@ -350,14 +309,7 @@ mod tests {
     #[test]
     fn test_save_v3_bad_instruction() {
         let map = test_map(3);
-        let i = mock_instruction(
-            0x480,
-            vec![],
-            OpcodeForm::Short,
-            5,
-            OperandCount::_0OP,
-            0x482,
-        );
+        let i = mock_instruction(0x480, vec![], opcode(3, 5), 0x482);
         let mut zmachine = mock_zmachine(map);
 
         let a = dispatch(&mut zmachine, &i);
@@ -367,7 +319,10 @@ mod tests {
     #[test]
     fn test_restore_v3() {
         // Save a file
-        INPUT.lock().unwrap().clear();
+        input(&[
+            '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', 'v', '3', 'r', '.', 'i',
+            'f', 'z', 's',
+        ]);
 
         let mut map = test_map(3);
         // Set up the save instruction for the restore to decode
@@ -377,56 +332,46 @@ mod tests {
         let i = mock_branch_instruction(
             0x480,
             vec![],
-            OpcodeForm::Short,
-            5,
-            OperandCount::_0OP,
+            opcode(3, 5),
             0x482,
-            0x481,
-            true,
-            0x483,
+            branch(0x481, true, 0x483),
         );
 
         let mut zmachine = mock_zmachine(map);
         let a = dispatch(&mut zmachine, &i);
-        assert!(Path::new("test-01.ifzs").exists());
+        assert!(Path::new("test-v3r.ifzs").exists());
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x483);
 
+        input(&[
+            '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}',
+            '\u{8}', '\u{8}', '\u{8}', 't', 'e', 's', 't', '-', 'v', '3', 'r', '.', 'i', 'f', 'z',
+            's',
+        ]);
         let i = mock_branch_instruction(
             0x480,
             vec![],
-            OpcodeForm::Short,
-            6,
-            OperandCount::_0OP,
+            opcode(3, 6),
             0x482,
-            0x481,
-            true,
-            0x490,
+            branch(0x481, true, 0x490),
         );
         let a = dispatch(&mut zmachine, &i);
-        assert!(fs::remove_file(Path::new("test-01.ifzs")).is_ok());
+        assert!(fs::remove_file(Path::new("test-v3r.ifzs")).is_ok());
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x489);
     }
 
     #[test]
     fn test_restore_v3_fail() {
-        // Save a file
-        INPUT.lock().unwrap().clear();
-
         let map = test_map(3);
 
         let mut zmachine = mock_zmachine(map);
         let i = mock_branch_instruction(
             0x480,
             vec![],
-            OpcodeForm::Short,
-            6,
-            OperandCount::_0OP,
+            opcode(3, 6),
             0x482,
-            0x481,
-            true,
-            0x490,
+            branch(0x481, true, 0x490),
         );
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok());
@@ -436,24 +381,19 @@ mod tests {
     #[test]
     fn test_save_v4() {
         // Accept default save file name
-        INPUT.lock().unwrap().clear();
+        input(&[
+            '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', 'v', '4', '.', 'i', 'f',
+            'z', 's',
+        ]);
+
         let mut map = test_map(4);
         set_variable(&mut map, 0x80, 0xFF);
 
-        let i = mock_store_instruction(
-            0x480,
-            vec![],
-            OpcodeForm::Short,
-            5,
-            OperandCount::_0OP,
-            0x483,
-            0x481,
-            0x80,
-        );
+        let i = mock_store_instruction(0x480, vec![], opcode(4, 5), 0x483, store(0x481, 0x80));
         let mut zmachine = mock_zmachine(map);
         let a = dispatch(&mut zmachine, &i);
-        assert!(Path::new("test-01.ifzs").exists());
-        assert!(fs::remove_file(Path::new("test-01.ifzs")).is_ok());
+        assert!(Path::new("test-v4.ifzs").exists());
+        assert!(fs::remove_file(Path::new("test-v4.ifzs")).is_ok());
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x483);
         let v = zmachine.variable(0x80);
@@ -463,32 +403,16 @@ mod tests {
 
     #[test]
     fn test_save_v4_fail() {
-        INPUT.lock().unwrap().clear();
-        INPUT
-            .lock()
-            .unwrap()
-            .append(&mut VecDeque::from(vec!['\u{8}'; 12]));
-        INPUT
-            .lock()
-            .unwrap()
-            .append(&mut VecDeque::from(vec!['/', 'x', '/', 'f']));
-
+        input(&[
+            '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}',
+            '\u{8}', '\u{8}', '\u{8}', '/', 'x', '/', 'x',
+        ]);
         let mut map = test_map(4);
         set_variable(&mut map, 0x80, 0xFF);
 
-        let i = mock_store_instruction(
-            0x480,
-            vec![],
-            OpcodeForm::Short,
-            5,
-            OperandCount::_0OP,
-            0x483,
-            0x481,
-            0x80,
-        );
+        let i = mock_store_instruction(0x480, vec![], opcode(4, 5), 0x483, store(0x481, 0x80));
         let mut zmachine = mock_zmachine(map);
         let a = dispatch(&mut zmachine, &i);
-        assert!(!Path::new("test-01.ifzs").exists());
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x483);
         let v = zmachine.variable(0x80);
@@ -501,14 +425,7 @@ mod tests {
         let mut map = test_map(4);
         set_variable(&mut map, 0x80, 0xFF);
 
-        let i = mock_instruction(
-            0x480,
-            vec![],
-            OpcodeForm::Short,
-            5,
-            OperandCount::_0OP,
-            0x483,
-        );
+        let i = mock_instruction(0x480, vec![], opcode(4, 5), 0x483);
         let mut zmachine = mock_zmachine(map);
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_err());
@@ -518,9 +435,12 @@ mod tests {
 
     #[test]
     fn test_restore_v4() {
-        // Save a file
-        INPUT.lock().unwrap().clear();
+        input(&[
+            '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', 'v', '4', 'r', '.', 'i',
+            'f', 'z', 's',
+        ]);
 
+        // Save a file
         let mut map = test_map(4);
         // Set up the save instruction for the restore to decode
         map[0x480] = 0xb5;
@@ -531,36 +451,23 @@ mod tests {
 
         let mut zmachine = mock_zmachine(map.clone());
 
-        let i = mock_store_instruction(
-            0x480,
-            vec![],
-            OpcodeForm::Short,
-            5,
-            OperandCount::_0OP,
-            0x482,
-            0x481,
-            0x80,
-        );
+        let i = mock_store_instruction(0x480, vec![], opcode(4, 5), 0x482, store(0x481, 0x80));
 
         let a = dispatch(&mut zmachine, &i);
-        assert!(Path::new("test-01.ifzs").exists());
+        assert!(Path::new("test-v4r.ifzs").exists());
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x482);
         assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x01));
 
-        let i2 = mock_store_instruction(
-            0x484,
-            vec![],
-            OpcodeForm::Short,
-            6,
-            OperandCount::_0OP,
-            0x486,
-            0x485,
-            0x81,
-        );
+        let i2 = mock_store_instruction(0x484, vec![], opcode(4, 6), 0x486, store(0x485, 0x81));
+        input(&[
+            '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}',
+            '\u{8}', '\u{8}', '\u{8}', 't', 'e', 's', 't', '-', 'v', '4', 'r', '.', 'i', 'f', 'z',
+            's',
+        ]);
 
         let a = dispatch(&mut zmachine, &i2);
-        assert!(fs::remove_file(Path::new("test-01.ifzs")).is_ok());
+        assert!(fs::remove_file(Path::new("test-v4r.ifzs")).is_ok());
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), 0x482);
         assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0x02));
@@ -569,8 +476,6 @@ mod tests {
     #[test]
     fn test_restore_v4_fail() {
         // Save a file
-        INPUT.lock().unwrap().clear();
-
         let mut map = test_map(4);
         // Set up the save instruction for the restore to decode
         map[0x480] = 0xb5;
@@ -581,16 +486,7 @@ mod tests {
 
         let mut zmachine = mock_zmachine(map);
 
-        let i = mock_store_instruction(
-            0x480,
-            vec![],
-            OpcodeForm::Short,
-            5,
-            OperandCount::_0OP,
-            0x482,
-            0x481,
-            0x80,
-        );
+        let i = mock_store_instruction(0x480, vec![], opcode(4, 5), 0x482, store(0x481, 0x80));
 
         let a = dispatch(&mut zmachine, &i);
         assert!(Path::new("test-01.ifzs").exists());
@@ -599,16 +495,7 @@ mod tests {
         assert_eq!(a.unwrap(), 0x482);
         assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x01));
 
-        let i2 = mock_store_instruction(
-            0x484,
-            vec![],
-            OpcodeForm::Short,
-            6,
-            OperandCount::_0OP,
-            0x486,
-            0x485,
-            0x81,
-        );
+        let i2 = mock_store_instruction(0x484, vec![], opcode(4, 6), 0x486, store(0x485, 0x81));
 
         let a = dispatch(&mut zmachine, &i2);
         assert!(a.is_ok());
@@ -621,14 +508,7 @@ mod tests {
         let map = test_map(3);
         let mut zmachine = mock_zmachine(map);
 
-        let i = mock_instruction(
-            0x480,
-            vec![],
-            OpcodeForm::Short,
-            7,
-            OperandCount::_0OP,
-            0x481,
-        );
+        let i = mock_instruction(0x480, vec![], opcode(3, 7), 0x481);
 
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok());
@@ -643,14 +523,7 @@ mod tests {
         assert!(zmachine.push(0x1122).is_ok());
         assert!(zmachine.push(0x3344).is_ok());
 
-        let i = mock_instruction(
-            0x501,
-            vec![],
-            OpcodeForm::Short,
-            8,
-            OperandCount::_0OP,
-            0x502,
-        );
+        let i = mock_instruction(0x501, vec![], opcode(3, 8), 0x502);
 
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0x402));
@@ -665,14 +538,7 @@ mod tests {
         assert!(zmachine.push(0x1122).is_ok());
         assert!(zmachine.push(0x3344).is_ok());
 
-        let i = mock_instruction(
-            0x501,
-            vec![],
-            OpcodeForm::Short,
-            9,
-            OperandCount::_0OP,
-            0x502,
-        );
+        let i = mock_instruction(0x501, vec![], opcode(3, 9), 0x502);
 
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0x502));
@@ -685,16 +551,7 @@ mod tests {
         let mut zmachine = mock_zmachine(map);
         mock_frame(&mut zmachine, 0x480, None, 0x404);
         mock_frame(&mut zmachine, 0x500, None, 0x404);
-        let i = mock_store_instruction(
-            0x500,
-            vec![],
-            OpcodeForm::Short,
-            9,
-            OperandCount::_0OP,
-            0x502,
-            0x501,
-            0x80,
-        );
+        let i = mock_store_instruction(0x500, vec![], opcode(5, 9), 0x502, store(0x501, 0x80));
 
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0x502));
@@ -703,48 +560,28 @@ mod tests {
 
     #[test]
     fn test_quit() {
-        INPUT.lock().unwrap().clear();
         let map = test_map(3);
         let mut zmachine = mock_zmachine(map);
-        let i = mock_instruction(
-            0x400,
-            vec![],
-            OpcodeForm::Short,
-            10,
-            OperandCount::_0OP,
-            0x401,
-        );
+        let i = mock_instruction(0x400, vec![], opcode(3, 10), 0x401);
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0));
-        PRINT.lock().unwrap().clear();
     }
 
     #[test]
     fn test_new_line() {
-        PRINT.lock().unwrap().clear();
         let map = test_map(3);
         let mut zmachine = mock_zmachine(map);
         assert!(zmachine.set_cursor(1, 1).is_ok());
-        let i = mock_instruction(
-            0x400,
-            vec![],
-            OpcodeForm::Short,
-            11,
-            OperandCount::_0OP,
-            0x401,
-        );
+        let i = mock_instruction(0x400, vec![], opcode(3, 11), 0x401);
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0x401));
         let (nr, nc) = zmachine.cursor().unwrap();
         assert_eq!(2, nr);
         assert_eq!(nc, 1);
-        PRINT.lock().unwrap().clear();
     }
 
     #[test]
     fn test_show_status_score() {
-        PRINT.lock().unwrap().clear();
-
         let mut map = test_map(3);
 
         // Set the object table to 0x200
@@ -761,26 +598,17 @@ mod tests {
 
         let mut zmachine = mock_zmachine(map);
 
-        let i = mock_instruction(
-            0x400,
-            vec![],
-            OpcodeForm::Short,
-            12,
-            OperandCount::_0OP,
-            0x401,
-        );
+        let i = mock_instruction(0x400, vec![], opcode(3, 12), 0x401);
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0x401));
         assert_eq!(
-            *PRINT.lock().unwrap(),
+            print(),
             " Status Object                                                         -246/4567"
         );
     }
 
     #[test]
     fn test_show_status_time_am() {
-        PRINT.lock().unwrap().clear();
-
         let mut map = test_map(3);
 
         // Set the timed game flag bit
@@ -799,26 +627,17 @@ mod tests {
 
         let mut zmachine = mock_zmachine(map);
 
-        let i = mock_instruction(
-            0x400,
-            vec![],
-            OpcodeForm::Short,
-            12,
-            OperandCount::_0OP,
-            0x401,
-        );
+        let i = mock_instruction(0x400, vec![], opcode(3, 12), 0x401);
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0x401));
         assert_eq!(
-            *PRINT.lock().unwrap(),
+            print(),
             " Status Object                                                          12:00 AM"
         );
     }
 
     #[test]
     fn test_show_status_time_pm() {
-        PRINT.lock().unwrap().clear();
-
         let mut map = test_map(3);
 
         // Set the timed game flag bit
@@ -838,26 +657,17 @@ mod tests {
 
         let mut zmachine = mock_zmachine(map);
 
-        let i = mock_instruction(
-            0x400,
-            vec![],
-            OpcodeForm::Short,
-            12,
-            OperandCount::_0OP,
-            0x401,
-        );
+        let i = mock_instruction(0x400, vec![], opcode(3, 12), 0x401);
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0x401));
         assert_eq!(
-            *PRINT.lock().unwrap(),
+            print(),
             " Status Object                                                          12:00 PM"
         );
     }
 
     #[test]
     fn test_show_status_time_padding() {
-        PRINT.lock().unwrap().clear();
-
         let mut map = test_map(3);
 
         // Set the timed game flag bit
@@ -876,18 +686,11 @@ mod tests {
 
         let mut zmachine = mock_zmachine(map);
 
-        let i = mock_instruction(
-            0x400,
-            vec![],
-            OpcodeForm::Short,
-            12,
-            OperandCount::_0OP,
-            0x401,
-        );
+        let i = mock_instruction(0x400, vec![], opcode(3, 12), 0x401);
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0x401));
         assert_eq!(
-            *PRINT.lock().unwrap(),
+            print(),
             " Status Object                                                           1:59 AM"
         );
     }
@@ -907,13 +710,9 @@ mod tests {
         let i = mock_branch_instruction(
             0x400,
             vec![],
-            OpcodeForm::Short,
-            13,
-            OperandCount::_0OP,
+            opcode(3, 13),
             0x402,
-            0x401,
-            true,
-            0x40a,
+            branch(0x401, true, 0x40a),
         );
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0x40a));
@@ -934,13 +733,9 @@ mod tests {
         let i = mock_branch_instruction(
             0x400,
             vec![],
-            OpcodeForm::Short,
-            13,
-            OperandCount::_0OP,
+            opcode(3, 13),
             0x402,
-            0x401,
-            true,
-            0x40a,
+            branch(0x401, true, 0x40a),
         );
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0x402));
@@ -954,13 +749,9 @@ mod tests {
         let i = mock_branch_instruction(
             0x400,
             vec![],
-            OpcodeForm::Short,
-            15,
-            OperandCount::_0OP,
+            opcode(3, 15),
             0x402,
-            0x401,
-            true,
-            0x40a,
+            branch(0x401, true, 0x40a),
         );
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0x40a));
@@ -968,13 +759,9 @@ mod tests {
         let i = mock_branch_instruction(
             0x400,
             vec![],
-            OpcodeForm::Short,
-            15,
-            OperandCount::_0OP,
+            opcode(3, 15),
             0x402,
-            0x401,
-            false,
-            0x40a,
+            branch(0x401, false, 0x40a),
         );
         let a = dispatch(&mut zmachine, &i);
         assert!(a.is_ok_and(|x| x == 0x402));
