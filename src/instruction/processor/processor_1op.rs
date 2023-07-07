@@ -138,7 +138,6 @@ pub fn print_obj(
     let ztext = property::short_name(zmachine, operands[0] as usize)?;
     let text = text::from_vec(zmachine, &ztext)?;
     zmachine.print(&text)?;
-    // context.print_string(text);
     Ok(instruction.next_address())
 }
 
@@ -162,7 +161,6 @@ pub fn print_paddr(
     let address = zmachine.packed_string_address(operands[0])?;
     let text = text::as_text(zmachine, address)?;
     zmachine.print(&text)?;
-    // context.print_string(text);
     Ok(instruction.next_address())
 }
 
@@ -184,4 +182,1022 @@ pub fn call_1n(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
     let operands = operand_values(zmachine, instruction)?;
     let address = zmachine.packed_routine_address(operands[0])?;
     zmachine.call_routine(address, &vec![], None, instruction.next_address())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        instruction::{
+            processor::{dispatch, tests::*},
+            Opcode, OpcodeForm, OperandCount, OperandType,
+        },
+        object,
+    };
+
+    fn opcode(version: u8, instruction: u8) -> Opcode {
+        Opcode::new(
+            version,
+            instruction,
+            instruction,
+            OpcodeForm::Short,
+            OperandCount::_1OP,
+        )
+    }
+
+    #[test]
+    fn test_jz_true() {
+        let map = test_map(3);
+        let mut zmachine = mock_zmachine(map);
+
+        let i = mock_branch_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 0)],
+            opcode(3, 0),
+            0x403,
+            branch(0x402, true, 0x40a),
+        );
+
+        let a = dispatch(&mut zmachine, &i);
+        assert!(a.is_ok_and(|x| x == 0x40a));
+    }
+
+    #[test]
+    fn test_jz_false() {
+        let map = test_map(3);
+        let mut zmachine = mock_zmachine(map);
+
+        let i = mock_branch_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(3, 0),
+            0x403,
+            branch(0x402, true, 0x40a),
+        );
+
+        let a = dispatch(&mut zmachine, &i);
+        assert!(a.is_ok_and(|x| x == 0x403));
+    }
+
+    #[test]
+    fn test_get_sibling_v3_true() {
+        let mut map = test_map(3);
+        // Sibling
+        //   4     18    E        7     12    14
+        // 0 00100 11000 01110  0 00111 10010 10100
+        // 130E                 1E54
+        //   C     5     5
+        // 1 01100 00101 00101
+        // B0A5
+
+        mock_object(&mut map, 1, vec![0x130E, 0x1E54, 0xB0A5], (4, 2, 5));
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_branch_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(3, 1),
+            0x403,
+            branch(0x401, true, 0x40a),
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x40a));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x02));
+    }
+
+    #[test]
+    fn test_get_sibling_v3_false() {
+        let mut map = test_map(3);
+        set_variable(&mut map, 0x80, 0xFFFF);
+
+        mock_object(&mut map, 1, vec![0x130E, 0x1E54, 0xB0A5], (4, 0, 5));
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_branch_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(3, 1),
+            0x403,
+            branch(0x401, true, 0x40a),
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x00));
+    }
+
+    #[test]
+    fn test_get_sibling_v4_true() {
+        let mut map = test_map(4);
+
+        mock_object(&mut map, 1, vec![0x130E, 0x1E54, 0xB0A5], (4, 2, 5));
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_branch_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(4, 1),
+            0x403,
+            branch(0x401, true, 0x40a),
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x40a));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x02));
+    }
+
+    #[test]
+    fn test_get_sibling_v4_false() {
+        let mut map = test_map(4);
+        set_variable(&mut map, 0x80, 0xFFFF);
+
+        mock_object(&mut map, 1, vec![0x130E, 0x1E54, 0xB0A5], (4, 0, 5));
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_branch_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(4, 1),
+            0x403,
+            branch(0x401, true, 0x40a),
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x00));
+    }
+
+    #[test]
+    fn test_get_child_v3_true() {
+        let mut map = test_map(3);
+        // Child
+        //   4     8     D        E     12    9
+        // 0 00100 01000 01101  1 01110 10010 01001
+        // 110D                 BA49
+
+        mock_object(&mut map, 1, vec![0x110D, 0xBA49], (4, 2, 5));
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_branch_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(3, 2),
+            0x403,
+            branch(0x401, true, 0x40a),
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x40a));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x05));
+    }
+
+    #[test]
+    fn test_get_child_v3_false() {
+        let mut map = test_map(3);
+        set_variable(&mut map, 0x80, 0xFFFF);
+
+        mock_object(&mut map, 1, vec![0x110D, 0xBA49], (4, 2, 0));
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_branch_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(4, 2),
+            0x403,
+            branch(0x401, true, 0x40a),
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x00));
+    }
+
+    #[test]
+    fn test_get_child_v4_true() {
+        let mut map = test_map(4);
+
+        mock_object(&mut map, 1, vec![0x110D, 0xBA49], (4, 2, 5));
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_branch_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(4, 2),
+            0x403,
+            branch(0x401, true, 0x40a),
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x40a));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x05));
+    }
+
+    #[test]
+    fn test_get_child_v4_false() {
+        let mut map = test_map(4);
+        set_variable(&mut map, 0x80, 0xFFFF);
+
+        mock_object(&mut map, 1, vec![0x110D, 0xBA49], (4, 2, 0));
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_branch_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(4, 2),
+            0x403,
+            branch(0x401, true, 0x40a),
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x00));
+    }
+
+    #[test]
+    fn test_get_parent_v3() {
+        let mut map = test_map(3);
+        set_variable(&mut map, 0x80, 0xFFFF);
+        // Parent
+        //   4     15    6        17    A     13
+        // 0 00100 10101 00110  0 10111 01010 10011
+        // 12A6                 5D53
+        //   19    5     5
+        // 1 11001 00101 00101
+        // E4A5
+
+        mock_object(&mut map, 1, vec![0x12A6, 0x5E54, 0xE4A5], (4, 2, 5));
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(3, 3),
+            0x403,
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x04));
+    }
+
+    #[test]
+    fn test_get_parent_v4() {
+        let mut map = test_map(4);
+        set_variable(&mut map, 0x80, 0xFFFF);
+        // Parent
+        //   4     15    6        16    A     14
+        // 0 00100 10101 00110  0 10110 01010 10100
+        // 12A6                 5954
+        //   19    5     5
+        // 1 11001 00101 00101
+        // E4A5
+
+        mock_object(&mut map, 1, vec![0x12A6, 0x5954, 0xE4A5], (4, 2, 5));
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(4, 3),
+            0x403,
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x04));
+    }
+
+    #[test]
+    fn test_get_prop_len_v3() {
+        let mut map = test_map(3);
+        set_variable(&mut map, 0x80, 0xFFFF);
+        map[0x300] = 0x2C;
+        // Object
+        //   4     14    7        F     A     8
+        // 0 00100 10100 00111  0 01111 01010 01011
+        // 1287                 3D4B
+        //   19    5     5
+        // 1 11001 00101 00101
+        // E4A5
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0x301)],
+            opcode(3, 4),
+            0x403,
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 2));
+    }
+
+    #[test]
+    fn test_get_prop_len_v4_short() {
+        let mut map = test_map(4);
+        set_variable(&mut map, 0x80, 0xFFFF);
+        map[0x300] = 0x3A;
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0x301)],
+            opcode(4, 4),
+            0x403,
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 1));
+    }
+
+    #[test]
+    fn test_get_prop_len_v4_long() {
+        let mut map = test_map(4);
+        set_variable(&mut map, 0x80, 0xFFFF);
+        map[0x300] = 0x7A;
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0x301)],
+            opcode(4, 4),
+            0x403,
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 2));
+    }
+
+    #[test]
+    fn test_get_prop_len_v4_extended() {
+        let mut map = test_map(4);
+        set_variable(&mut map, 0x80, 0xFFFF);
+        map[0x300] = 0xBA;
+        map[0x301] = 0xBF;
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0x302)],
+            opcode(4, 4),
+            0x403,
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 63));
+    }
+
+    #[test]
+    fn test_get_prop_len_v4_64() {
+        let mut map = test_map(4);
+        set_variable(&mut map, 0x80, 0xFFFF);
+        map[0x300] = 0xBA;
+        map[0x301] = 0x80;
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0x302)],
+            opcode(4, 4),
+            0x403,
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 64));
+    }
+
+    #[test]
+    fn test_inc() {
+        let mut map = test_map(3);
+        set_variable(&mut map, 0x80, 0x1234);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 0x80)],
+            opcode(3, 5),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x1235));
+    }
+
+    #[test]
+    fn test_inc_overflow() {
+        let mut map = test_map(3);
+        set_variable(&mut map, 0x80, 0x7FFF);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 0x80)],
+            opcode(3, 5),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x8000));
+    }
+
+    #[test]
+    fn test_inc_sp() {
+        let map = test_map(3);
+        let mut zmachine = mock_zmachine(map);
+        assert!(zmachine.push(0x1234).is_ok());
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 0)],
+            opcode(3, 5),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(zmachine.variable(0).is_ok_and(|x| x == 0x1235));
+        assert!(zmachine.variable(0).is_err());
+    }
+
+    #[test]
+    fn test_dec() {
+        let mut map = test_map(3);
+        set_variable(&mut map, 0x80, 0x1234);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 0x80)],
+            opcode(3, 6),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x1233));
+    }
+
+    #[test]
+    fn test_dec_overflow() {
+        let mut map = test_map(3);
+        set_variable(&mut map, 0x80, 0x0000);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 0x80)],
+            opcode(3, 6),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0xFFFF));
+    }
+
+    #[test]
+    fn test_dec_sp() {
+        let mut map = test_map(3);
+        set_variable(&mut map, 0x80, 0x7FFF);
+        let mut zmachine = mock_zmachine(map);
+        assert!(zmachine.push(0x1234).is_ok());
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 0)],
+            opcode(3, 6),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(zmachine.variable(0).is_ok_and(|x| x == 0x1233));
+        assert!(zmachine.variable(0).is_err());
+    }
+
+    #[test]
+    fn test_print_addr() {
+        let mut map = test_map(3);
+        // Hello
+        map[0x600] = 0x11;
+        map[0x601] = 0xaa;
+        map[0x602] = 0xc6;
+        map[0x603] = 0x34;
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0x600)],
+            opcode(3, 7),
+            0x403,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert_print("Hello");
+    }
+
+    #[test]
+    fn test_call_1s_v3() {
+        let mut map = test_map(3);
+        mock_routine(&mut map, 0x600, &[0x1234, 0x5678, 0x9abc, 0xdef0]);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0x300)],
+            opcode(3, 8),
+            0x404,
+            store(0x403, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x609));
+        assert!(zmachine.variable(0).is_err());
+        assert!(zmachine.variable(1).is_ok_and(|x| x == 0x1234));
+        assert!(zmachine.variable(2).is_ok_and(|x| x == 0x5678));
+        assert!(zmachine.variable(3).is_ok_and(|x| x == 0x9abc));
+        assert!(zmachine.variable(4).is_ok_and(|x| x == 0xdef0));
+        assert!(zmachine.variable(5).is_err());
+        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0xF0AD));
+    }
+
+    #[test]
+    fn test_call_1s_v4() {
+        let mut map = test_map(4);
+        mock_routine(&mut map, 0x600, &[0x1234, 0x5678, 0x9abc, 0xdef0]);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0x180)],
+            opcode(4, 8),
+            0x404,
+            store(0x403, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x609));
+        assert!(zmachine.variable(0).is_err());
+        assert!(zmachine.variable(1).is_ok_and(|x| x == 0x1234));
+        assert!(zmachine.variable(2).is_ok_and(|x| x == 0x5678));
+        assert!(zmachine.variable(3).is_ok_and(|x| x == 0x9abc));
+        assert!(zmachine.variable(4).is_ok_and(|x| x == 0xdef0));
+        assert!(zmachine.variable(5).is_err());
+        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0xF0AD));
+    }
+
+    #[test]
+    fn test_call_1s_v5() {
+        let mut map = test_map(5);
+        mock_routine(&mut map, 0x600, &[0x1234, 0x5678, 0x9abc, 0xdef0]);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0x180)],
+            opcode(5, 8),
+            0x404,
+            store(0x403, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x601));
+        assert!(zmachine.variable(0).is_err());
+        assert!(zmachine.variable(1).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(2).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(3).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(4).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(5).is_err());
+        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0xF0AD));
+    }
+
+    #[test]
+    fn test_call_1s_v8() {
+        let mut map = test_map(8);
+        mock_routine(&mut map, 0x600, &[0x1234, 0x5678, 0x9abc, 0xdef0]);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0xC0)],
+            opcode(8, 8),
+            0x404,
+            store(0x403, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x601));
+        assert!(zmachine.variable(0).is_err());
+        assert!(zmachine.variable(1).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(2).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(3).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(4).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(5).is_err());
+        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0xF0AD));
+    }
+
+    #[test]
+    fn test_remove_obj_v3_first_child() {
+        let mut map = test_map(3);
+        mock_object(&mut map, 1, vec![0x12A6, 0x5954, 0xE4A5], (4, 5, 2));
+        mock_object(&mut map, 2, vec![0x110D, 0xBA49], (1, 3, 5));
+        mock_object(&mut map, 3, vec![0x130E, 0x1E54, 0xB0A5], (1, 6, 7));
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 2)],
+            opcode(3, 9),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 3));
+        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 0));
+        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 0));
+        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
+        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 1));
+        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 6));
+        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+    }
+
+    #[test]
+    fn test_remove_obj_v3_middle_child() {
+        let mut map = test_map(3);
+        mock_object(&mut map, 1, vec![0x12A6, 0x5954, 0xE4A5], (4, 5, 2));
+        mock_object(&mut map, 2, vec![0x110D, 0xBA49], (1, 3, 5));
+        mock_object(&mut map, 3, vec![0x130E, 0x1E54, 0xB0A5], (1, 6, 7));
+        mock_object(&mut map, 6, vec![0x1287, 0x3D4B, 0xE4A5], (1, 8, 9));
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 3)],
+            opcode(3, 9),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 2));
+        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 1));
+        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 6));
+        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
+        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 0));
+        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 0));
+        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+        assert!(object::parent(&zmachine, 6).is_ok_and(|x| x == 1));
+        assert!(object::sibling(&zmachine, 6).is_ok_and(|x| x == 8));
+        assert!(object::child(&zmachine, 6).is_ok_and(|x| x == 9));
+    }
+
+    #[test]
+    fn test_remove_obj_v3_last_child() {
+        let mut map = test_map(3);
+        mock_object(&mut map, 1, vec![0x12A6, 0x5954, 0xE4A5], (4, 5, 2));
+        mock_object(&mut map, 2, vec![0x110D, 0xBA49], (1, 3, 5));
+        mock_object(&mut map, 3, vec![0x130E, 0x1E54, 0xB0A5], (1, 6, 7));
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 3)],
+            opcode(3, 9),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 2));
+        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 1));
+        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 6));
+        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
+        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 0));
+        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 0));
+        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+    }
+
+    #[test]
+    fn test_remove_obj_no_parent() {
+        let mut map = test_map(3);
+        mock_object(&mut map, 1, vec![0x12A6, 0x5954, 0xE4A5], (4, 5, 2));
+        mock_object(&mut map, 2, vec![0x110D, 0xBA49], (1, 0, 5));
+        mock_object(&mut map, 3, vec![0x130E, 0x1E54, 0xB0A5], (0, 6, 7));
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 3)],
+            opcode(3, 9),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 2));
+        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 1));
+        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 0));
+        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
+        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 0));
+        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 6));
+        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+    }
+
+    #[test]
+    fn test_remove_obj_object_0() {
+        let mut map = test_map(3);
+        mock_object(&mut map, 1, vec![0x12A6, 0x5954, 0xE4A5], (4, 5, 2));
+        mock_object(&mut map, 2, vec![0x110D, 0xBA49], (1, 3, 5));
+        mock_object(&mut map, 3, vec![0x130E, 0x1E54, 0xB0A5], (1, 6, 7));
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 0)],
+            opcode(3, 9),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 2));
+        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 1));
+        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 3));
+        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
+        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 1));
+        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 6));
+        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+    }
+
+    #[test]
+    fn test_remove_obj_v4_first_child() {
+        let mut map = test_map(4);
+        mock_object(&mut map, 1, vec![0x12A6, 0x5954, 0xE4A5], (4, 5, 2));
+        mock_object(&mut map, 2, vec![0x110D, 0xBA49], (1, 3, 5));
+        mock_object(&mut map, 3, vec![0x130E, 0x1E54, 0xB0A5], (1, 6, 7));
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 2)],
+            opcode(4, 9),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 3));
+        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 0));
+        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 0));
+        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
+        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 1));
+        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 6));
+        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+    }
+
+    #[test]
+    fn test_remove_obj_v4_middle_child() {
+        let mut map = test_map(4);
+        mock_object(&mut map, 1, vec![0x12A6, 0x5954, 0xE4A5], (4, 5, 2));
+        mock_object(&mut map, 2, vec![0x110D, 0xBA49], (1, 3, 5));
+        mock_object(&mut map, 3, vec![0x130E, 0x1E54, 0xB0A5], (1, 6, 7));
+        mock_object(&mut map, 6, vec![0x1287, 0x3D4B, 0xE4A5], (1, 8, 9));
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 3)],
+            opcode(4, 9),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 2));
+        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 1));
+        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 6));
+        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
+        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 0));
+        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 0));
+        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+        assert!(object::parent(&zmachine, 6).is_ok_and(|x| x == 1));
+        assert!(object::sibling(&zmachine, 6).is_ok_and(|x| x == 8));
+        assert!(object::child(&zmachine, 6).is_ok_and(|x| x == 9));
+    }
+
+    #[test]
+    fn test_remove_obj_v4_last_child() {
+        let mut map = test_map(4);
+        mock_object(&mut map, 1, vec![0x12A6, 0x5954, 0xE4A5], (4, 5, 2));
+        mock_object(&mut map, 2, vec![0x110D, 0xBA49], (1, 3, 5));
+        mock_object(&mut map, 3, vec![0x130E, 0x1E54, 0xB0A5], (1, 6, 7));
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 3)],
+            opcode(4, 9),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 2));
+        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 1));
+        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 6));
+        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
+        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 0));
+        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 0));
+        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+    }
+
+    #[test]
+    fn test_remove_obj_invalid_tree() {
+        let mut map = test_map(3);
+        mock_object(&mut map, 1, vec![0x12A6, 0x5954, 0xE4A5], (4, 5, 2));
+        mock_object(&mut map, 2, vec![0x110D, 0xBA49], (1, 0, 5));
+        mock_object(&mut map, 3, vec![0x130E, 0x1E54, 0xB0A5], (1, 6, 7));
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 3)],
+            opcode(3, 9),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_err());
+    }
+
+    #[test]
+    fn test_print_obj_v3() {
+        let mut map = test_map(3);
+        mock_object(&mut map, 1, vec![0x12A6, 0x5D53, 0xE4A5], (4, 5, 2));
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(3, 10),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert_print("Parent");
+    }
+
+    #[test]
+    fn test_print_obj_v4() {
+        let mut map = test_map(4);
+        mock_object(&mut map, 1, vec![0x12A6, 0x5D53, 0xE4A5], (4, 5, 2));
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 1)],
+            opcode(4, 10),
+            0x402,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
+        assert_print("Parent");
+    }
+
+    #[test]
+    fn test_ret_store() {
+        let map = test_map(3);
+        let mut zmachine = mock_zmachine(map);
+        assert!(zmachine.set_variable(0, 0x1234).is_ok());
+        mock_frame(&mut zmachine, 0x500, Some(0x80), 0x400);
+        let i = mock_instruction(
+            0x501,
+            vec![operand(OperandType::LargeConstant, 0x5678)],
+            opcode(3, 11),
+            0x501,
+        );
+        assert!(zmachine.peek_variable(0).is_err());
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x400));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x5678));
+        assert!(zmachine.peek_variable(0).is_ok_and(|x| x == 0x1234));
+    }
+
+    #[test]
+    fn test_ret_no_store() {
+        let map = test_map(3);
+        let mut zmachine = mock_zmachine(map);
+        assert!(zmachine.set_variable(0, 0x1234).is_ok());
+        mock_frame(&mut zmachine, 0x500, None, 0x400);
+        let i = mock_instruction(
+            0x501,
+            vec![operand(OperandType::LargeConstant, 0x5678)],
+            opcode(3, 11),
+            0x501,
+        );
+        assert!(zmachine.peek_variable(0).is_err());
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x400));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+        assert!(zmachine.peek_variable(0).is_ok_and(|x| x == 0x1234));
+    }
+
+    #[test]
+    fn test_jump_forward() {
+        let map = test_map(3);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x401,
+            vec![operand(OperandType::LargeConstant, 0xFF)],
+            opcode(3, 12),
+            0x404,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x501));
+    }
+
+    #[test]
+    fn test_jump_backward() {
+        let map = test_map(3);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x401,
+            vec![operand(OperandType::LargeConstant, 0xFEFF)],
+            opcode(3, 12),
+            0x404,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x301));
+    }
+
+    #[test]
+    fn test_print_paddr_v3() {
+        let mut map = test_map(3);
+        // Hello
+        map[0x600] = 0x11;
+        map[0x601] = 0xaa;
+        map[0x602] = 0xc6;
+        map[0x603] = 0x34;
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0x300)],
+            opcode(3, 13),
+            0x403,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert_print("Hello");
+    }
+
+    #[test]
+    fn test_print_paddr_v4() {
+        let mut map = test_map(4);
+        // Hello
+        map[0x600] = 0x11;
+        map[0x601] = 0xaa;
+        map[0x602] = 0xc6;
+        map[0x603] = 0x34;
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0x180)],
+            opcode(4, 13),
+            0x403,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert_print("Hello");
+    }
+
+    #[test]
+    fn test_print_paddr_v8() {
+        let mut map = test_map(8);
+        // Hello
+        map[0x600] = 0x11;
+        map[0x601] = 0xaa;
+        map[0x602] = 0xc6;
+        map[0x603] = 0x34;
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 0xC0)],
+            opcode(8, 13),
+            0x403,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert_print("Hello");
+    }
+
+    #[test]
+    fn test_load() {
+        let mut map = test_map(3);
+        set_variable(&mut map, 0x80, 0x1234);
+        set_variable(&mut map, 0x81, 0x5678);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 0x81)],
+            opcode(3, 14),
+            0x403,
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x5678));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0x5678));
+    }
+
+    #[test]
+    pub fn test_not() {
+        let map = test_map(3);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0xF0A5)],
+            opcode(3, 15),
+            0x404,
+            store(0x403, 0x080),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x0F5A));
+    }
+
+    #[test]
+    pub fn test_call_1n_v5() {
+        let mut map = test_map(5);
+        mock_routine(&mut map, 0x600, &[0x1234, 0x5678, 0x9abc, 0xdef0]);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0x180)],
+            opcode(5, 15),
+            0x404,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x601));
+        assert!(zmachine.variable(0).is_err());
+        assert!(zmachine.variable(1).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(2).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(3).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(4).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(5).is_err());
+        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    pub fn test_call_1n_v8() {
+        let mut map = test_map(8);
+        mock_routine(&mut map, 0x600, &[0x1234, 0x5678, 0x9abc, 0xdef0]);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0xC0)],
+            opcode(8, 15),
+            0x404,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x601));
+        assert!(zmachine.variable(0).is_err());
+        assert!(zmachine.variable(1).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(2).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(3).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(4).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(5).is_err());
+        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+    }
 }

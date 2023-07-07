@@ -269,7 +269,7 @@ pub mod tests {
         PRINT.with(|x| x.borrow_mut().push(c));
     }
 
-    pub fn print() -> String {
+    fn print() -> String {
         PRINT.with(|x| x.borrow().to_string())
     }
 
@@ -306,6 +306,10 @@ pub mod tests {
         let z = ZMachine::new(m, Config::default(), None, "test");
         assert!(z.is_ok());
         z.unwrap()
+    }
+
+    pub fn operand(operand_type: OperandType, value: u16) -> Operand {
+        Operand::new(operand_type, value)
     }
 
     pub fn mock_instruction(
@@ -345,6 +349,23 @@ pub mod tests {
         Instruction::new(address, opcode, operands, Some(result), None, next_address)
     }
 
+    pub fn mock_branch_store_instruction(
+        address: usize,
+        operands: Vec<Operand>,
+        opcode: Opcode,
+        next_address: usize,
+        branch: Branch,
+        result: StoreResult,
+    ) -> Instruction {
+        Instruction::new(
+            address,
+            opcode,
+            operands,
+            Some(result),
+            Some(branch),
+            next_address,
+        )
+    }
     pub fn mock_branch(condition: bool, branch_address: usize, next_address: usize) -> Instruction {
         Instruction::new(
             0,
@@ -380,6 +401,17 @@ pub mod tests {
             .is_ok());
     }
 
+    pub fn mock_routine(map: &mut [u8], address: usize, local_variables: &[u16]) {
+        // Arguments
+        map[address] = local_variables.len() as u8;
+        for (i, w) in local_variables.iter().enumerate() {
+            if map[0] < 5 {
+                map[address + 1 + (i * 2)] = (*w >> 8) as u8;
+                map[address + 2 + (i * 2)] = *w as u8;
+            }
+        }
+    }
+
     pub fn assert_eq_ok<T: std::fmt::Debug + std::cmp::PartialEq>(
         s: Result<T, RuntimeError>,
         value: T,
@@ -388,7 +420,16 @@ pub mod tests {
         assert_eq!(s.unwrap(), value);
     }
 
-    pub fn mock_object(map: &mut [u8], object: usize, short_name: Vec<u16>) {
+    pub fn assert_print(str: &str) {
+        assert_eq!(print(), str);
+    }
+
+    pub fn mock_object(
+        map: &mut [u8],
+        object: usize,
+        short_name: Vec<u16>,
+        (parent, sibling, child): (u16, u16, u16),
+    ) {
         let version = map[0];
         let object_table = ((map[0x0a] as usize) << 8) + map[0x0b] as usize;
         let object_address = if version < 4 {
@@ -399,8 +440,24 @@ pub mod tests {
 
         // Property tables will be placed at 0x300
         let property_table_address = 0x300 + ((object - 1) * 20);
-        map[object_address + 7] = (property_table_address >> 8) as u8;
-        map[object_address + 8] = property_table_address as u8;
+        // Set parent/sibling/child
+        // Set the property table address
+        if version < 4 {
+            map[object_address + 4] = parent as u8;
+            map[object_address + 5] = sibling as u8;
+            map[object_address + 6] = child as u8;
+            map[object_address + 7] = (property_table_address >> 8) as u8;
+            map[object_address + 8] = property_table_address as u8;
+        } else {
+            map[object_address + 6] = (parent >> 8) as u8;
+            map[object_address + 7] = parent as u8;
+            map[object_address + 8] = (sibling >> 8) as u8;
+            map[object_address + 9] = sibling as u8;
+            map[object_address + 10] = (child >> 8) as u8;
+            map[object_address + 11] = child as u8;
+            map[object_address + 12] = (property_table_address >> 8) as u8;
+            map[object_address + 13] = property_table_address as u8;
+        }
 
         let l = short_name.len();
         map[property_table_address] = l as u8;
@@ -409,6 +466,24 @@ pub mod tests {
             let a = property_table_address + 1 + (i * 2);
             map[a] = (*w >> 8) as u8;
             map[a + 1] = *w as u8;
+        }
+    }
+
+    pub fn mock_properties(map: &mut [u8], object: usize, properties: &[(u8, &Vec<u8>)]) {
+        let property_table_address = 0x300 + ((object - 1) * 20);
+        let hl = map[property_table_address] as usize;
+
+        let mut address = property_table_address + 1 + (hl * 2);
+        for (number, data) in properties {
+            if map[0] < 4 {
+                let size = ((data.len() - 1) * 32) as u8 + *number;
+                map[address] = size;
+                for (i, b) in data.iter().enumerate() {
+                    println!("{:02x} -> {:04x}", *b, address + i + 1);
+                    map[address + 1 + i] = *b;
+                }
+            }
+            address = address + 1 + data.len();
         }
     }
 
