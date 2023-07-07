@@ -73,7 +73,7 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
     match zmachine.save(pc) {
         Ok(_) => save_result(zmachine, instruction, true),
-        Err(e) => save_result(zmachine, instruction, false),
+        Err(_) => save_result(zmachine, instruction, false),
     }
 }
 
@@ -169,7 +169,7 @@ pub fn piracy(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usiz
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::Path, thread, time::Duration};
+    use std::{fs, path::Path};
 
     use crate::instruction::{
         processor::{dispatch, tests::*},
