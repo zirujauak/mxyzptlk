@@ -12,6 +12,9 @@ use curses::easy_curses::*;
 #[cfg(feature = "pancurses")]
 use curses::pancurses::new_terminal;
 
+#[cfg(test)]
+use curses::test_terminal::*;
+
 #[derive(Clone, Copy, Debug)]
 pub enum Color {
     Black = 2,
