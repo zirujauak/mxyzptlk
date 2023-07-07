@@ -4,6 +4,8 @@ use super::InputEvent;
 pub mod easy_curses;
 #[cfg(feature = "pancurses")]
 pub mod pancurses;
+#[cfg(test)]
+pub mod test_terminal;
 
 fn char_to_u16(c: char) -> InputEvent {
     match c {

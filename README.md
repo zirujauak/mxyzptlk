@@ -105,7 +105,9 @@ When logging is enabled, execution will dump quite a bit of output to various `.
 The following libraries are required to build from source:
 * libsndfile
 
-    The `sndfile` feature (enabled by default) controls whether libsndfile is used to convert AIFF sounds to another format.  To disable `sndfile`, pass the `--no-default-features` flag to cargo when you build or run. See the [Installation](#Installation) section above for instructions on installing the library.
+    The `sndfile` feature controls whether libsndfile is used to convert AIFF sounds to another format.
+    
+    See the [Installation](#Installation) section above for instructions on installing the library.
 
 ### Building
 ```
@@ -116,7 +118,10 @@ add the `--release` flag if you don't plan to debug anything:
 cargo build --release
 ```
 
-The default build uses `pancurses` and `libsndfile`.  Use the `--no-default-features` and `--features` flags on `cargo` to change the build.
+The `pancurses` feature is enabled by default.  This will yield a binary that uses the the pancurses terminal library _without_ libsndfile.
+
+* `easycurses` - this will override the `pancurses` feature.
+* `sndfile` - include libsndfile for AIFF resource conversion.
 
 For example, to build using `easycurses` without `libsndfile`:
 ```

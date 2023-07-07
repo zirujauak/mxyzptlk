@@ -404,7 +404,9 @@ impl ZMachine {
             let hour = self.state.variable(17)?;
             let minute = self.state.variable(18)?;
             let suffix = if hour > 11 { "PM" } else { "AM" };
-            format!("{}:{} {}", hour % 12, minute, suffix)
+            let h = if hour % 12 == 0 { 12 } else { hour };
+
+            format!("{:2}:{:02} {}", h, minute, suffix)
                 .as_bytes()
                 .iter()
                 .map(|x| *x as u16)

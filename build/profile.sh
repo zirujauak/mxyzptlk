@@ -1,8 +1,13 @@
 #!/bin/zsh
+
+## Build and run tests with instrumentation
+cargo clean
+RUSTFLAGS="-C instrument-coverage" cargo --quiet test --tests
+
+## Find the target binary
 target=$(find target/debug/deps -regex ".*/mxyzptlk-[^.]*")
 
-cargo clean
-RUSTFLAGS="-C instrument-coverage" cargo --quiet test --no-default-features --tests
+## Generate and view report
 xcrun llvm-profdata merge -sparse default_*.profraw -o json5format.profdata
 xcrun llvm-cov show --use-color \
     --ignore-filename-regex='/.cargo/registry' \
@@ -12,5 +17,6 @@ xcrun llvm-cov show --use-color \
     --show-line-counts-or-regions \
     --Xdemangler=rustfilt | less -R
 
+## Clean up profiling data
 rm *.profraw
 rm json5format.profdata

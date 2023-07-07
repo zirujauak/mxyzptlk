@@ -253,3 +253,405 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
         },
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use crate::{config::Config, zmachine::state::memory::Memory};
+    use std::{cell::RefCell, collections::VecDeque};
+
+    thread_local! {
+        pub static PRINT:RefCell<String> = RefCell::new(String::new());
+        pub static INPUT:RefCell<VecDeque<char>> = RefCell::new(VecDeque::new());
+    }
+
+    pub fn print_char(c: char) {
+        PRINT.with(|x| x.borrow_mut().push(c));
+    }
+
+    pub fn print() -> String {
+        PRINT.with(|x| x.borrow().to_string())
+    }
+
+    pub fn input(i: &[char]) {
+        for c in i {
+            INPUT.with(|x| x.borrow_mut().push_back(*c));
+        }
+    }
+
+    pub fn input_char() -> Option<char> {
+        INPUT.with(|x| x.borrow_mut().pop_front())
+    }
+
+    pub fn test_map(version: u8) -> Vec<u8> {
+        let mut v = vec![0; 0x800];
+        // Initial PC at $0400
+        v[6] = 0x4;
+        v[0] = version;
+        // Static mark at $0400
+        v[0x0e] = 0x04;
+        // Global variables at $0100
+        v[0x0c] = 0x01;
+        v
+    }
+
+    pub fn set_variable(map: &mut [u8], variable: u8, value: u16) {
+        let address = 0x100 + ((variable - 16) * 2) as usize;
+        map[address] = (value >> 8) as u8;
+        map[address + 1] = value as u8;
+    }
+
+    pub fn mock_zmachine(map: Vec<u8>) -> ZMachine {
+        let m = Memory::new(map);
+        let z = ZMachine::new(m, Config::default(), None, "test");
+        assert!(z.is_ok());
+        z.unwrap()
+    }
+
+    pub fn mock_instruction(
+        address: usize,
+        operands: Vec<Operand>,
+        opcode: Opcode,
+        next_address: usize,
+    ) -> Instruction {
+        Instruction::new(address, opcode, operands, None, None, next_address)
+    }
+
+    pub fn branch(byte_address: usize, condition: bool, branch_address: usize) -> Branch {
+        Branch::new(byte_address, condition, branch_address)
+    }
+
+    pub fn mock_branch_instruction(
+        address: usize,
+        operands: Vec<Operand>,
+        opcode: Opcode,
+        next_address: usize,
+        branch: Branch,
+    ) -> Instruction {
+        Instruction::new(address, opcode, operands, None, Some(branch), next_address)
+    }
+
+    pub fn store(byte_address: usize, variable: u8) -> StoreResult {
+        StoreResult::new(byte_address, variable)
+    }
+
+    pub fn mock_store_instruction(
+        address: usize,
+        operands: Vec<Operand>,
+        opcode: Opcode,
+        next_address: usize,
+        result: StoreResult,
+    ) -> Instruction {
+        Instruction::new(address, opcode, operands, Some(result), None, next_address)
+    }
+
+    pub fn mock_branch(condition: bool, branch_address: usize, next_address: usize) -> Instruction {
+        Instruction::new(
+            0,
+            Opcode::new(5, 1, 1, OpcodeForm::Var, OperandCount::_VAR),
+            vec![],
+            None,
+            Some(Branch::new(0, condition, branch_address)),
+            next_address,
+        )
+    }
+
+    pub fn mock_store_result(result: Option<u8>, next_address: usize) -> Instruction {
+        let r = result.map(|x| StoreResult::new(0, x));
+        Instruction::new(
+            0,
+            Opcode::new(5, 1, 1, OpcodeForm::Var, OperandCount::_VAR),
+            vec![],
+            r,
+            None,
+            next_address,
+        )
+    }
+
+    pub fn mock_frame(
+        zmachine: &mut ZMachine,
+        address: usize,
+        result: Option<u8>,
+        return_address: usize,
+    ) {
+        let r = result.map(|x| StoreResult::new(0, x));
+        assert!(zmachine
+            .call_routine(address, &vec![], r, return_address)
+            .is_ok());
+    }
+
+    pub fn assert_eq_ok<T: std::fmt::Debug + std::cmp::PartialEq>(
+        s: Result<T, RuntimeError>,
+        value: T,
+    ) {
+        assert!(s.is_ok());
+        assert_eq!(s.unwrap(), value);
+    }
+
+    pub fn mock_object(map: &mut [u8], object: usize, short_name: Vec<u16>) {
+        let version = map[0];
+        let object_table = ((map[0x0a] as usize) << 8) + map[0x0b] as usize;
+        let object_address = if version < 4 {
+            object_table + 62 + ((object - 1) * 9)
+        } else {
+            object_table + 126 + ((object - 1) * 14)
+        };
+
+        // Property tables will be placed at 0x300
+        let property_table_address = 0x300 + ((object - 1) * 20);
+        map[object_address + 7] = (property_table_address >> 8) as u8;
+        map[object_address + 8] = property_table_address as u8;
+
+        let l = short_name.len();
+        map[property_table_address] = l as u8;
+
+        for (i, w) in short_name.iter().enumerate() {
+            let a = property_table_address + 1 + (i * 2);
+            map[a] = (*w >> 8) as u8;
+            map[a + 1] = *w as u8;
+        }
+    }
+
+    // **NOTE**: Tests for dispatch() are delegated to the processor_* tests
+    #[test]
+    fn test_operand_value() {
+        // Set up a simple memory map with global var 0x80 set
+        let mut v = test_map(5);
+        set_variable(&mut v, 0x80, 0x789A);
+        let mut zmachine = mock_zmachine(v);
+
+        let o_small_constant = Operand::new(OperandType::SmallConstant, 0x12);
+        let o_large_constant = Operand::new(OperandType::LargeConstant, 0x3456);
+        let o_variable = Operand::new(OperandType::Variable, 0x80);
+        assert_eq_ok(operand_value(&mut zmachine, &o_small_constant), 0x12);
+        assert_eq_ok(operand_value(&mut zmachine, &o_large_constant), 0x3456);
+        assert_eq_ok(operand_value(&mut zmachine, &o_variable), 0x789A);
+    }
+
+    #[test]
+    fn test_operand_values() {
+        let mut v = test_map(5);
+        set_variable(&mut v, 0x80, 0x789A);
+        set_variable(&mut v, 0x81, 0x1357);
+        let mut zmachine = mock_zmachine(v);
+        let o_small_constant = Operand::new(OperandType::SmallConstant, 0x12);
+        let o_large_constant = Operand::new(OperandType::LargeConstant, 0x3456);
+        let o_variable1 = Operand::new(OperandType::Variable, 0x80);
+        let o_variable2 = Operand::new(OperandType::Variable, 0x81);
+        let i = mock_instruction(
+            0x480,
+            vec![o_variable1, o_large_constant, o_small_constant, o_variable2],
+            Opcode::new(5, 0, 0, OpcodeForm::Var, OperandCount::_VAR),
+            0,
+        );
+
+        let operands = operand_values(&mut zmachine, &i);
+        assert!(operands.is_ok());
+        let o = operands.unwrap();
+        assert_eq!(o[0], 0x789A);
+        assert_eq!(o[1], 0x3456);
+        assert_eq!(o[2], 0x12);
+        assert_eq!(o[3], 0x1357);
+
+        let i = mock_instruction(
+            0x480,
+            vec![],
+            Opcode::new(5, 0, 0, OpcodeForm::Var, OperandCount::_VAR),
+            0,
+        );
+        let operands = operand_values(&mut zmachine, &i);
+        assert!(operands.is_ok());
+        assert!(operands.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_branch_rfalse() {
+        let mut v = test_map(5);
+        set_variable(&mut v, 0x80, 0xFF);
+        let mut zmachine = mock_zmachine(v);
+        mock_frame(&mut zmachine, 0x500, Some(0x80), 0x480);
+        let i = mock_branch(true, 0, 0x502);
+        let a = processor::branch(&mut zmachine, &i, true);
+        assert!(a.is_ok());
+        assert_eq!(a.unwrap(), 0x480);
+        let v = zmachine.variable(0x80);
+        assert!(v.is_ok());
+        assert_eq!(v.unwrap(), 0);
+    }
+
+    #[test]
+    fn test_branch_rfalse_no_branch() {
+        let mut v = test_map(5);
+        set_variable(&mut v, 0x80, 0xFF);
+        let mut zmachine = mock_zmachine(v);
+        mock_frame(&mut zmachine, 0x500, Some(0x80), 0x480);
+        let i = mock_branch(false, 0, 0x502);
+        let a = processor::branch(&mut zmachine, &i, true);
+        assert!(a.is_ok());
+        assert_eq!(a.unwrap(), 0x502);
+        let v = zmachine.variable(0x80);
+        assert!(v.is_ok());
+        assert_eq!(v.unwrap(), 0xFF);
+    }
+
+    #[test]
+    fn test_branch_rtrue() {
+        let mut v = test_map(5);
+        set_variable(&mut v, 0x80, 0xFF);
+        let mut zmachine = mock_zmachine(v);
+        mock_frame(&mut zmachine, 0x500, Some(0x80), 0x480);
+        let i = mock_branch(true, 1, 0x502);
+        let a = processor::branch(&mut zmachine, &i, true);
+        assert!(a.is_ok());
+        assert_eq!(a.unwrap(), 0x480);
+        let v = zmachine.variable(0x80);
+        assert!(v.is_ok());
+        assert_eq!(v.unwrap(), 1);
+    }
+
+    #[test]
+    fn test_branch_rtrue_no_branch() {
+        let mut v = test_map(5);
+        set_variable(&mut v, 0x80, 0xFF);
+        let mut zmachine = mock_zmachine(v);
+        mock_frame(&mut zmachine, 0x500, Some(0x80), 0x480);
+        let i = mock_branch(false, 1, 0x502);
+        let a = processor::branch(&mut zmachine, &i, true);
+        assert!(a.is_ok());
+        assert_eq!(a.unwrap(), 0x502);
+        let v = zmachine.variable(0x80);
+        assert!(v.is_ok());
+        assert_eq!(v.unwrap(), 0xFF);
+    }
+
+    #[test]
+    fn test_branch() {
+        let v = test_map(5);
+        let mut zmachine = mock_zmachine(v);
+        let i = mock_branch(true, 0x500, 0x482);
+        let a = processor::branch(&mut zmachine, &i, true);
+        assert!(a.is_ok());
+        assert_eq!(a.unwrap(), 0x500);
+    }
+
+    #[test]
+    fn test_branch_no_branch() {
+        let v = test_map(5);
+        let mut zmachine = mock_zmachine(v);
+        let i = mock_branch(true, 0x500, 0x482);
+        let a = processor::branch(&mut zmachine, &i, false);
+        assert!(a.is_ok());
+        assert_eq!(a.unwrap(), 0x482);
+    }
+
+    #[test]
+    fn test_branch_not_a_branch_instruction() {
+        let v = test_map(5);
+        let mut zmachine = mock_zmachine(v);
+        let i = mock_instruction(
+            0x480,
+            vec![],
+            Opcode::new(5, 0, 0, OpcodeForm::Var, OperandCount::_VAR),
+            0x482,
+        );
+        let a = processor::branch(&mut zmachine, &i, false);
+        assert!(a.is_ok());
+        assert_eq!(a.unwrap(), 0x482);
+    }
+
+    #[test]
+    fn test_store_result() {
+        let mut v = test_map(5);
+        set_variable(&mut v, 0x80, 0xFF);
+        let mut zmachine = mock_zmachine(v);
+        let i = mock_store_result(Some(0x80), 0x482);
+        let a = store_result(&mut zmachine, &i, 0x12);
+        assert!(a.is_ok());
+        let v = zmachine.variable(0x80);
+        assert!(v.is_ok());
+        assert_eq!(v.unwrap(), 0x12);
+    }
+
+    #[test]
+    fn test_store_result_no_result() {
+        let mut v = test_map(5);
+        set_variable(&mut v, 0x80, 0xFF);
+        let mut zmachine = mock_zmachine(v);
+        let i = mock_store_result(None, 0x482);
+        let a = store_result(&mut zmachine, &i, 0x12);
+        assert!(a.is_ok());
+        let v = zmachine.variable(0x80);
+        assert!(v.is_ok());
+        assert_eq!(v.unwrap(), 0xFF);
+    }
+
+    #[test]
+    fn test_store_result_not_a_store_result_instruction() {
+        let mut v = test_map(5);
+        set_variable(&mut v, 0x80, 0xFF);
+        let mut zmachine = mock_zmachine(v);
+        let i = mock_instruction(
+            0x480,
+            vec![],
+            Opcode::new(5, 0, 0, OpcodeForm::Var, OperandCount::_VAR),
+            0x482,
+        );
+        let a = store_result(&mut zmachine, &i, 0x12);
+        assert!(a.is_ok());
+    }
+
+    #[test]
+    fn test_call_fn_rfalse() {
+        let mut v = test_map(5);
+        set_variable(&mut v, 0x80, 0xFF);
+        let mut zmachine = mock_zmachine(v);
+        let a = call_fn(
+            &mut zmachine,
+            0,
+            0x482,
+            &vec![],
+            Some(StoreResult::new(0, 0x80)),
+        );
+        assert!(a.is_ok());
+        assert_eq!(a.unwrap(), 0x482);
+        let v = zmachine.variable(0x80);
+        assert!(v.is_ok());
+        assert_eq!(v.unwrap(), 0x00);
+    }
+
+    #[test]
+    fn test_call_fn_rtrue() {
+        let mut v = test_map(5);
+        set_variable(&mut v, 0x80, 0xFF);
+        let mut zmachine = mock_zmachine(v);
+        let a = call_fn(
+            &mut zmachine,
+            1,
+            0x482,
+            &vec![],
+            Some(StoreResult::new(0, 0x80)),
+        );
+        assert!(a.is_ok());
+        assert_eq!(a.unwrap(), 0x482);
+        let v = zmachine.variable(0x80);
+        assert!(v.is_ok());
+        assert_eq!(v.unwrap(), 0x01);
+    }
+
+    #[test]
+    fn test_call_fn() {
+        let v = test_map(5);
+        let mut zmachine = mock_zmachine(v);
+        assert_eq!(zmachine.frame_count(), 1);
+        let a = call_fn(
+            &mut zmachine,
+            0x500,
+            0x482,
+            &vec![],
+            Some(StoreResult::new(0, 0x80)),
+        );
+        assert!(a.is_ok());
+        assert_eq!(a.unwrap(), 0x501);
+        assert_eq!(zmachine.frame_count(), 2);
+    }
+}

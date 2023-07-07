@@ -89,7 +89,7 @@ impl StoreResult {
     }
 }
 
-struct Branch {
+pub struct Branch {
     address: usize,
     condition: bool,
     branch_address: usize,
