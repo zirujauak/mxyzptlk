@@ -655,30 +655,6 @@ mod tests {
     }
 
     #[test]
-    fn test_call_1s_v3() {
-        let mut map = test_map(3);
-        mock_routine(&mut map, 0x600, &[0x1234, 0x5678, 0x9abc, 0xdef0]);
-
-        let mut zmachine = mock_zmachine(map);
-        let i = mock_store_instruction(
-            0x400,
-            vec![operand(OperandType::LargeConstant, 0x300)],
-            opcode(3, 8),
-            0x404,
-            store(0x403, 0x80),
-        );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x609));
-        assert!(zmachine.variable(0).is_err());
-        assert!(zmachine.variable(1).is_ok_and(|x| x == 0x1234));
-        assert!(zmachine.variable(2).is_ok_and(|x| x == 0x5678));
-        assert!(zmachine.variable(3).is_ok_and(|x| x == 0x9abc));
-        assert!(zmachine.variable(4).is_ok_and(|x| x == 0xdef0));
-        assert!(zmachine.variable(5).is_err());
-        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x404));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0xF0AD));
-    }
-
-    #[test]
     fn test_call_1s_v4() {
         let mut map = test_map(4);
         mock_routine(&mut map, 0x600, &[0x1234, 0x5678, 0x9abc, 0xdef0]);

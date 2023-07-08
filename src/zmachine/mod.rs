@@ -234,6 +234,7 @@ impl ZMachine {
     }
 
     pub fn restart(&mut self) -> Result<usize, RuntimeError> {
+        self.rng.seed(0);
         self.state.restart()
     }
 

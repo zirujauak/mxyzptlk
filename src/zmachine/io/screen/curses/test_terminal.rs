@@ -1,4 +1,4 @@
-use crate::instruction::processor::tests::{input_char, print_char, INPUT, PRINT};
+use crate::instruction::processor::tests::{input_char, print_char, set_colors};
 use crate::zmachine::io::screen::{CellStyle, Color, InputEvent, Terminal};
 
 pub fn new_terminal() -> Box<dyn Terminal> {
@@ -46,5 +46,7 @@ impl Terminal for TestTerminal {
 
     fn quit(&mut self) {}
 
-    fn set_colors(&mut self, _colors: (Color, Color)) {}
+    fn set_colors(&mut self, colors: (Color, Color)) {
+        set_colors((colors.0 as u8, colors.1 as u8))
+    }
 }
