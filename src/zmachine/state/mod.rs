@@ -476,7 +476,7 @@ impl State {
     ) -> Result<usize, RuntimeError> {
         if self.read_interrupt_pending {
             debug!(target: "app::frame", "Read interrupt routine firing @ ${:06x}", address);
-            self.clear_read_interrupt();
+            //self.clear_read_interrupt();
             self.read_interrupt_result = Some(0);
             let (initial_pc, local_variables) = self.routine_header(address)?;
             let frame =

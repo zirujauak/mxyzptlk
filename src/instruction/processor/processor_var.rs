@@ -87,8 +87,15 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
     if let Some(r) = zmachine.read_interrupt_result() {
         zmachine.clear_read_interrupt();
         if r == 1 {
-            zmachine.write_byte(text_buffer + 1, 0)?;
-            store_result(zmachine, instruction, 0)?;
+            if zmachine.version() == 4 {
+                let len = zmachine.read_byte(text_buffer)? as usize - 1;
+                for i in 0..len {
+                    zmachine.write_byte(text_buffer + i + 1, 0)?;
+                }
+            } else {
+                zmachine.write_byte(text_buffer + 1, 0)?;
+                store_result(zmachine, instruction, 0)?;
+            }
             return Ok(instruction.next_address());
         }
     }
@@ -115,9 +122,23 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 
     let mut existing_input = Vec::new();
 
-    match zmachine.version().cmp(&4) {
-        Ordering::Less => zmachine.status_line()?,
-        Ordering::Greater => {
+    match zmachine.version() {
+        3 => zmachine.status_line()?,
+        4 => {
+            let mut i = 1;
+            loop {
+                let b = zmachine.read_byte(text_buffer + i)? as u16;
+                if b == 0 {
+                    break;
+                }
+                existing_input.push(b);
+                i += 1;
+            }
+            if zmachine.input_interrupt_print() {
+                zmachine.print(&existing_input)?;
+            }
+        }
+        _ => {
             let existing_len = zmachine.read_byte(text_buffer + 1)? as usize;
             for i in 0..existing_len {
                 existing_input.push(zmachine.read_byte(text_buffer + 2 + i)? as u16);
@@ -126,7 +147,6 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
                 zmachine.print(&existing_input)?;
             }
         }
-        _ => {}
     }
 
     zmachine.clear_input_interrupt_print();
@@ -136,11 +156,20 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
     let terminator = input_buffer.last().filter(|&x| terminators.contains(x));
 
     // If there was no terminator, then input was interrupted
+    // TODO: match this and save the unwrapped terminator when it is Some
+    // to use later.
     if terminator.is_none() {
         // Store any input that was read before the interrupt
-        zmachine.write_byte(text_buffer + 1, input_buffer.len() as u8)?;
-        for (i, b) in input_buffer.iter().enumerate() {
-            zmachine.write_byte(text_buffer + 2 + i, *b as u8)?;
+        if zmachine.version() == 4 {
+            for (i, b) in input_buffer.iter().enumerate() {
+                zmachine.write_byte(text_buffer + 1 + i, to_lower_case(*b))?;
+            }
+            zmachine.write_byte(text_buffer + 1 + input_buffer.len(), 0)?;
+        } else {
+            zmachine.write_byte(text_buffer + 1, input_buffer.len() as u8)?;
+            for (i, b) in input_buffer.iter().enumerate() {
+                zmachine.write_byte(text_buffer + 2 + i, to_lower_case(*b))?;
+            }
         }
 
         debug!(target: "app::input", "READ interrupted");
@@ -195,11 +224,8 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
     }
 
     if zmachine.version() > 4 {
-        if let Some(t) = terminator {
-            store_result(zmachine, instruction, *t)?;
-        } else {
-            store_result(zmachine, instruction, 0)?;
-        }
+        // unwrap() is safe here as terminator is checked for none earlier
+        store_result(zmachine, instruction, *terminator.unwrap())?;
     }
 
     Ok(instruction.next_address())
@@ -658,4 +684,808 @@ pub fn check_arg_count(
         instruction,
         zmachine.argument_count()? >= operands[0] as u8,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        instruction::{
+            processor::{
+                dispatch,
+                tests::{
+                    input, mock_dictionary, mock_instruction, mock_object, mock_properties,
+                    mock_routine, mock_store_instruction, mock_zmachine, operand, set_input_delay,
+                    set_variable, store, test_map,
+                },
+            },
+            Opcode, OpcodeForm, OperandCount, OperandType,
+        },
+        object::property,
+    };
+
+    fn opcode(version: u8, instruction: u8) -> Opcode {
+        Opcode::new(
+            version,
+            instruction,
+            instruction,
+            OpcodeForm::Var,
+            OperandCount::_VAR,
+        )
+    }
+
+    #[test]
+    fn test_call_v3() {
+        let mut map = test_map(3);
+        mock_routine(
+            &mut map,
+            0x600,
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        );
+        let mut zmachine = mock_zmachine(map);
+        assert!(zmachine.push(1).is_ok());
+        let i = mock_store_instruction(
+            0x401,
+            vec![
+                operand(OperandType::LargeConstant, 0x300),
+                operand(OperandType::SmallConstant, 0x12),
+                operand(OperandType::LargeConstant, 0x3456),
+                operand(OperandType::LargeConstant, 0xABCD),
+            ],
+            opcode(3, 0),
+            0x409,
+            store(0x408, 0),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x61f));
+        assert!(zmachine.peek_variable(0).is_err());
+        assert!(zmachine.variable(1).is_ok_and(|x| x == 0x12));
+        assert!(zmachine.variable(2).is_ok_and(|x| x == 0x3456));
+        assert!(zmachine.variable(3).is_ok_and(|x| x == 0xABCD));
+        assert!(zmachine.variable(4).is_ok_and(|x| x == 4));
+        assert!(zmachine.variable(5).is_ok_and(|x| x == 5));
+        assert!(zmachine.variable(6).is_ok_and(|x| x == 6));
+        assert!(zmachine.variable(7).is_ok_and(|x| x == 7));
+        assert!(zmachine.variable(8).is_ok_and(|x| x == 8));
+        assert!(zmachine.variable(9).is_ok_and(|x| x == 9));
+        assert!(zmachine.variable(10).is_ok_and(|x| x == 10));
+        assert!(zmachine.variable(11).is_ok_and(|x| x == 11));
+        assert!(zmachine.variable(12).is_ok_and(|x| x == 12));
+        assert!(zmachine.variable(13).is_ok_and(|x| x == 13));
+        assert!(zmachine.variable(14).is_ok_and(|x| x == 14));
+        assert!(zmachine.variable(15).is_ok_and(|x| x == 15));
+        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x409));
+        assert!(zmachine.variable(0).is_ok_and(|x| x == 0xF0AD));
+        assert!(zmachine.variable(0).is_ok_and(|x| x == 1));
+    }
+
+    #[test]
+    fn test_call_vs_v4() {
+        let mut map = test_map(4);
+        mock_routine(
+            &mut map,
+            0x600,
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        );
+        let mut zmachine = mock_zmachine(map);
+        assert!(zmachine.push(1).is_ok());
+        let i = mock_store_instruction(
+            0x401,
+            vec![
+                operand(OperandType::LargeConstant, 0x180),
+                operand(OperandType::SmallConstant, 0x12),
+                operand(OperandType::LargeConstant, 0x3456),
+                operand(OperandType::LargeConstant, 0xABCD),
+            ],
+            opcode(4, 0),
+            0x409,
+            store(0x408, 0),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x61f));
+        assert!(zmachine.peek_variable(0).is_err());
+        assert!(zmachine.variable(1).is_ok_and(|x| x == 0x12));
+        assert!(zmachine.variable(2).is_ok_and(|x| x == 0x3456));
+        assert!(zmachine.variable(3).is_ok_and(|x| x == 0xABCD));
+        assert!(zmachine.variable(4).is_ok_and(|x| x == 4));
+        assert!(zmachine.variable(5).is_ok_and(|x| x == 5));
+        assert!(zmachine.variable(6).is_ok_and(|x| x == 6));
+        assert!(zmachine.variable(7).is_ok_and(|x| x == 7));
+        assert!(zmachine.variable(8).is_ok_and(|x| x == 8));
+        assert!(zmachine.variable(9).is_ok_and(|x| x == 9));
+        assert!(zmachine.variable(10).is_ok_and(|x| x == 10));
+        assert!(zmachine.variable(11).is_ok_and(|x| x == 11));
+        assert!(zmachine.variable(12).is_ok_and(|x| x == 12));
+        assert!(zmachine.variable(13).is_ok_and(|x| x == 13));
+        assert!(zmachine.variable(14).is_ok_and(|x| x == 14));
+        assert!(zmachine.variable(15).is_ok_and(|x| x == 15));
+        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x409));
+        assert!(zmachine.variable(0).is_ok_and(|x| x == 0xF0AD));
+        assert!(zmachine.variable(0).is_ok_and(|x| x == 1));
+    }
+
+    #[test]
+    fn test_call_vs_v5() {
+        let mut map = test_map(5);
+        mock_routine(
+            &mut map,
+            0x600,
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        );
+        let mut zmachine = mock_zmachine(map);
+        assert!(zmachine.push(1).is_ok());
+        let i = mock_store_instruction(
+            0x401,
+            vec![
+                operand(OperandType::LargeConstant, 0x180),
+                operand(OperandType::SmallConstant, 0x12),
+                operand(OperandType::LargeConstant, 0x3456),
+                operand(OperandType::LargeConstant, 0xABCD),
+            ],
+            opcode(5, 0),
+            0x409,
+            store(0x408, 0),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x601));
+        assert!(zmachine.peek_variable(0).is_err());
+        assert!(zmachine.variable(1).is_ok_and(|x| x == 0x12));
+        assert!(zmachine.variable(2).is_ok_and(|x| x == 0x3456));
+        assert!(zmachine.variable(3).is_ok_and(|x| x == 0xABCD));
+        assert!(zmachine.variable(4).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(5).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(6).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(7).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(8).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(9).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(10).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(11).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(12).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(13).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(14).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(15).is_ok_and(|x| x == 0));
+        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x409));
+        assert!(zmachine.variable(0).is_ok_and(|x| x == 0xF0AD));
+        assert!(zmachine.variable(0).is_ok_and(|x| x == 1));
+    }
+
+    #[test]
+    fn test_call_vs_v8() {
+        let mut map = test_map(8);
+        mock_routine(
+            &mut map,
+            0x600,
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        );
+        let mut zmachine = mock_zmachine(map);
+        assert!(zmachine.push(1).is_ok());
+        let i = mock_store_instruction(
+            0x401,
+            vec![
+                operand(OperandType::LargeConstant, 0xC0),
+                operand(OperandType::SmallConstant, 0x12),
+                operand(OperandType::LargeConstant, 0x3456),
+                operand(OperandType::LargeConstant, 0xABCD),
+            ],
+            opcode(8, 0),
+            0x409,
+            store(0x408, 0),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x601));
+        assert!(zmachine.peek_variable(0).is_err());
+        assert!(zmachine.variable(1).is_ok_and(|x| x == 0x12));
+        assert!(zmachine.variable(2).is_ok_and(|x| x == 0x3456));
+        assert!(zmachine.variable(3).is_ok_and(|x| x == 0xABCD));
+        assert!(zmachine.variable(4).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(5).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(6).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(7).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(8).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(9).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(10).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(11).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(12).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(13).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(14).is_ok_and(|x| x == 0));
+        assert!(zmachine.variable(15).is_ok_and(|x| x == 0));
+        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x409));
+        assert!(zmachine.variable(0).is_ok_and(|x| x == 0xF0AD));
+        assert!(zmachine.variable(0).is_ok_and(|x| x == 1));
+    }
+
+    #[test]
+    fn test_storew() {
+        let map = test_map(3);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::SmallConstant, 0x4),
+                operand(OperandType::LargeConstant, 0x1234),
+            ],
+            opcode(3, 1),
+            0x406,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x406));
+        assert!(zmachine.read_word(0x388).is_ok_and(|x| x == 0x1234));
+    }
+
+    #[test]
+    fn test_storeb() {
+        let map = test_map(3);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::SmallConstant, 0x4),
+                operand(OperandType::SmallConstant, 0x56),
+            ],
+            opcode(3, 2),
+            0x405,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x405));
+        assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == 0x56));
+    }
+
+    #[test]
+    fn test_put_prop_v3_byte() {
+        let mut map = test_map(3);
+        mock_object(&mut map, 1, vec![], (0, 0, 0));
+        mock_properties(
+            &mut map,
+            1,
+            &[
+                (20, &vec![0x12, 0x34]),
+                (15, &vec![0x56]),
+                (10, &vec![0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22]),
+            ],
+        );
+        let mut zmachine = mock_zmachine(map);
+        assert!(property::property(&zmachine, 1, 15).is_ok_and(|x| x == 0x56));
+        let i = mock_instruction(
+            0x400,
+            vec![
+                operand(OperandType::SmallConstant, 1),
+                operand(OperandType::SmallConstant, 15),
+                operand(OperandType::LargeConstant, 0xFFFE),
+            ],
+            opcode(3, 3),
+            0x404,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+        assert!(property::property(&zmachine, 1, 15).is_ok_and(|x| x == 0xFE));
+    }
+
+    #[test]
+    fn test_put_prop_v3_word() {
+        let mut map = test_map(3);
+        mock_object(&mut map, 1, vec![], (0, 0, 0));
+        mock_properties(
+            &mut map,
+            1,
+            &[
+                (20, &vec![0x12, 0x34]),
+                (15, &vec![0x56]),
+                (10, &vec![0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22]),
+            ],
+        );
+        let mut zmachine = mock_zmachine(map);
+        assert!(property::property(&zmachine, 1, 20).is_ok_and(|x| x == 0x1234));
+        let i = mock_instruction(
+            0x400,
+            vec![
+                operand(OperandType::SmallConstant, 1),
+                operand(OperandType::SmallConstant, 20),
+                operand(OperandType::LargeConstant, 0xFEDC),
+            ],
+            opcode(3, 3),
+            0x405,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x405));
+        assert!(property::property(&zmachine, 1, 20).is_ok_and(|x| x == 0xFEDC));
+    }
+
+    #[test]
+    fn test_put_prop_invalid() {
+        let mut map = test_map(3);
+        mock_object(&mut map, 1, vec![], (0, 0, 0));
+        mock_properties(
+            &mut map,
+            1,
+            &[
+                (20, &vec![0x12, 0x34]),
+                (15, &vec![0x56]),
+                (10, &vec![0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22]),
+            ],
+        );
+        let mut zmachine = mock_zmachine(map);
+        assert!(property::property(&zmachine, 1, 20).is_ok_and(|x| x == 0x1234));
+        let i = mock_instruction(
+            0x400,
+            vec![
+                operand(OperandType::SmallConstant, 1),
+                operand(OperandType::SmallConstant, 21),
+                operand(OperandType::LargeConstant, 0xFEDC),
+            ],
+            opcode(3, 3),
+            0x405,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_err());
+    }
+
+    #[test]
+    fn test_put_prop_v4_byte() {
+        let mut map = test_map(4);
+        mock_object(&mut map, 1, vec![], (0, 0, 0));
+        mock_properties(
+            &mut map,
+            1,
+            &[
+                (40, &vec![0x12, 0x34]),
+                (35, &vec![0x56]),
+                (10, &vec![0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22]),
+            ],
+        );
+        let mut zmachine = mock_zmachine(map);
+        assert!(property::property(&zmachine, 1, 35).is_ok_and(|x| x == 0x56));
+        let i = mock_instruction(
+            0x400,
+            vec![
+                operand(OperandType::SmallConstant, 1),
+                operand(OperandType::SmallConstant, 35),
+                operand(OperandType::LargeConstant, 0xFFFE),
+            ],
+            opcode(4, 3),
+            0x404,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+        assert!(property::property(&zmachine, 1, 35).is_ok_and(|x| x == 0xFE));
+    }
+
+    #[test]
+    fn test_put_prop_v4_word() {
+        let mut map = test_map(4);
+        mock_object(&mut map, 1, vec![], (0, 0, 0));
+        mock_properties(
+            &mut map,
+            1,
+            &[
+                (40, &vec![0x12, 0x34]),
+                (35, &vec![0x56]),
+                (10, &vec![0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22]),
+            ],
+        );
+        let mut zmachine = mock_zmachine(map);
+        assert!(property::property(&zmachine, 1, 40).is_ok_and(|x| x == 0x1234));
+        let i = mock_instruction(
+            0x400,
+            vec![
+                operand(OperandType::SmallConstant, 1),
+                operand(OperandType::SmallConstant, 40),
+                operand(OperandType::LargeConstant, 0xFEDC),
+            ],
+            opcode(4, 3),
+            0x405,
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x405));
+        assert!(property::property(&zmachine, 1, 40).is_ok_and(|x| x == 0xFEDC));
+    }
+
+    #[test]
+    fn test_sread_v3() {
+        let mut map = test_map(3);
+        mock_dictionary(&mut map);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::LargeConstant, 0x3A0),
+            ],
+            opcode(3, 4),
+            0x405,
+        );
+
+        input(&['I', 'n', 'v', 'e', 'n', 't', 'o', 'r', 'y']);
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x405));
+        // Text buffer
+        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == b'i'));
+        assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x383).is_ok_and(|x| x == b'v'));
+        assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == b'e'));
+        assert!(zmachine.read_byte(0x385).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x386).is_ok_and(|x| x == b't'));
+        assert!(zmachine.read_byte(0x387).is_ok_and(|x| x == b'o'));
+        assert!(zmachine.read_byte(0x388).is_ok_and(|x| x == b'r'));
+        assert!(zmachine.read_byte(0x389).is_ok_and(|x| x == b'y'));
+        assert!(zmachine.read_byte(0x38a).is_ok_and(|x| x == 0));
+        // Parse buffer
+        assert!(zmachine.read_byte(0x3A1).is_ok_and(|x| x == 1));
+        assert!(zmachine.read_word(0x3A2).is_ok_and(|x| x == 0x310));
+        assert!(zmachine.read_byte(0x3A4).is_ok_and(|x| x == 9));
+        assert!(zmachine.read_byte(0x3A5).is_ok_and(|x| x == 1));
+    }
+
+    #[test]
+    fn test_sread_v4() {
+        let mut map = test_map(4);
+        mock_dictionary(&mut map);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::LargeConstant, 0x3A0),
+            ],
+            opcode(4, 4),
+            0x405,
+        );
+
+        input(&['I', 'n', 'v', 'e', 'n', 't', 'o', 'r', 'y']);
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x405));
+        // Text buffer
+        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == b'i'));
+        assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x383).is_ok_and(|x| x == b'v'));
+        assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == b'e'));
+        assert!(zmachine.read_byte(0x385).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x386).is_ok_and(|x| x == b't'));
+        assert!(zmachine.read_byte(0x387).is_ok_and(|x| x == b'o'));
+        assert!(zmachine.read_byte(0x388).is_ok_and(|x| x == b'r'));
+        assert!(zmachine.read_byte(0x389).is_ok_and(|x| x == b'y'));
+        assert!(zmachine.read_byte(0x38a).is_ok_and(|x| x == 0));
+        // Parse buffer
+        assert!(zmachine.read_byte(0x3A1).is_ok_and(|x| x == 1));
+        assert!(zmachine.read_word(0x3A2).is_ok_and(|x| x == 0x310));
+        assert!(zmachine.read_byte(0x3A4).is_ok_and(|x| x == 9));
+        assert!(zmachine.read_byte(0x3A5).is_ok_and(|x| x == 1));
+    }
+
+    #[test]
+    fn test_sread_v4_interrupt() {
+        let mut map = test_map(4);
+        mock_dictionary(&mut map);
+        mock_routine(&mut map, 0x600, &[0x1234, 0x5678]);
+        let mut zmachine = mock_zmachine(map);
+        // Read with a 3 second timeout
+        let i = mock_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::LargeConstant, 0x3A0),
+                operand(OperandType::LargeConstant, 30),
+                operand(OperandType::LargeConstant, 0x180),
+            ],
+            opcode(4, 4),
+            0x405,
+        );
+
+        input(&['I', 'n', 'v', 'e', 'n', 't', 'o', 'r', 'y']);
+        // Wait 500ms before each key press
+        set_input_delay(501);
+
+        // Input was interrupted
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x605));
+        // Text buffer
+        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == b'i'));
+        assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x383).is_ok_and(|x| x == b'v'));
+        assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == b'e'));
+        assert!(zmachine.read_byte(0x385).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x386).is_ok_and(|x| x == b't'));
+        assert!(zmachine.read_byte(0x387).is_ok_and(|x| x == 0));
+        // Parse buffer
+        assert!(zmachine.read_byte(0x3A1).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_sread_v4_interrupt_continue() {
+        let mut map = test_map(4);
+        mock_dictionary(&mut map);
+        mock_routine(&mut map, 0x600, &[0x1234, 0x5678]);
+        // Text buffer from previous READ
+        map[0x381] = b'i';
+        map[0x382] = b'n';
+        map[0x383] = b'v';
+        map[0x384] = b'e';
+        map[0x385] = b'n';
+        map[0x386] = b't';
+        map[0x387] = 0;
+
+        let mut zmachine = mock_zmachine(map);
+        zmachine.set_read_interrupt_pending();
+        assert!(zmachine.call_read_interrupt(0x600, 0x400).is_ok());
+        assert!(zmachine.return_routine(0).is_ok());
+
+        // Read with a 3 second timeout
+        let i = mock_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::LargeConstant, 0x3A0),
+                operand(OperandType::LargeConstant, 30),
+                operand(OperandType::LargeConstant, 0x180),
+            ],
+            opcode(4, 4),
+            0x405,
+        );
+
+        input(&['o', 'r', 'y']);
+
+        // Input was interrupted
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x405));
+        // Text buffer
+        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == b'i'));
+        assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x383).is_ok_and(|x| x == b'v'));
+        assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == b'e'));
+        assert!(zmachine.read_byte(0x385).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x386).is_ok_and(|x| x == b't'));
+        assert!(zmachine.read_byte(0x387).is_ok_and(|x| x == b'o'));
+        assert!(zmachine.read_byte(0x388).is_ok_and(|x| x == b'r'));
+        assert!(zmachine.read_byte(0x389).is_ok_and(|x| x == b'y'));
+        assert!(zmachine.read_byte(0x38a).is_ok_and(|x| x == 0));
+        // Parse buffer
+        assert!(zmachine.read_byte(0x3A1).is_ok_and(|x| x == 1));
+        assert!(zmachine.read_word(0x3A2).is_ok_and(|x| x == 0x310));
+        assert!(zmachine.read_byte(0x3A4).is_ok_and(|x| x == 9));
+        assert!(zmachine.read_byte(0x3A5).is_ok_and(|x| x == 1));
+    }
+
+    #[test]
+    fn test_sread_v4_interrupt_stop() {
+        let mut map = test_map(4);
+        mock_dictionary(&mut map);
+        mock_routine(&mut map, 0x600, &[0x1234, 0x5678]);
+        // Text buffer from previous READ
+        map[0x381] = b'i';
+        map[0x382] = b'n';
+        map[0x383] = b'v';
+        map[0x384] = b'e';
+        map[0x385] = b'n';
+        map[0x386] = b't';
+        map[0x387] = 0;
+
+        let mut zmachine = mock_zmachine(map);
+        zmachine.set_read_interrupt_pending();
+        assert!(zmachine.call_read_interrupt(0x600, 0x400).is_ok());
+        assert!(zmachine.return_routine(1).is_ok());
+
+        // Read with a 3 second timeout
+        let i = mock_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::LargeConstant, 0x3A0),
+                operand(OperandType::LargeConstant, 30),
+                operand(OperandType::LargeConstant, 0x180),
+            ],
+            opcode(4, 4),
+            0x405,
+        );
+
+        // Input was interrupted
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x405));
+        // Text buffer
+        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == 0));
+        assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == 0));
+        assert!(zmachine.read_byte(0x383).is_ok_and(|x| x == 0));
+        assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == 0));
+        assert!(zmachine.read_byte(0x385).is_ok_and(|x| x == 0));
+        assert!(zmachine.read_byte(0x386).is_ok_and(|x| x == 0));
+        assert!(zmachine.read_byte(0x387).is_ok_and(|x| x == 0));
+        // Parse buffer
+        assert!(zmachine.read_byte(0x3A1).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_aread_v5() {
+        let mut map = test_map(5);
+        mock_dictionary(&mut map);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::LargeConstant, 0x3A0),
+            ],
+            opcode(5, 4),
+            0x406,
+            store(0x405, 0x80),
+        );
+
+        input(&['I', 'n', 'v', 'e', 'n', 't', 'o', 'r', 'y']);
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x406));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == b'\r' as u16));
+        // Text buffer
+        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == 9));
+        assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == b'i'));
+        assert!(zmachine.read_byte(0x383).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == b'v'));
+        assert!(zmachine.read_byte(0x385).is_ok_and(|x| x == b'e'));
+        assert!(zmachine.read_byte(0x386).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x387).is_ok_and(|x| x == b't'));
+        assert!(zmachine.read_byte(0x388).is_ok_and(|x| x == b'o'));
+        assert!(zmachine.read_byte(0x389).is_ok_and(|x| x == b'r'));
+        assert!(zmachine.read_byte(0x38a).is_ok_and(|x| x == b'y'));
+        // Parse buffer
+        assert!(zmachine.read_byte(0x3A1).is_ok_and(|x| x == 1));
+        assert!(zmachine.read_word(0x3A2).is_ok_and(|x| x == 0x310));
+        assert!(zmachine.read_byte(0x3A4).is_ok_and(|x| x == 9));
+        assert!(zmachine.read_byte(0x3A5).is_ok_and(|x| x == 2));
+    }
+
+    #[test]
+    fn test_aread_v5_no_parse() {
+        let mut map = test_map(5);
+        mock_dictionary(&mut map);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::LargeConstant, 0),
+            ],
+            opcode(5, 4),
+            0x406,
+            store(0x405, 0x80),
+        );
+
+        input(&['I', 'n', 'v', 'e', 'n', 't', 'o', 'r', 'y']);
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x406));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == b'\r' as u16));
+        // Text buffer
+        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == 9));
+        assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == b'i'));
+        assert!(zmachine.read_byte(0x383).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == b'v'));
+        assert!(zmachine.read_byte(0x385).is_ok_and(|x| x == b'e'));
+        assert!(zmachine.read_byte(0x386).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x387).is_ok_and(|x| x == b't'));
+        assert!(zmachine.read_byte(0x388).is_ok_and(|x| x == b'o'));
+        assert!(zmachine.read_byte(0x389).is_ok_and(|x| x == b'r'));
+        assert!(zmachine.read_byte(0x38a).is_ok_and(|x| x == b'y'));
+        // Parse buffer
+        assert!(zmachine.read_byte(0x3A1).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_aread_v5_interrupt() {
+        let mut map = test_map(5);
+        mock_dictionary(&mut map);
+        mock_routine(&mut map, 0x600, &[0x1234, 0x5678]);
+        let mut zmachine = mock_zmachine(map);
+        // Read with a 3 second timeout
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::LargeConstant, 0x3A0),
+                operand(OperandType::LargeConstant, 30),
+                operand(OperandType::LargeConstant, 0x180),
+            ],
+            opcode(5, 4),
+            0x409,
+            store(0x408, 0x80),
+        );
+
+        input(&['I', 'n', 'v', 'e', 'n', 't', 'o', 'r', 'y']);
+        // Wait 500ms before each key press
+        set_input_delay(501);
+
+        // Input was interrupted
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x601));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+        // Text buffer
+        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == 6));
+        assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == b'i'));
+        assert!(zmachine.read_byte(0x383).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == b'v'));
+        assert!(zmachine.read_byte(0x385).is_ok_and(|x| x == b'e'));
+        assert!(zmachine.read_byte(0x386).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x387).is_ok_and(|x| x == b't'));
+        // Parse buffer
+        assert!(zmachine.read_byte(0x3A1).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_aread_v5_interrupt_continue() {
+        let mut map = test_map(5);
+        mock_dictionary(&mut map);
+        mock_routine(&mut map, 0x600, &[0x1234, 0x5678]);
+        // Text buffer from previous READ
+        map[0x381] = 6;
+        map[0x382] = b'i';
+        map[0x383] = b'n';
+        map[0x384] = b'v';
+        map[0x385] = b'e';
+        map[0x386] = b'n';
+        map[0x387] = b't';
+
+        let mut zmachine = mock_zmachine(map);
+        zmachine.set_read_interrupt_pending();
+        assert!(zmachine.call_read_interrupt(0x600, 0x400).is_ok());
+        assert!(zmachine.return_routine(0).is_ok());
+
+        // Read with a 3 second timeout
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::LargeConstant, 0x3A0),
+                operand(OperandType::LargeConstant, 30),
+                operand(OperandType::LargeConstant, 0x180),
+            ],
+            opcode(5, 4),
+            0x409,
+            store(0x408, 0x80),
+        );
+
+        input(&['o', 'r', 'y']);
+
+        // Input was interrupted
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x409));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == b'\r' as u16));
+        // Text buffer
+        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == 9));
+        assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == b'i'));
+        assert!(zmachine.read_byte(0x383).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == b'v'));
+        assert!(zmachine.read_byte(0x385).is_ok_and(|x| x == b'e'));
+        assert!(zmachine.read_byte(0x386).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x387).is_ok_and(|x| x == b't'));
+        assert!(zmachine.read_byte(0x388).is_ok_and(|x| x == b'o'));
+        assert!(zmachine.read_byte(0x389).is_ok_and(|x| x == b'r'));
+        assert!(zmachine.read_byte(0x38a).is_ok_and(|x| x == b'y'));
+        // Parse buffer
+        assert!(zmachine.read_byte(0x3A1).is_ok_and(|x| x == 1));
+        assert!(zmachine.read_word(0x3A2).is_ok_and(|x| x == 0x310));
+        assert!(zmachine.read_byte(0x3A4).is_ok_and(|x| x == 9));
+        assert!(zmachine.read_byte(0x3A5).is_ok_and(|x| x == 2));
+    }
+
+    #[test]
+    fn test_aread_v5_interrupt_stop() {
+        let mut map = test_map(5);
+        set_variable(&mut map, 0x80, 0xFF);
+        mock_dictionary(&mut map);
+        mock_routine(&mut map, 0x600, &[0x1234, 0x5678]);
+        // Text buffer from previous READ
+        map[0x381] = 6;
+        map[0x382] = b'i';
+        map[0x383] = b'n';
+        map[0x384] = b'v';
+        map[0x385] = b'e';
+        map[0x386] = b'n';
+        map[0x387] = b't';
+
+        let mut zmachine = mock_zmachine(map);
+        zmachine.set_read_interrupt_pending();
+        assert!(zmachine.call_read_interrupt(0x600, 0x400).is_ok());
+        assert!(zmachine.return_routine(1).is_ok());
+
+        // Read with a 3 second timeout
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::LargeConstant, 0x3A0),
+                operand(OperandType::LargeConstant, 30),
+                operand(OperandType::LargeConstant, 0x180),
+            ],
+            opcode(5, 4),
+            0x409,
+            store(0x408, 0x80),
+        );
+
+        // Input was interrupted
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x409));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+        // Text buffer
+        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == 0));
+        // Parse buffer
+        assert!(zmachine.read_byte(0x3A1).is_ok_and(|x| x == 0));
+    }
 }

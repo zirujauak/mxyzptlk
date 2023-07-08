@@ -1,4 +1,7 @@
-use crate::instruction::processor::tests::{input_char, print_char, set_colors};
+use std::thread;
+use std::time::Duration;
+
+use crate::instruction::processor::tests::{input_char, input_delay, print_char, set_colors};
 use crate::zmachine::io::screen::{CellStyle, Color, InputEvent, Terminal};
 
 pub fn new_terminal() -> Box<dyn Terminal> {
@@ -27,6 +30,10 @@ impl Terminal for TestTerminal {
     fn flush(&mut self) {}
 
     fn read_key(&mut self, _wait: bool) -> InputEvent {
+        if input_delay() > 0 {
+            thread::sleep(Duration::from_millis(input_delay()));
+        }
+
         if let Some(c) = input_char() {
             InputEvent::from_char(c as u16)
         } else {

@@ -90,21 +90,21 @@ fn call_fn(
 pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     info!(target: "app::instruction", "dispatch: {}", instruction);
     match instruction.opcode().form() {
-        OpcodeForm::Ext => match instruction.opcode().instruction() {
-            0x00 => processor_ext::save(zmachine, instruction),
-            0x01 => processor_ext::restore(zmachine, instruction),
-            0x02 => processor_ext::log_shift(zmachine, instruction),
-            0x03 => processor_ext::art_shift(zmachine, instruction),
-            0x04 => processor_ext::set_font(zmachine, instruction),
+        OpcodeForm::Ext => match (zmachine.version(), instruction.opcode().instruction()) {
+            (5, 0x00) | (7, 0x00) | (8, 0x00) => processor_ext::save(zmachine, instruction),
+            (5, 0x01) | (7, 0x01) | (8, 0x01) => processor_ext::restore(zmachine, instruction),
+            (5, 0x02) | (7, 0x02) | (8, 0x02) => processor_ext::log_shift(zmachine, instruction),
+            (5, 0x03) | (7, 0x03) | (8, 0x03) => processor_ext::art_shift(zmachine, instruction),
+            (5, 0x04) | (7, 0x04) | (8, 0x04) => processor_ext::set_font(zmachine, instruction),
             //         0x05 => processor_ext::draw_picture(context, instruction),
             //         0x06 => processor_ext::picture_data(context, instruction),
             //         0x07 => processor_ext::erase_picture(context, instruction),
             //         0x08 => processor_ext::set_margins(context, instruction),
-            0x09 => processor_ext::save_undo(zmachine, instruction),
-            0x0a => processor_ext::restore_undo(zmachine, instruction),
-            //         0x0b => processor_ext::print_unicode(context, instruction),
-            //         0x0c => processor_ext::check_unicode(context, instruction),
-            //         0x0d => processor_ext::set_true_colour(context, instruction),
+            (5, 0x09) | (7, 0x09) | (8, 0x09) => processor_ext::save_undo(zmachine, instruction),
+            (5, 0x0a) | (7, 0x0a) | (8, 0x0a) => processor_ext::restore_undo(zmachine, instruction),
+            //         (5, 0x0b) | (7, 0x0b) | (8, 0x0b) => processor_ext::print_unicode(context, instruction),
+            //         (5, 0x0c) | (7, 0x0c) | (8, 0x0c) => processor_ext::check_unicode(context, instruction),
+            //         (5, 0x0d) | (7, 0x0d) | (8, 0x0d) => processor_ext::set_true_colour(context, instruction),
             //         0x10 => processor_ext::move_window(context, instruction),
             //         0x11 => processor_ext::window_size(context, instruction),
             //         0x12 => processor_ext::window_style(context, instruction),
@@ -119,7 +119,7 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
             //         0x1b => processor_ext::make_menu(context, instruction),
             //         0x1c => processor_ext::picture_table(context, instruction),
             //         0x1d => processor_ext::buffer_screen(context, instruction),
-            _ => Err(RuntimeError::new(
+            (_, _) => Err(RuntimeError::new(
                 ErrorCode::UnimplementedInstruction,
                 format!("Unimplemented EXT instruction: {}", instruction.opcode()),
             )),
@@ -210,39 +210,63 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
                     format!("Unimplemented instruction: {}", instruction.opcode()),
                 )),
             },
-            OperandCount::_VAR => match instruction.opcode().instruction() {
-                0x00 => processor_var::call_vs(zmachine, instruction),
-                0x01 => processor_var::storew(zmachine, instruction),
-                0x02 => processor_var::storeb(zmachine, instruction),
-                0x03 => processor_var::put_prop(zmachine, instruction),
-                0x04 => processor_var::read(zmachine, instruction),
-                0x05 => processor_var::print_char(zmachine, instruction),
-                0x06 => processor_var::print_num(zmachine, instruction),
-                0x07 => processor_var::random(zmachine, instruction),
-                0x08 => processor_var::push(zmachine, instruction),
-                0x09 => processor_var::pull(zmachine, instruction),
-                0x0a => processor_var::split_window(zmachine, instruction),
-                0x0b => processor_var::set_window(zmachine, instruction),
-                0x0c => processor_var::call_vs2(zmachine, instruction),
-                0x0d => processor_var::erase_window(zmachine, instruction),
-                0x0e => processor_var::erase_line(zmachine, instruction),
-                0x0f => processor_var::set_cursor(zmachine, instruction),
-                0x11 => processor_var::set_text_style(zmachine, instruction),
-                0x12 => processor_var::buffer_mode(zmachine, instruction),
-                0x13 => processor_var::output_stream(zmachine, instruction),
-                0x14 => processor_var::input_stream(zmachine, instruction),
-                0x15 => processor_var::sound_effect(zmachine, instruction),
-                0x16 => processor_var::read_char(zmachine, instruction),
-                0x17 => processor_var::scan_table(zmachine, instruction),
-                0x18 => processor_var::not(zmachine, instruction),
-                0x19 => processor_var::call_vn(zmachine, instruction),
-                0x1a => processor_var::call_vn2(zmachine, instruction),
-                0x1b => processor_var::tokenise(zmachine, instruction),
-                0x1c => processor_var::encode_text(zmachine, instruction),
-                0x1d => processor_var::copy_table(zmachine, instruction),
-                0x1e => processor_var::print_table(zmachine, instruction),
-                0x1f => processor_var::check_arg_count(zmachine, instruction),
-                _ => Err(RuntimeError::new(
+            OperandCount::_VAR => match (zmachine.version(), instruction.opcode().instruction()) {
+                (_, 0x00) => processor_var::call_vs(zmachine, instruction),
+                (_, 0x01) => processor_var::storew(zmachine, instruction),
+                (_, 0x02) => processor_var::storeb(zmachine, instruction),
+                (_, 0x03) => processor_var::put_prop(zmachine, instruction),
+                (_, 0x04) => processor_var::read(zmachine, instruction),
+                (_, 0x05) => processor_var::print_char(zmachine, instruction),
+                (_, 0x06) => processor_var::print_num(zmachine, instruction),
+                (_, 0x07) => processor_var::random(zmachine, instruction),
+                (_, 0x08) => processor_var::push(zmachine, instruction),
+                (_, 0x09) => processor_var::pull(zmachine, instruction),
+                (_, 0x0a) => processor_var::split_window(zmachine, instruction),
+                (_, 0x0b) => processor_var::set_window(zmachine, instruction),
+                (4, 0x0c) | (5, 0x0c) | (7, 0x0c) | (8, 0x0c) => {
+                    processor_var::call_vs2(zmachine, instruction)
+                }
+                (4, 0x0d) | (5, 0x0d) | (7, 0x0d) | (8, 0x0d) => {
+                    processor_var::erase_window(zmachine, instruction)
+                }
+                (4, 0x0e) | (5, 0x0e) | (7, 0x0e) | (8, 0x0e) => {
+                    processor_var::erase_line(zmachine, instruction)
+                }
+                (4, 0x0f) | (5, 0x0f) | (7, 0x0f) | (8, 0x0f) => {
+                    processor_var::set_cursor(zmachine, instruction)
+                }
+                (4, 0x11) | (5, 0x11) | (7, 0x11) | (8, 0x11) => {
+                    processor_var::set_text_style(zmachine, instruction)
+                }
+                (4, 0x12) | (5, 0x12) | (7, 0x12) | (8, 0x12) => {
+                    processor_var::buffer_mode(zmachine, instruction)
+                }
+                (_, 0x13) => processor_var::output_stream(zmachine, instruction),
+                (_, 0x14) => processor_var::input_stream(zmachine, instruction),
+                (_, 0x15) => processor_var::sound_effect(zmachine, instruction),
+                (4, 0x16) | (5, 0x16) | (7, 0x16) | (8, 0x16) => {
+                    processor_var::read_char(zmachine, instruction)
+                }
+                (4, 0x17) | (5, 0x17) | (7, 0x17) | (8, 0x17) => {
+                    processor_var::scan_table(zmachine, instruction)
+                }
+                (5, 0x18) | (7, 0x18) | (8, 0x18) => processor_var::not(zmachine, instruction),
+                (5, 0x19) | (7, 0x19) | (8, 0x19) => processor_var::call_vn(zmachine, instruction),
+                (5, 0x1a) | (7, 0x1a) | (8, 0x1a) => processor_var::call_vn2(zmachine, instruction),
+                (5, 0x1b) | (7, 0x1b) | (8, 0x1b) => processor_var::tokenise(zmachine, instruction),
+                (5, 0x1c) | (7, 0x1c) | (8, 0x1c) => {
+                    processor_var::encode_text(zmachine, instruction)
+                }
+                (5, 0x1d) | (7, 0x1d) | (8, 0x1d) => {
+                    processor_var::copy_table(zmachine, instruction)
+                }
+                (5, 0x1e) | (7, 0x1e) | (8, 0x1e) => {
+                    processor_var::print_table(zmachine, instruction)
+                }
+                (5, 0x1f) | (7, 0x1f) | (8, 0x1f) => {
+                    processor_var::check_arg_count(zmachine, instruction)
+                }
+                (_, _) => Err(RuntimeError::new(
                     ErrorCode::UnimplementedInstruction,
                     format!("Unimplemented instruction: {}", instruction.opcode()),
                 )),
@@ -260,6 +284,7 @@ pub mod tests {
     thread_local! {
         pub static PRINT:RefCell<String> = RefCell::new(String::new());
         pub static INPUT:RefCell<VecDeque<char>> = RefCell::new(VecDeque::new());
+        pub static INPUT_DELAY:RefCell<u64> = RefCell::new(0);
         pub static COLORS:RefCell<(u8, u8)> = RefCell::new((0, 0));
     }
 
@@ -279,6 +304,14 @@ pub mod tests {
 
     pub fn input_char() -> Option<char> {
         INPUT.with(|x| x.borrow_mut().pop_front())
+    }
+
+    pub fn input_delay() -> u64 {
+        INPUT_DELAY.with(|x| x.borrow().to_owned())
+    }
+
+    pub fn set_input_delay(msec: u64) {
+        INPUT_DELAY.with(|x| x.swap(&RefCell::new(msec)));
     }
 
     pub fn colors() -> (u8, u8) {
@@ -418,6 +451,120 @@ pub mod tests {
                 map[address + 1 + (i * 2)] = (*w >> 8) as u8;
                 map[address + 2 + (i * 2)] = *w as u8;
             }
+        }
+    }
+
+    pub fn mock_dictionary(map: &mut [u8]) {
+        // Create a simple dictionary with 4 words
+        // hello
+        // inventory
+        // look
+        // sailor
+        // Set the dictionary address to 0x300
+        map[0x08] = 0x03;
+
+        map[0x300] = 3;
+        map[0x301] = b'.';
+        map[0x302] = b',';
+        map[0x303] = b'"';
+
+        // Entry length is 9 bytes
+        map[0x304] = 0x9;
+        // There are 4 entries
+        map[0x306] = 4;
+
+        if map[0] == 3 {
+            // Text buffer is at 0x380 and can hold up to 10 characters
+            map[0x380] = 11;
+            // Parse buffer is at 0x3A0 and can hold up to 2 entries
+            map[0x3A0] = 2;
+            // hello
+            //   C     A     11       11    14    5
+            // 0 01100 01010 10001  1 10001 10100 00101
+            // 3151 C685
+            map[0x307] = 0x31;
+            map[0x308] = 0x51;
+            map[0x309] = 0xC6;
+            map[0x30a] = 0x85;
+            // 5 bytes of other content
+            // inventory
+            //   E     13    1B       A     13    19
+            // 0 01110 10011 11011  1 01010 10011 11001
+            // 3A7B AA79
+            map[0x310] = 0x3A;
+            map[0x311] = 0x7B;
+            map[0x312] = 0xAA;
+            map[0x313] = 0x79;
+            // 5 bytes of other content
+            // look
+            //   11    14    14       10    5     5
+            // 0 10001 10100 10100  1 01010 00101 00101
+            // 4D24 A8A5
+            map[0x319] = 0x4D;
+            map[0x31A] = 0x24;
+            map[0x31B] = 0xA8;
+            map[0x31C] = 0xA5;
+            // 5 bytes of other content
+            // sailor
+            //   18    6     E        11    14    17
+            // 0 11000 00110 01110  1 10001 10100 10111
+            // 60CE C697
+            map[0x322] = 0x60;
+            map[0x323] = 0xCE;
+            map[0x324] = 0xC6;
+            map[0x325] = 0x97;
+        } else {
+            // Text buffer is at 0x380 and can hold up to 10 characters
+            if map[0] == 4 {
+                map[0x380] = 11;
+            } else {
+                map[0x380] = 10;
+            }
+            // Parse buffer is at 0x3A0 and can hold up to 2 entries
+            map[0x3A0] = 2;
+            // hello
+            //   C     A     11       11    14    5        5     5     5
+            // 0 01100 01010 10001  0 10001 10100 00101  1 00101 00101 00101
+            // 3151 4685 94A5
+            map[0x307] = 0x31;
+            map[0x308] = 0x51;
+            map[0x309] = 0x46;
+            map[0x30a] = 0x85;
+            map[0x30b] = 0x94;
+            map[0x30c] = 0xA5;
+            // 3 bytes of other content
+            // inventory
+            //   E     13    1B       4     13    19       14    17    1E
+            // 0 01110 10011 11011  0 01010 10011 11001  1 10100 10111 11110
+            // 3A7B 2A79 D2FE
+            map[0x310] = 0x3A;
+            map[0x311] = 0x7B;
+            map[0x312] = 0x2A;
+            map[0x313] = 0x79;
+            map[0x314] = 0xD2;
+            map[0x315] = 0xFE;
+            // 5 bytes of other content
+            // look
+            //   11    14    14       10    5     5
+            // 0 10001 10100 10100  0 01010 00101 00101
+            // 4D24 48A5 94A5;
+            map[0x319] = 0x4D;
+            map[0x31A] = 0x24;
+            map[0x31B] = 0x48;
+            map[0x31C] = 0xA5;
+            map[0x31D] = 0x94;
+            map[0x31E] = 0xA5;
+            // 5 bytes of other content
+            // sailor
+            //   18    6     E        11    14    17
+            // 0 11000 00110 01110  0 10001 10100 10111
+            // 60CE 4697 94A5
+            map[0x322] = 0x60;
+            map[0x323] = 0xCE;
+            map[0x324] = 0x46;
+            map[0x325] = 0x97;
+            map[0x326] = 0x94;
+            map[0x327] = 0xA5;
         }
     }
 
