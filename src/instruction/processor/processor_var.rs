@@ -162,13 +162,13 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
         // Store any input that was read before the interrupt
         if zmachine.version() == 4 {
             for (i, b) in input_buffer.iter().enumerate() {
-                zmachine.write_byte(text_buffer + 1 + i, to_lower_case(*b))?;
+                zmachine.write_byte(text_buffer + 1 + i, *b as u8)?;
             }
             zmachine.write_byte(text_buffer + 1 + input_buffer.len(), 0)?;
         } else {
             zmachine.write_byte(text_buffer + 1, input_buffer.len() as u8)?;
             for (i, b) in input_buffer.iter().enumerate() {
-                zmachine.write_byte(text_buffer + 2 + i, to_lower_case(*b))?;
+                zmachine.write_byte(text_buffer + 2 + i, *b as u8)?;
             }
         }
 
@@ -1167,7 +1167,7 @@ mod tests {
         // Input was interrupted
         assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x605));
         // Text buffer
-        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == b'i'));
+        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == b'I'));
         assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == b'n'));
         assert!(zmachine.read_byte(0x383).is_ok_and(|x| x == b'v'));
         assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == b'e'));
@@ -1184,7 +1184,7 @@ mod tests {
         mock_dictionary(&mut map);
         mock_routine(&mut map, 0x600, &[0x1234, 0x5678]);
         // Text buffer from previous READ
-        map[0x381] = b'i';
+        map[0x381] = b'I';
         map[0x382] = b'n';
         map[0x383] = b'v';
         map[0x384] = b'e';
@@ -1238,7 +1238,7 @@ mod tests {
         mock_dictionary(&mut map);
         mock_routine(&mut map, 0x600, &[0x1234, 0x5678]);
         // Text buffer from previous READ
-        map[0x381] = b'i';
+        map[0x381] = b'I';
         map[0x382] = b'n';
         map[0x383] = b'v';
         map[0x384] = b'e';
@@ -1380,7 +1380,7 @@ mod tests {
         assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
         // Text buffer
         assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == 6));
-        assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == b'i'));
+        assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == b'I'));
         assert!(zmachine.read_byte(0x383).is_ok_and(|x| x == b'n'));
         assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == b'v'));
         assert!(zmachine.read_byte(0x385).is_ok_and(|x| x == b'e'));
