@@ -16,7 +16,8 @@ pub fn value(zmachine: &ZMachine, object: usize, attribute: u8) -> Result<bool, 
         let value = zmachine.read_byte(address)?;
         Ok(value & mask == mask)
     } else {
-        todo!("Invalid attribute #")
+        warn!(target: "app::object", "Request to set invalid attribute {} on object {}", attribute, object);
+        Ok(false)
     }
 }
 
@@ -34,7 +35,8 @@ pub fn set(zmachine: &mut ZMachine, object: usize, attribute: u8) -> Result<(), 
         let attribute_byte = zmachine.read_byte(address)?;
         zmachine.write_byte(address, attribute_byte | mask)
     } else {
-        todo!("Invalid attribute #")
+        warn!(target: "app::object", "Request to set invalid attribute {} on object {}", attribute, object);
+        Ok(())
     }
 }
 
@@ -52,6 +54,7 @@ pub fn clear(zmachine: &mut ZMachine, object: usize, attribute: u8) -> Result<()
         let attribute_byte = zmachine.read_byte(address)?;
         zmachine.write_byte(address, attribute_byte & !mask)
     } else {
-        todo!("Invalid attribute #")
+        warn!(target: "app::object", "Request to set invalid attribute {} on object {}", attribute, object);
+        Ok(())
     }
 }

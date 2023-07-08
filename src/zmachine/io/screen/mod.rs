@@ -6,7 +6,7 @@ use crate::error::*;
 #[cfg(feature = "easycurses")]
 use curses::easy_curses::*;
 
-#[cfg(all(feature = "pancurses", not(feature = "easycurses")))]
+#[cfg(all(feature = "pancurses", not(feature = "easycurses"), not(test)))]
 use curses::pancurses::*;
 
 #[cfg(test)]

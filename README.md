@@ -14,15 +14,7 @@ This interpreter follows the [1.0 Standard](https://inform-fiction.org/zmachine/
 The current release is `1.0.0-beta.1`
 
 ## Installation
-1. Download the appropriate release binary for your system.  There are several binaries available for each platform:
-    * `-pancurses` - using the `pancurses` crate directly
-    * `-easycurses` - using the `easycurses` wrapper for pancurses
-    * `-libsndfile` - using `libsndfile` to convert AIFF sound resources
-
-        So, `aarch64-apple-darwin-pancurses-libsndfile` is a build for Apple silicon (M1/M2) Macs that requires `libsndfile`, while `aarch64-apple-darwin-easycurses` is a build for Apple silicon using `easycurses` that does not depend on `libsndfile` (and is unable to use AIFF sound resources).
-
-
-    Platforms:
+1. Download the appropriate release archive for your system.  Archives are named by platform:
     * `aarch64-apple-darwin` for ARM-based (M1, M2) Macs
     * `x86_64-apple-darwin` for Intel-based Macs
     * `x86_64-pc-windows-msvc` for 64-bit X86 Windows
@@ -33,11 +25,21 @@ The current release is `1.0.0-beta.1`
 
         Each archive contains 4 binaries named `mxyzptlk-...` as described above.
 3. Choose the terminal and sound configuration binary and copy it to a local `bin/` directory (`/usr/local/bin` on most Linux and Mac installations) for ease of use.  
+
+    There are several binaries available for each platform:
+    * `-pancurses` - using the `pancurses` crate directly
+    * `-easycurses` - using the `easycurses` wrapper for pancurses
+    * `-libsndfile` - using `libsndfile` to convert AIFF sound resources
+
+    So, for example, `mxyzptlk-pancurses-libsndfile[.exe]` is a build requires `libsndfile`, while `mxyzptlk-easycurses[.exe]` is a build using `easycurses` that does not depend on `libsndfile` (and is, therefore, unable to use AIFF sound resources).
+
+    **NOTE**: The `easycurses` builds are an artifact of early development efforts and will be removed before the final `1.0.0` release.
+
 4. Optionally, copy the `log4rs.yml` and `config.yml` files to a `.mxyzptlk/` directory in your "home" directory.  The default configuration does not enable logging, so unless you want to change the default color scheme (white on black) or generate logs, neither file is required.
 
 ### `libsndfile`
 
-The generally available Blorb files all have AIFF sound resources.  AIFF is an antiquated format that isn't supported by any of the Rust audio crates that I've been able to find.  To get around this limitation, `libsndfile` is used to convert the AIFF sounds to another format (FLAC or Ogg/Vorbis) that can be played.  To get around the `libsndfile` dependencey, one can extract the AIFF resources from the Blorb IFF file, convert them to Ogg/Vorbis, then rebuild the Blorb file, which is probably more work than it's worth.
+The generally available Blorb files all have AIFF sound resources.  AIFF is an antiquated format that isn't supported by any of the Rust audio crates that I've been able to find.  To get around this limitation, `libsndfile` is used to convert the AIFF sounds to another format (FLAC or Ogg/Vorbis) that can be played.  To get around the `libsndfile` dependency, one can extract the AIFF resources from the Blorb IFF file, convert them to Ogg/Vorbis, then rebuild the Blorb file, which is probably more work than it's worth.
 
 For the `-libsndfile` binaries, `libsndfile` must be available, obviously.
 * **Linux**: many distros already include `libsndfile` in base installs, but if not you can use the package manager to install it.  Specific instructions vary by package manager
@@ -62,10 +64,9 @@ There are a couple of places to get game files:
 
 * The [Interactive Fiction Archive](https://www.ifarchive.org/indexes/if-archive/) 
 
-    The if-archive has quite a number of free games.  This interpreter is for "zcode" games only, generally those with names ending in ".z{version}".  Only `version`s 3, 4, 5, 7, and 8 are supported, though version 7 is somewhat rare and I haven't tried running one yet.
+    The if-archive has quite a number of free games.  This interpreter is for "zcode" games only, generally those with names ending in ".z{version}".  Only versions 3, 4, 5, 7, and 8 are supported, though version 7 is somewhat rare and I have not tried running one yet.
 
-    Download a zcode file ([Curses](htt
-    ps://www.ifarchive.org/if-archive/games/zcode/curses.z5), for example) and try it out:
+    Download a zcode file \([Curses](https://www.ifarchive.org/if-archive/games/zcode/curses.z5), for example\) and try it out:
     ```
     mxyzptlk curses.z5
     ```
@@ -76,19 +77,21 @@ There are a couple of places to get game files:
 
 * The [Masterpieces Of Infocom](https://en.wikipedia.org/wiki/Classic_Text_Adventure_Masterpieces_of_Infocom) CD-ROM
 
-    Published by Activision back in 1996, contains zcode files for (almost*) every Infocom game ever published.  If you can procure a copy, the `.DAT` files on this CD are the zcode files.
+    Published by Activision back in 1996, this release contains zcode files for every* Infocom interactive fiction game published.  If you can procure a copy, the `.DAT` files on this CD are the zcode files.
 
-    *\* Except `The Hitchhiker's Guide To The Galaxy` and `James Clavell's Shogun` due to licensing issues.  `Shogun` is a graphical V6 game that won't run anyway, but `HHGTTG` is a classic that is sorely missed.*
+    *\* Excepting `The Hitchhiker's Guide To The Galaxy` and `James Clavell's Shogun`, which are absent due to expired licensing agreements.  `Shogun` is a V6 game and is not supported, but `THHGTTG` is a classic and is sorely missed.*
 
 #### **A Note About Blorb Resource Files**
 Certain revisions of `The Lurking Horror` and `Sherlock` support sound effects.  In order to use them, a Blorb file with the sound resources needs to be located in the same directory as the game file, with same filename and a `.blorb` or `.blb` extension in order for `mxyzptlk` to locate it. In other words, when playing `the-lurking-horror.z3`, the Blorb file should be named `the-lurking-horror.blorb` or `the-lurking-horror.blb`.
 
 #### **A Note About Files (Saves And Transcripts)**
-When saving or restoring game state, `mxyzptlk` will prompt for a filename.  When saving, the default name is `{zcode-file-minus-extension}-##.ifzs`, where `##` starts at "01" and will count upwards to the first filename not present on disk.  When restoring, the prompt defaults to the last (numerically) file found on disk.  
+When saving or restoring game state, `mxyzptlk` will prompt for a filename.  When saving, the default name is `{zcode-file-minus-extension}-##.ifzs`, where `##` starts at "01" and will count upwards to the first filename not found on in the current working directory.  When restoring, the prompt defaults to the last (numerically) file found on disk.  Attempting to save to an invalid location or restore an invalid file will display an error message to the screen, but shouldn't cause the game to crash or exit. 
 
-Transcripting (recording the game session via the `script` and `unscript` command in most games) uses the same naming as save/restore except with a `.txt` extension.
+Transcripting (recording the game session via the `script` and `unscript` command in most games) uses the same naming as save except with a `.txt` extension.  A prompt for a filename is only shown once* during program execution and all transcripted text will be placed in the same file.
 
-Any errors creating, opening, reading, or writing to files are reported by the interpreter and shouldn't halt game execution.  If transcripting fails, the game will print the transcripting header, but transcripting will not be enabled.
+Any errors creating, opening, reading, or writing to files are reported by the interpreter and shouldn't halt game execution.  
+
+*\*If creation of the transcript file fails, the game code may print the transcript heading, but transcripting will _not_ be enabled and not text is written to disk.  Attempting to start scripting a second time _will_ prompt for a filename again*
 
 ### Configuration
 
@@ -102,7 +105,7 @@ When logging is enabled, execution will dump quite a bit of output to various `.
 ## Building from source
 
 ### Required libraries
-The following libraries are required to build from source:
+The following external system libraries are optional:
 * libsndfile
 
     The `sndfile` feature controls whether libsndfile is used to convert AIFF sounds to another format.
@@ -118,19 +121,22 @@ add the `--release` flag if you don't plan to debug anything:
 cargo build --release
 ```
 
-The `pancurses` feature is enabled by default.  This will yield a binary that uses the the pancurses terminal library _without_ libsndfile.
+The `pancurses` feature is enabled by default.  This will yield a binary that uses the pancurses terminal library and can play FLAC or Ogg/Vorbis sound resources.
 
-* `easycurses` - this will override the `pancurses` feature.
-* `sndfile` - include libsndfile for AIFF resource conversion.
+* `easycurses` - this will replace the pancurses dependency with the easycures-rs wrapper around pancurses.
 
-For example, to build using `easycurses` without `libsndfile`:
+    **NOTE**: The `easycurses` feature is an artifact of early development efforts and will be removed before the final `1.0.0` release.
+    
+* `sndfile` - include `libsndfile` for automatic AIFF sound resource conversion.
+
+For example, for a build using the `easycurses` terminal library without a dependency on `libsndfile`:
 ```
 cargo build --release --no-default-features --features easycurses
 ```
 
 ### Testing
 
-The `zcode` directory contains several freely available test files.  I did not author these files and provide no guarantee of correctness.  I do wish to thank the authors, however, because these tests helped track down and squash several bugs resulting from my misinterpretation of the ZMachine standard.
+The `zcode` directory contains several freely available test files.  I did not author these files and provide no guarantee of correctness.  I do wish to thank the authors, however, because these tests were invaluable in the process of tracking down and squashing several bugs resulting from my misinterpretations of the ZMachine standard.
 
 * [TerpEtude](https://www.ifarchive.org/if-archive/infocom/interpreters/tools/etude.tar.Z) by Andrew Plotkin
     * Also available [here](https://github.com/townba/etude) with source code.  The `etude.z5` and `gntests.z5` files included are from this repo.
@@ -145,7 +151,7 @@ To run a test from the repo root:
 $ cargo run -- zcode/etude.z5
 ```
 
-Some are interactive, like TerpEtude, and others just run a sequence of tests and output results.
+Some are interactive, like TerpEtude, while others just run a sequence of tests and output results.
 
 ## Security Advisories
 

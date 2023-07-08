@@ -125,89 +125,86 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
             )),
         },
         _ => match instruction.opcode().operand_count() {
-            OperandCount::_0OP => match instruction.opcode().instruction() {
-                0x0 => processor_0op::rtrue(zmachine, instruction),
-                0x1 => processor_0op::rfalse(zmachine, instruction),
-                0x2 => processor_0op::print(zmachine, instruction),
-                0x3 => processor_0op::print_ret(zmachine, instruction),
-                0x5 => processor_0op::save(zmachine, instruction),
-                0x6 => processor_0op::restore(zmachine, instruction),
-                0x7 => processor_0op::restart(zmachine, instruction),
-                0x8 => processor_0op::ret_popped(zmachine, instruction),
-                0x9 => {
-                    if zmachine.version() < 5 {
-                        processor_0op::pop(zmachine, instruction)
-                    } else {
-                        processor_0op::catch(zmachine, instruction)
-                    }
-                }
-                0xa => processor_0op::quit(zmachine, instruction),
-                0xb => processor_0op::new_line(zmachine, instruction),
-                0xc => processor_0op::show_status(zmachine, instruction),
-                0xd => processor_0op::verify(zmachine, instruction),
-                0xf => processor_0op::piracy(zmachine, instruction),
-                _ => Err(RuntimeError::new(
+            OperandCount::_0OP => match (zmachine.version(), instruction.opcode().instruction()) {
+                (_, 0x0) => processor_0op::rtrue(zmachine, instruction),
+                (_, 0x1) => processor_0op::rfalse(zmachine, instruction),
+                (_, 0x2) => processor_0op::print(zmachine, instruction),
+                (_, 0x3) => processor_0op::print_ret(zmachine, instruction),
+                (_, 0x4) => processor_0op::nop(zmachine, instruction),
+                (3, 0x5) | (4, 0x5) => processor_0op::save(zmachine, instruction),
+                (3, 0x6) | (4, 0x6) => processor_0op::restore(zmachine, instruction),
+                (_, 0x7) => processor_0op::restart(zmachine, instruction),
+                (_, 0x8) => processor_0op::ret_popped(zmachine, instruction),
+                (3, 0x9) | (4, 0x9) => processor_0op::pop(zmachine, instruction),
+                (_, 0x9) => processor_0op::catch(zmachine, instruction),
+                (_, 0xa) => processor_0op::quit(zmachine, instruction),
+                (_, 0xb) => processor_0op::new_line(zmachine, instruction),
+                (3, 0xc) => processor_0op::show_status(zmachine, instruction),
+                (_, 0xd) => processor_0op::verify(zmachine, instruction),
+                (_, 0xf) => processor_0op::piracy(zmachine, instruction),
+                (_, _) => Err(RuntimeError::new(
                     ErrorCode::UnimplementedInstruction,
                     format!("Unimplemented instruction: {}", instruction.opcode()),
                 )),
             },
-            OperandCount::_1OP => match instruction.opcode().instruction() {
-                0x0 => processor_1op::jz(zmachine, instruction),
-                0x1 => processor_1op::get_sibling(zmachine, instruction),
-                0x2 => processor_1op::get_child(zmachine, instruction),
-                0x3 => processor_1op::get_parent(zmachine, instruction),
-                0x4 => processor_1op::get_prop_len(zmachine, instruction),
-                0x5 => processor_1op::inc(zmachine, instruction),
-                0x6 => processor_1op::dec(zmachine, instruction),
-                0x7 => processor_1op::print_addr(zmachine, instruction),
-                0x8 => processor_1op::call_1s(zmachine, instruction),
-                0x9 => processor_1op::remove_obj(zmachine, instruction),
-                0xa => processor_1op::print_obj(zmachine, instruction),
-                0xb => processor_1op::ret(zmachine, instruction),
-                0xc => processor_1op::jump(zmachine, instruction),
-                0xd => processor_1op::print_paddr(zmachine, instruction),
-                0xe => processor_1op::load(zmachine, instruction),
-                0xf => {
-                    if zmachine.version() < 5 {
-                        processor_1op::not(zmachine, instruction)
-                    } else {
-                        processor_1op::call_1n(zmachine, instruction)
-                    }
+            OperandCount::_1OP => match (zmachine.version(), instruction.opcode().instruction()) {
+                (_, 0x0) => processor_1op::jz(zmachine, instruction),
+                (_, 0x1) => processor_1op::get_sibling(zmachine, instruction),
+                (_, 0x2) => processor_1op::get_child(zmachine, instruction),
+                (_, 0x3) => processor_1op::get_parent(zmachine, instruction),
+                (_, 0x4) => processor_1op::get_prop_len(zmachine, instruction),
+                (_, 0x5) => processor_1op::inc(zmachine, instruction),
+                (_, 0x6) => processor_1op::dec(zmachine, instruction),
+                (_, 0x7) => processor_1op::print_addr(zmachine, instruction),
+                (4, 0x8) | (5, 0x8) | (7, 0x8) | (8, 0x8) => {
+                    processor_1op::call_1s(zmachine, instruction)
                 }
-                _ => Err(RuntimeError::new(
+                (_, 0x9) => processor_1op::remove_obj(zmachine, instruction),
+                (_, 0xa) => processor_1op::print_obj(zmachine, instruction),
+                (_, 0xb) => processor_1op::ret(zmachine, instruction),
+                (_, 0xc) => processor_1op::jump(zmachine, instruction),
+                (_, 0xd) => processor_1op::print_paddr(zmachine, instruction),
+                (_, 0xe) => processor_1op::load(zmachine, instruction),
+                (3, 0xf) | (4, 0xf) => processor_1op::not(zmachine, instruction),
+                (_, 0xf) => processor_1op::call_1n(zmachine, instruction),
+                (_, _) => Err(RuntimeError::new(
                     ErrorCode::UnimplementedInstruction,
                     format!("Unimplemented instruction: {}", instruction.opcode()),
                 )),
             },
-            OperandCount::_2OP => match instruction.opcode().instruction() {
-                0x01 => processor_2op::je(zmachine, instruction),
-                0x02 => processor_2op::jl(zmachine, instruction),
-                0x03 => processor_2op::jg(zmachine, instruction),
-                0x04 => processor_2op::dec_chk(zmachine, instruction),
-                0x05 => processor_2op::inc_chk(zmachine, instruction),
-                0x06 => processor_2op::jin(zmachine, instruction),
-                0x07 => processor_2op::test(zmachine, instruction),
-                0x08 => processor_2op::or(zmachine, instruction),
-                0x09 => processor_2op::and(zmachine, instruction),
-                0x0a => processor_2op::test_attr(zmachine, instruction),
-                0x0b => processor_2op::set_attr(zmachine, instruction),
-                0x0c => processor_2op::clear_attr(zmachine, instruction),
-                0x0d => processor_2op::store(zmachine, instruction),
-                0x0e => processor_2op::insert_obj(zmachine, instruction),
-                0x0f => processor_2op::loadw(zmachine, instruction),
-                0x10 => processor_2op::loadb(zmachine, instruction),
-                0x11 => processor_2op::get_prop(zmachine, instruction),
-                0x12 => processor_2op::get_prop_addr(zmachine, instruction),
-                0x13 => processor_2op::get_next_prop(zmachine, instruction),
-                0x14 => processor_2op::add(zmachine, instruction),
-                0x15 => processor_2op::sub(zmachine, instruction),
-                0x16 => processor_2op::mul(zmachine, instruction),
-                0x17 => processor_2op::div(zmachine, instruction),
-                0x18 => processor_2op::modulus(zmachine, instruction),
-                0x19 => processor_2op::call_2s(zmachine, instruction),
-                0x1a => processor_2op::call_2n(zmachine, instruction),
-                0x1b => processor_2op::set_colour(zmachine, instruction),
-                0x1c => processor_2op::throw(zmachine, instruction),
+            OperandCount::_2OP => match (zmachine.version(), instruction.opcode().instruction()) {
+                (_, 0x01) => processor_2op::je(zmachine, instruction),
+                (_, 0x02) => processor_2op::jl(zmachine, instruction),
+                (_, 0x03) => processor_2op::jg(zmachine, instruction),
+                (_, 0x04) => processor_2op::dec_chk(zmachine, instruction),
+                (_, 0x05) => processor_2op::inc_chk(zmachine, instruction),
+                (_, 0x06) => processor_2op::jin(zmachine, instruction),
+                (_, 0x07) => processor_2op::test(zmachine, instruction),
+                (_, 0x08) => processor_2op::or(zmachine, instruction),
+                (_, 0x09) => processor_2op::and(zmachine, instruction),
+                (_, 0x0a) => processor_2op::test_attr(zmachine, instruction),
+                (_, 0x0b) => processor_2op::set_attr(zmachine, instruction),
+                (_, 0x0c) => processor_2op::clear_attr(zmachine, instruction),
+                (_, 0x0d) => processor_2op::store(zmachine, instruction),
+                (_, 0x0e) => processor_2op::insert_obj(zmachine, instruction),
+                (_, 0x0f) => processor_2op::loadw(zmachine, instruction),
+                (_, 0x10) => processor_2op::loadb(zmachine, instruction),
+                (_, 0x11) => processor_2op::get_prop(zmachine, instruction),
+                (_, 0x12) => processor_2op::get_prop_addr(zmachine, instruction),
+                (_, 0x13) => processor_2op::get_next_prop(zmachine, instruction),
+                (_, 0x14) => processor_2op::add(zmachine, instruction),
+                (_, 0x15) => processor_2op::sub(zmachine, instruction),
+                (_, 0x16) => processor_2op::mul(zmachine, instruction),
+                (_, 0x17) => processor_2op::div(zmachine, instruction),
+                (_, 0x18) => processor_2op::modulus(zmachine, instruction),
+                (4, 0x19) | (5, 0x19) | (7, 0x19) | (8, 0x19) => {
+                    processor_2op::call_2s(zmachine, instruction)
+                }
+                (5, 0x1a) | (7, 0x1a) | (8, 0x1a) => processor_2op::call_2n(zmachine, instruction),
+                (5, 0x1b) | (7, 0x1b) | (8, 0x1b) => {
+                    processor_2op::set_colour(zmachine, instruction)
+                }
+                (5, 0x1c) | (7, 0x1c) | (8, 0x1c) => processor_2op::throw(zmachine, instruction),
                 _ => Err(RuntimeError::new(
                     ErrorCode::UnimplementedInstruction,
                     format!("Unimplemented instruction: {}", instruction.opcode()),
@@ -263,6 +260,7 @@ pub mod tests {
     thread_local! {
         pub static PRINT:RefCell<String> = RefCell::new(String::new());
         pub static INPUT:RefCell<VecDeque<char>> = RefCell::new(VecDeque::new());
+        pub static COLORS:RefCell<(u8, u8)> = RefCell::new((0, 0));
     }
 
     pub fn print_char(c: char) {
@@ -283,15 +281,26 @@ pub mod tests {
         INPUT.with(|x| x.borrow_mut().pop_front())
     }
 
+    pub fn colors() -> (u8, u8) {
+        COLORS.with(|x| x.borrow().to_owned())
+    }
+
+    pub fn set_colors(colors: (u8, u8)) {
+        COLORS.with(|x| x.swap(&RefCell::new(colors)));
+    }
+
     pub fn test_map(version: u8) -> Vec<u8> {
         let mut v = vec![0; 0x800];
+        v[0] = version;
         // Initial PC at $0400
         v[6] = 0x4;
-        v[0] = version;
+        // Object table as 0x200
+        v[0x0A] = 0x02;
         // Static mark at $0400
-        v[0x0e] = 0x04;
+        v[0x0E] = 0x04;
         // Global variables at $0100
-        v[0x0c] = 0x01;
+        v[0x0C] = 0x01;
+
         v
     }
 
@@ -469,25 +478,76 @@ pub mod tests {
         }
     }
 
+    pub fn mock_attributes(map: &mut [u8], object: usize, attributes: &[u8]) {
+        let version = map[0];
+        let object_table = ((map[0x0a] as usize) << 8) + map[0x0b] as usize;
+        let object_address = if version < 4 {
+            object_table + 62 + ((object - 1) * 9)
+        } else {
+            object_table + 126 + ((object - 1) * 14)
+        };
+
+        for (i, b) in attributes.iter().enumerate() {
+            map[object_address + i] = *b;
+        }
+    }
+
+    pub fn mock_default_properties(map: &mut [u8]) {
+        let version = map[0];
+        let words = if version < 4 { 31 } else { 63 };
+
+        let object_table = ((map[0x0a] as usize) << 8) + map[0x0b] as usize;
+        for i in 0..words {
+            let address = object_table + (i * 2);
+            map[address] = (i as u8) % 0x10;
+            map[address + 1] = i as u8;
+        }
+    }
+
     pub fn mock_properties(map: &mut [u8], object: usize, properties: &[(u8, &Vec<u8>)]) {
         let property_table_address = 0x300 + ((object - 1) * 20);
         let hl = map[property_table_address] as usize;
 
         let mut address = property_table_address + 1 + (hl * 2);
         for (number, data) in properties {
-            if map[0] < 4 {
-                let size = ((data.len() - 1) * 32) as u8 + *number;
-                map[address] = size;
-                for (i, b) in data.iter().enumerate() {
-                    println!("{:02x} -> {:04x}", *b, address + i + 1);
-                    map[address + 1 + i] = *b;
+            match (map[0], data.len()) {
+                // V3
+                (3, _) => {
+                    let size = ((data.len() - 1) * 32) as u8 + *number;
+                    map[address] = size;
+                    for (i, b) in data.iter().enumerate() {
+                        map[address + 1 + i] = *b;
+                    }
+                    address = address + 1 + data.len();
+                }
+                // V4+, 1 byte
+                (_, 1) => {
+                    map[address] = *number;
+                    map[address + 1] = data[0];
+                    address = address + 1 + data.len();
+                }
+                // V4+, 2 bytes
+                (_, 2) => {
+                    map[address] = 0x40 | *number;
+                    map[address + 1] = data[0];
+                    map[address + 2] = data[1];
+                    address = address + 1 + data.len();
+                }
+                // V4+, > 2 bytes
+                (_, _) => {
+                    map[address] = 0x80 | *number;
+                    map[address + 1] = 0x80 | (data.len() as u8 & 0x3F);
+                    for (i, b) in data.iter().enumerate() {
+                        map[address + 1 + i] = *b;
+                    }
+                    address = address + 2 + data.len();
                 }
             }
-            address = address + 1 + data.len();
         }
     }
 
     // **NOTE**: Tests for dispatch() are delegated to the processor_* tests
+
     #[test]
     fn test_operand_value() {
         // Set up a simple memory map with global var 0x80 set

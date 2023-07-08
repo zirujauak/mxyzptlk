@@ -35,6 +35,10 @@ pub fn print_ret(
     zmachine.return_routine(1)
 }
 
+pub fn nop(_zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
+    Ok(instruction.next_address())
+}
+
 fn save_result(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -246,6 +250,14 @@ mod tests {
         assert_eq!(zmachine.frame_count(), 1);
         assert_print("Hello");
         assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x01));
+    }
+
+    #[test]
+    fn test_nop() {
+        let v = test_map(3);
+        let mut zmachine = mock_zmachine(v);
+        let i = mock_instruction(0x400, vec![], opcode(3, 4), 0x401);
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x401));
     }
 
     #[test]
@@ -541,11 +553,7 @@ mod tests {
     fn test_show_status_score() {
         let mut map = test_map(3);
 
-        // Set the object table to 0x200
-        map[0x0A] = 0x02;
-
         // Short name: Status Object
-
         mock_object(
             &mut map,
             1,
@@ -573,9 +581,6 @@ mod tests {
 
         // Set the timed game flag bit
         map[0x01] = 0x02;
-
-        // Set the object table to 0x200
-        map[0x0A] = 0x02;
 
         // Short name: Status Object
         mock_object(
@@ -606,9 +611,6 @@ mod tests {
         // Set the timed game flag bit
         map[0x01] = 0x02;
 
-        // Set the object table to 0x200
-        map[0x0A] = 0x02;
-
         // Short name: Status Object
 
         mock_object(
@@ -638,9 +640,6 @@ mod tests {
 
         // Set the timed game flag bit
         map[0x01] = 0x02;
-
-        // Set the object table to 0x200
-        map[0x0A] = 0x02;
 
         // Short name: Status Object
         mock_object(
