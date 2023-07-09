@@ -136,6 +136,12 @@ cargo build --release --no-default-features --features easycurses
 
 ### Testing
 
+Unit tests are currently a work in progress.  To run the tests:
+
+```
+cargo test
+```
+
 The `zcode` directory contains several freely available test files.  I did not author these files and provide no guarantee of correctness.  I do wish to thank the authors, however, because these tests were invaluable in the process of tracking down and squashing several bugs resulting from my misinterpretations of the ZMachine standard.
 
 * [TerpEtude](https://www.ifarchive.org/if-archive/infocom/interpreters/tools/etude.tar.Z) by Andrew Plotkin
