@@ -1330,6 +1330,51 @@ mod tests {
     }
 
     #[test]
+    fn test_aread_v5_terminator_table() {
+        let mut map = test_map(5);
+        // Set up a terminating character table at 0x200
+        map[0x2E] = 0x2;
+        map[0x200] = b'n'; // This one is invalid
+        map[0x201] = 0xFE;
+        map[0x202] = 0;
+
+        mock_dictionary(&mut map);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x380),
+                operand(OperandType::LargeConstant, 0x3A0),
+            ],
+            opcode(5, 4),
+            0x406,
+            store(0x405, 0x80),
+        );
+
+        // Terminate input with 0xFE
+        input(&['I', 'n', 'v', 'e', 'n', 't', 'o', 'r', 'y', 0xFE as char]);
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x406));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0xFE));
+        // Text buffer
+        assert!(zmachine.read_byte(0x381).is_ok_and(|x| x == 9));
+        assert!(zmachine.read_byte(0x382).is_ok_and(|x| x == b'i'));
+        assert!(zmachine.read_byte(0x383).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x384).is_ok_and(|x| x == b'v'));
+        assert!(zmachine.read_byte(0x385).is_ok_and(|x| x == b'e'));
+        assert!(zmachine.read_byte(0x386).is_ok_and(|x| x == b'n'));
+        assert!(zmachine.read_byte(0x387).is_ok_and(|x| x == b't'));
+        assert!(zmachine.read_byte(0x388).is_ok_and(|x| x == b'o'));
+        assert!(zmachine.read_byte(0x389).is_ok_and(|x| x == b'r'));
+        assert!(zmachine.read_byte(0x38a).is_ok_and(|x| x == b'y'));
+        // Parse buffer
+        assert!(zmachine.read_byte(0x3A1).is_ok_and(|x| x == 1));
+        assert!(zmachine.read_word(0x3A2).is_ok_and(|x| x == 0x310));
+        assert!(zmachine.read_byte(0x3A4).is_ok_and(|x| x == 9));
+        assert!(zmachine.read_byte(0x3A5).is_ok_and(|x| x == 2));
+    }
+
+    #[test]
     fn test_aread_v5_no_parse() {
         let mut map = test_map(5);
         mock_dictionary(&mut map);
