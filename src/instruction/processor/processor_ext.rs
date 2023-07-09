@@ -98,26 +98,6 @@ pub fn set_font(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
     Ok(instruction.next_address())
 }
 
-// pub fn draw_picture(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
-
-// pub fn picture_data(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
-
-// pub fn erase_picture(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
-
-// pub fn set_margins(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
-
 pub fn save_undo(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -166,72 +146,368 @@ pub fn restore_undo(
 //     todo!()
 // }
 
-// pub fn move_window(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::Path};
 
-// pub fn window_size(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+    use crate::instruction::{
+        processor::{
+            dispatch,
+            tests::{
+                input, mock_frame, mock_store_instruction, mock_zmachine, operand, set_variable,
+                store, test_map,
+            },
+        },
+        Opcode, OpcodeForm, OperandCount, OperandType,
+    };
 
-// pub fn window_style(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+    fn opcode(instruction: u8) -> Opcode {
+        Opcode::new(5, 0xBE, instruction, OpcodeForm::Ext, OperandCount::_VAR)
+    }
 
-// pub fn get_wind_prop(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+    #[test]
+    fn test_save() {
+        input(&[
+            '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', 'v', '5', '.', 'i', 'f',
+            'z', 's',
+        ]);
 
-// pub fn scroll_window(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+        let map = test_map(5);
+        let i = mock_store_instruction(0x480, vec![], opcode(0), 0x483, store(0x482, 0x80));
+        let mut zmachine = mock_zmachine(map);
+        let a = dispatch(&mut zmachine, &i);
+        assert!(Path::new("test-v5.ifzs").exists());
+        assert!(fs::remove_file(Path::new("test-v5.ifzs")).is_ok());
+        assert!(a.is_ok_and(|x| x == 0x483));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 1));
+    }
 
-// pub fn pop_stack(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+    #[test]
+    fn test_save_fail() {
+        input(&[
+            '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}',
+            '\u{8}', '\u{8}', '\u{8}', '/', 'x', '/', 'x',
+        ]);
 
-// pub fn read_mouse(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+        let map = test_map(5);
+        let i = mock_store_instruction(0x480, vec![], opcode(0), 0x483, store(0x482, 0x80));
+        let mut zmachine = mock_zmachine(map);
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x483));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+    }
 
-// pub fn mouse_window(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+    #[test]
+    fn test_restore_v5() {
+        input(&[
+            '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', 'v', '5', 'r', '.', 'i',
+            'f', 'z', 's',
+        ]);
 
-// pub fn push_stack(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+        // Save a file
+        let mut map = test_map(5);
+        // Set up the save instruction for the restore to decode
+        map[0x480] = 0xbe;
+        map[0x481] = 0x00;
+        map[0x482] = 0xFF;
+        map[0x483] = 0x80;
 
-// pub fn put_wind_prop(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+        set_variable(&mut map, 0x80, 0xFF);
+        set_variable(&mut map, 0x81, 0xFE);
 
-// pub fn print_form(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+        let mut zmachine = mock_zmachine(map);
 
-// pub fn make_menu(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+        let i = mock_store_instruction(0x480, vec![], opcode(0), 0x484, store(0x483, 0x80));
 
-// pub fn picture_table(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+        let a = dispatch(&mut zmachine, &i);
+        assert!(Path::new("test-v5r.ifzs").exists());
+        assert!(a.is_ok_and(|x| x == 0x484));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x01));
 
-// pub fn buffer_screen(context: &mut Context, instruction: &Instruction) -> Result<usize, ContextError> {
-//     let operands = operand_values(context, instruction)?;
-//     todo!()
-// }
+        let i2 = mock_store_instruction(0x484, vec![], opcode(1), 0x486, store(0x485, 0x81));
+        input(&[
+            '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}', '\u{8}',
+            '\u{8}', '\u{8}', '\u{8}', 't', 'e', 's', 't', '-', 'v', '5', 'r', '.', 'i', 'f', 'z',
+            's',
+        ]);
+
+        let a = dispatch(&mut zmachine, &i2);
+        assert!(fs::remove_file(Path::new("test-v5r.ifzs")).is_ok());
+        assert!(a.is_ok_and(|x| x == 0x484));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x02));
+    }
+
+    #[test]
+    fn test_restore_v5_fail() {
+        let mut map = test_map(5);
+
+        set_variable(&mut map, 0x80, 0xFF);
+        set_variable(&mut map, 0x81, 0xFE);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(0x484, vec![], opcode(1), 0x486, store(0x485, 0x81));
+
+        let a = dispatch(&mut zmachine, &i);
+        assert!(a.is_ok_and(|x| x == 0x486));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_log_shift_left() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x0001),
+                operand(OperandType::SmallConstant, 15),
+            ],
+            opcode(2),
+            0x487,
+            store(0x486, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0x8000));
+    }
+
+    #[test]
+    fn test_log_shift_right() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x8000),
+                operand(OperandType::SmallConstant, 0xFFF1),
+            ],
+            opcode(2),
+            0x487,
+            store(0x486, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0x1));
+    }
+
+    #[test]
+    fn test_log_shift_left_overflow() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x8000),
+                operand(OperandType::SmallConstant, 16),
+            ],
+            opcode(2),
+            0x487,
+            store(0x486, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_log_shift_right_overflow() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x8000),
+                operand(OperandType::SmallConstant, 0xFFF0),
+            ],
+            opcode(2),
+            0x487,
+            store(0x486, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_art_shift_left() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x0001),
+                operand(OperandType::SmallConstant, 15),
+            ],
+            opcode(3),
+            0x487,
+            store(0x486, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0x8000));
+    }
+
+    #[test]
+    fn test_art_shift_right() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x8000),
+                operand(OperandType::SmallConstant, 0xFFF1),
+            ],
+            opcode(3),
+            0x487,
+            store(0x486, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0xFFFF));
+    }
+
+    #[test]
+    fn test_art_shift_left_overflow() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x8000),
+                operand(OperandType::SmallConstant, 16),
+            ],
+            opcode(3),
+            0x487,
+            store(0x486, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_art_shift_right_overflow() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x8000),
+                operand(OperandType::SmallConstant, 0xFFF0),
+            ],
+            opcode(3),
+            0x487,
+            store(0x486, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_set_font() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 0x3)],
+            opcode(4),
+            0x484,
+            store(0x483, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x484));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 1));
+    }
+
+    #[test]
+    fn test_set_font_0() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 0)],
+            opcode(4),
+            0x484,
+            store(0x483, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x484));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 1));
+    }
+
+    #[test]
+    fn test_set_font_invalid() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::SmallConstant, 9)],
+            opcode(4),
+            0x484,
+            store(0x483, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x484));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_save_undo() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(0x400, vec![], opcode(9), 0x483, store(0x482, 0x81));
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x483));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 1));
+    }
+
+    #[test]
+    fn test_restore_undo() {
+        let mut map = test_map(5);
+        // Put the save instruction into memory for the restore
+        map[0x400] = 0xBE;
+        map[0x401] = 0x0A;
+        map[0x402] = 0xFF;
+        map[0x403] = 0x80;
+
+        let mut zmachine = mock_zmachine(map);
+
+        // Save current state
+        let i = mock_store_instruction(0x400, vec![], opcode(9), 0x404, store(0x403, 0x81));
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 1));
+
+        // Simulate a function call to change state
+        mock_frame(&mut zmachine, 0x600, None, 0x500);
+        assert_eq!(zmachine.frame_count(), 2);
+
+        let i = mock_store_instruction(0x600, vec![], opcode(10), 0x604, store(0x603, 0x81));
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+        assert_eq!(zmachine.frame_count(), 1);
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 2));
+    }
+
+    #[test]
+    fn test_restore_undo_fail() {
+        let map = test_map(5);
+        let mut zmachine = mock_zmachine(map);
+
+        // No undo save
+        let i = mock_store_instruction(0x600, vec![], opcode(10), 0x604, store(0x603, 0x81));
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x604));
+        assert_eq!(zmachine.frame_count(), 1);
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+    }
+}

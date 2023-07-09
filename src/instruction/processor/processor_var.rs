@@ -3076,7 +3076,6 @@ mod tests {
         );
         assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x406));
         assert_print("abcdabcdabcdabcdabcdabcdabcdabcd");
-        println!("{:?}", zmachine.cursor().unwrap());
         assert!(zmachine.cursor().is_ok_and(|x| x == (12, 12)));
     }
 

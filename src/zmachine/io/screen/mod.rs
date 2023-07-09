@@ -647,12 +647,14 @@ impl Screen {
     }
 
     pub fn set_font(&mut self, font: u8) -> u8 {
-        if font == 1 || font == 3 || font == 4 {
-            let result = self.font;
-            self.font = font;
-            result
-        } else {
-            0
+        match font {
+            0 => self.font,
+            1 | 3 | 4 => {
+                let result = self.font;
+                self.font = font;
+                result
+            }
+            _ => 0,
         }
     }
 
