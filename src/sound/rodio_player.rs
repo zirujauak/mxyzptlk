@@ -14,6 +14,18 @@ pub struct RodioPlayer {
     sink: Option<Sink>,
 }
 
+fn normalize_volume(volume: u8) -> f32 {
+    // Volume should range 1 - 8, with -1 being "very load"
+    match volume {
+        // Louder than 8
+        0xFF => 1.25,
+        // range from 0.125 - 1.0 seems to work
+        (1..=8) => volume as f32 / 8.0,
+        // assume middle of range
+        _ => 0.5625,
+    }
+}
+
 impl Player for RodioPlayer {
     fn is_playing(&mut self) -> bool {
         if let Some(sink) = self.get_sink().as_mut() {
@@ -32,7 +44,7 @@ impl Player for RodioPlayer {
                             Ok(source) => {
                                 match self.get_sink() {
                                     Some(sink) => {
-                                        sink.set_volume(volume as f32 / 128.0);
+                                        sink.set_volume(normalize_volume(volume));
                                         // V5
                                         if repeats == 0 {
                                             sink.append(source.repeat_infinite())
@@ -79,8 +91,7 @@ impl Player for RodioPlayer {
 
     fn change_volume(&mut self, volume: u8) {
         if let Some(sink) = self.get_sink() {
-            let v = volume as f32 / 128.0;
-            sink.set_volume(v);
+            sink.set_volume(normalize_volume(volume));
         }
     }
 }
