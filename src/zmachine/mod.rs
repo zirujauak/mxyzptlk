@@ -751,7 +751,7 @@ impl ZMachine {
         repeats: u8,
         routine: Option<usize>,
     ) -> Result<(), RuntimeError> {
-        let repeats = if self.version == 5 {
+        let repeats = if self.version > 4 && repeats > 0 {
             Some(repeats)
         } else {
             None

@@ -235,6 +235,9 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
                 (4, 0x0f) | (5, 0x0f) | (7, 0x0f) | (8, 0x0f) => {
                     processor_var::set_cursor(zmachine, instruction)
                 }
+                (4, 0x10) | (5, 0x10) | (7, 0x10) | (8, 0x10) => {
+                    processor_var::get_cursor(zmachine, instruction)
+                }
                 (4, 0x11) | (5, 0x11) | (7, 0x11) | (8, 0x11) => {
                     processor_var::set_text_style(zmachine, instruction)
                 }
@@ -278,14 +281,24 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{config::Config, zmachine::state::memory::Memory};
+    use crate::{config::Config, sound::Manager, zmachine::state::memory::Memory};
     use std::{cell::RefCell, collections::VecDeque};
 
     thread_local! {
         pub static PRINT:RefCell<String> = RefCell::new(String::new());
         pub static INPUT:RefCell<VecDeque<char>> = RefCell::new(VecDeque::new());
         pub static INPUT_DELAY:RefCell<u64> = RefCell::new(0);
+        pub static INPUT_TIMEOUT:RefCell<bool> = RefCell::new(false);
         pub static COLORS:RefCell<(u8, u8)> = RefCell::new((0, 0));
+        pub static SPLIT:RefCell<u8> = RefCell::new(0);
+        pub static WINDOW:RefCell<u8> = RefCell::new(0);
+        pub static ERASE_WINDOW:RefCell<Vec<i8>> = RefCell::new(Vec::new());
+        pub static ERASE_LINE:RefCell<bool> = RefCell::new(false);
+        pub static STYLE:RefCell<u8> = RefCell::new(0);
+        pub static BUFFER:RefCell<u16> = RefCell::new(0);
+        pub static STREAM:RefCell<(u8, Option<usize>)> = RefCell::new((0, None));
+        pub static BEEP:RefCell<bool> = RefCell::new(false);
+        pub static PLAY_SOUND:RefCell<(usize, u8, u8)> = RefCell::new((0, 0, 0));
     }
 
     pub fn print_char(c: char) {
@@ -314,12 +327,92 @@ pub mod tests {
         INPUT_DELAY.with(|x| x.swap(&RefCell::new(msec)));
     }
 
+    pub fn input_timeout() -> bool {
+        INPUT_TIMEOUT.with(|x| x.borrow().to_owned())
+    }
+
+    pub fn set_input_timeout() {
+        INPUT_TIMEOUT.with(|x| x.swap(&RefCell::new(true)))
+    }
+
     pub fn colors() -> (u8, u8) {
         COLORS.with(|x| x.borrow().to_owned())
     }
 
     pub fn set_colors(colors: (u8, u8)) {
         COLORS.with(|x| x.swap(&RefCell::new(colors)));
+    }
+
+    pub fn split() -> u8 {
+        SPLIT.with(|x| x.borrow().to_owned())
+    }
+
+    pub fn set_split(lines: u8) {
+        SPLIT.with(|x| x.swap(&RefCell::new(lines)));
+    }
+
+    pub fn window() -> u8 {
+        WINDOW.with(|x| x.borrow().to_owned())
+    }
+
+    pub fn set_window(window: u8) {
+        WINDOW.with(|x| x.swap(&RefCell::new(window)))
+    }
+
+    pub fn erase_window() -> Vec<i8> {
+        ERASE_WINDOW.with(|x| x.borrow().clone())
+    }
+
+    pub fn set_erase_window(window: i8) {
+        ERASE_WINDOW.with(|x| x.borrow_mut().push(window));
+    }
+
+    pub fn erase_line() -> bool {
+        ERASE_LINE.with(|x| x.borrow().to_owned())
+    }
+
+    pub fn set_erase_line() {
+        ERASE_LINE.with(|x| x.swap(&RefCell::new(true)));
+    }
+
+    pub fn style() -> u8 {
+        STYLE.with(|x| x.borrow().to_owned())
+    }
+
+    pub fn set_style(style: u8) {
+        STYLE.with(|x| x.swap(&RefCell::new(style)));
+    }
+
+    pub fn buffer_mode() -> u16 {
+        BUFFER.with(|x| x.borrow().to_owned())
+    }
+
+    pub fn set_buffer_mode(mode: u16) {
+        BUFFER.with(|x| x.swap(&RefCell::new(mode)));
+    }
+
+    pub fn output_stream() -> (u8, Option<usize>) {
+        STREAM.with(|x| x.borrow().to_owned())
+    }
+
+    pub fn set_output_stream(mask: u8, table: Option<usize>) {
+        STREAM.with(|x| x.swap(&RefCell::new((mask, table))));
+    }
+
+    pub fn beep() -> bool {
+        BEEP.with(|x| x.borrow().to_owned())
+    }
+
+    pub fn set_beep() {
+        BEEP.with(|x| x.swap(&RefCell::new(true)));
+    }
+
+    pub fn play_sound() -> (usize, u8, u8) {
+        PLAY_SOUND.with(|x| x.borrow().to_owned())
+    }
+
+    pub fn set_play_sound(size: usize, volume: u8, repeats: u8) {
+        PLAY_SOUND.with(|x| x.swap(&RefCell::new((size, volume, repeats))));
     }
 
     pub fn test_map(version: u8) -> Vec<u8> {
@@ -345,7 +438,9 @@ pub mod tests {
 
     pub fn mock_zmachine(map: Vec<u8>) -> ZMachine {
         let m = Memory::new(map);
-        let z = ZMachine::new(m, Config::default(), None, "test");
+        let manager = Manager::mock();
+        assert!(manager.is_ok());
+        let z = ZMachine::new(m, Config::default(), Some(manager.unwrap()), "test");
         assert!(z.is_ok());
         z.unwrap()
     }
@@ -566,6 +661,57 @@ pub mod tests {
             map[0x326] = 0x94;
             map[0x327] = 0xA5;
         }
+    }
+
+    pub fn mock_custom_dictionary(map: &mut [u8], address: usize) {
+        // Create a custom dictionary with 3 words
+        // xyzzy
+        // plover
+        // moon
+
+        map[address] = 3;
+        map[address + 1] = b'.';
+        map[address + 2] = b',';
+        map[address + 3] = b'"';
+
+        // Entry length is 9 bytes
+        map[address + 4] = 0x9;
+        // There are 3 entries, unsorted
+        map[address + 5] = 0xFF;
+        map[address + 6] = 0xFD;
+
+        // xyzzy
+        //   1D    1E    1F       1F    1E    5        5     5     5
+        // 0 11101 11110 11111  0 11111 11110 00101  1 00101 00101 00101
+        // 77DF 7FC5 94A5
+        map[address + 7] = 0x77;
+        map[address + 8] = 0xDF;
+        map[address + 9] = 0x7F;
+        map[address + 10] = 0xC5;
+        map[address + 11] = 0x94;
+        map[address + 12] = 0xA5;
+        // 3 bytes of other content
+        // plover
+        //   15    11    14       1B    A     17       5     5     5
+        // 0 10101 10001 10100  0 11011 01010 10111  1 00101 00101 00101
+        // 5634 6D57 94A5
+        map[address + 16] = 0x56;
+        map[address + 17] = 0x34;
+        map[address + 18] = 0x6D;
+        map[address + 19] = 0x57;
+        map[address + 20] = 0x94;
+        map[address + 21] = 0xA5;
+        // 5 bytes of other content
+        // moon
+        //   12    14    14       13    5     5
+        // 0 10010 10100 10100  0 10011 00101 00101
+        // 4A94 54A5 4CA5;
+        map[address + 25] = 0x4A;
+        map[address + 26] = 0x94;
+        map[address + 27] = 0x4C;
+        map[address + 28] = 0xA5;
+        map[address + 29] = 0x94;
+        map[address + 30] = 0xA5;
     }
 
     pub fn assert_eq_ok<T: std::fmt::Debug + std::cmp::PartialEq>(

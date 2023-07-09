@@ -92,6 +92,7 @@ impl IO {
         let mask = (1 << (stream - 1)) & 0xF;
         self.output_streams |= mask;
         debug!(target: "app::stream", "Enable output stream {} => {:04b}", stream, self.output_streams);
+        self.screen.output_stream(self.output_streams, table);
         match stream {
             1 | 2 => Ok(()),
             3 => {
@@ -314,6 +315,7 @@ impl IO {
 
     pub fn buffer_mode(&mut self, mode: u16) -> Result<(), RuntimeError> {
         self.buffered = mode != 0;
+        self.screen.buffer_mode(mode);
         Ok(())
     }
 
