@@ -252,6 +252,26 @@ mod tests {
     }
 
     #[test]
+    fn test_log_shift_0() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x0001),
+                operand(OperandType::SmallConstant, 0),
+            ],
+            opcode(2),
+            0x487,
+            store(0x486, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 1));
+    }
+
+    #[test]
     fn test_log_shift_left() {
         let map = test_map(5);
 
@@ -329,6 +349,26 @@ mod tests {
 
         assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
         assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_art_shift_0() {
+        let map = test_map(5);
+
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::LargeConstant, 0x0001),
+                operand(OperandType::SmallConstant, 0),
+            ],
+            opcode(3),
+            0x487,
+            store(0x486, 0x81),
+        );
+
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
+        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 1));
     }
 
     #[test]
