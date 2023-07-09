@@ -53,14 +53,16 @@ fn terminators(zmachine: &ZMachine) -> Result<Vec<u16>, RuntimeError> {
 
     if zmachine.version() > 4 {
         let mut table_addr = zmachine.header_word(HeaderField::TerminatorTable)? as usize;
-        loop {
-            let b = zmachine.read_byte(table_addr)?;
-            if b == 0 {
-                break;
-            } else if (130..155).contains(&b) || b >= 252 {
-                terminators.push(b as u16);
+        if table_addr > 0 {
+            loop {
+                let b = zmachine.read_byte(table_addr)?;
+                if b == 0 {
+                    break;
+                } else if (129..155).contains(&b) || b >= 252 {
+                    terminators.push(b as u16);
+                }
+                table_addr += 1;
             }
-            table_addr += 1;
         }
     }
 

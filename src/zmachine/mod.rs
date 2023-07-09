@@ -573,12 +573,16 @@ impl ZMachine {
             let e = self.io.read_key(end == 0 && !check_sound);
             match e.zchar() {
                 Some(key) => {
-                    if terminators.contains(&key) || (terminators.contains(&255) && (key > 128)) {
+                    if terminators.contains(&key)
+                        // Terminator 255 means "any function key"
+                        || (terminators.contains(&255) && ((129..155).contains(&key) || key > 251))
+                    {
                         if key == 254 || key == 253 {
                             self.mouse_data(&e)?;
                         }
 
                         input_buffer.push(key);
+                        // Only print the terminator if it was the return key
                         if key == 0x0d {
                             self.io.print_vec(&vec![key])?;
                         }
