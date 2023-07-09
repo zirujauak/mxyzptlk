@@ -266,7 +266,6 @@ pub fn from_dictionary(
     let entry_size = zmachine.read_byte(dictionary_address + separator_count + 1)? as usize;
     let entry_count = zmachine.read_word(dictionary_address + separator_count + 2)? as i16;
     let word_count = if zmachine.version() < 4 { 2 } else { 3 };
-
     info!(target: "app::input", "LEXICAL ANALYSIS: dictionary @ {:04x}, {} separators, {} entries of size {}", dictionary_address, separator_count, entry_count, entry_size);
 
     let mut zchars = word.iter().map(|c| *c as u16).collect::<Vec<u16>>();

@@ -1,15 +1,24 @@
 use core::fmt;
 use std::collections::HashMap;
 
+#[cfg(not(test))]
 mod rodio_player;
 
-#[cfg(feature = "sndfile")]
+#[cfg(test)]
+mod test_player;
+
+#[cfg(any(feature = "sndfile", test))]
 mod loader;
+
+#[cfg(not(test))]
+use crate::sound::rodio_player::*;
+
+#[cfg(test)]
+use crate::sound::test_player::*;
 
 use crate::{
     error::RuntimeError,
     iff::blorb::{aiff::AIFF, oggv::OGGV, Blorb},
-    sound::rodio_player::RodioPlayer,
 };
 
 pub struct Sound {
@@ -52,7 +61,7 @@ impl From<(u32, &AIFF, Option<&u32>)> for Sound {
 #[cfg(not(feature = "sndfile"))]
 impl From<(u32, &AIFF, Option<&u32>)> for Sound {
     fn from((number, _aiff, repeats): (u32, &AIFF, Option<&u32>)) -> Self {
-        Sound::new(number, &vec![], repeats)
+        Sound::new(number, &[], repeats)
     }
 }
 
@@ -113,9 +122,22 @@ impl From<Blorb> for HashMap<u32, Sound> {
 }
 
 impl Manager {
+    #[cfg(test)]
+    pub fn mock() -> Result<Manager, RuntimeError> {
+        let mut sounds = HashMap::new();
+        sounds.insert(3, Sound::new(1, &[0; 128], None));
+        sounds.insert(4, Sound::new(1, &[0; 256], Some(&5)));
+
+        Ok(Manager {
+            player: Some(new_player()?),
+            sounds,
+            current_effect: 0,
+        })
+    }
+
     pub fn new(blorb: Blorb) -> Result<Manager, RuntimeError> {
         Ok(Manager {
-            player: Some(Box::new(RodioPlayer::new()?)),
+            player: Some(new_player()?),
             sounds: HashMap::from(blorb),
             current_effect: 0,
         })
@@ -159,6 +181,7 @@ impl Manager {
                         1
                     };
 
+                    self.current_effect = effect as u32;
                     p.play_sound(&sound.data, volume, r)
                 }
                 None => {

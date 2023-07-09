@@ -326,6 +326,7 @@ impl Screen {
         if self.cursor_0.0 < self.window_0_top {
             self.cursor_0 = (self.window_0_top, self.cursor_0.1)
         }
+        self.terminal.split_window(lines);
     }
 
     pub fn unsplit_window(&mut self) {
@@ -334,10 +335,12 @@ impl Screen {
         self.window_1_bottom = None;
         self.cursor_1 = None;
         self.selected_window = 0;
+        self.terminal.split_window(0);
     }
 
     pub fn select_window(&mut self, window: u8) -> Result<(), RuntimeError> {
         self.lines_since_input = 0;
+        self.terminal.set_window(window);
         if window == 0 {
             self.selected_window = 0;
             Ok(())
@@ -354,6 +357,7 @@ impl Screen {
     }
 
     pub fn erase_window(&mut self, window: i8) -> Result<(), RuntimeError> {
+        self.terminal.erase_window(window);
         match window {
             0 => {
                 for i in self.window_0_top..=self.rows {
@@ -455,6 +459,7 @@ impl Screen {
     }
 
     pub fn erase_line(&mut self) {
+        self.terminal.erase_line();
         let (row, col) = if self.selected_window == 0 {
             self.cursor_0
         } else {
@@ -619,7 +624,12 @@ impl Screen {
 
     pub fn set_style(&mut self, style: u8) -> Result<(), RuntimeError> {
         self.current_style.set(style);
+        self.terminal.set_style(self.current_style.mask);
         Ok(())
+    }
+
+    pub fn buffer_mode(&mut self, mode: u16) {
+        self.terminal.buffer_mode(mode);
     }
 
     pub fn beep(&mut self) {
@@ -637,13 +647,19 @@ impl Screen {
     }
 
     pub fn set_font(&mut self, font: u8) -> u8 {
-        if font == 1 || font == 3 || font == 4 {
-            let result = self.font;
-            self.font = font;
-            result
-        } else {
-            0
+        match font {
+            0 => self.font,
+            1 | 3 | 4 => {
+                let result = self.font;
+                self.font = font;
+                result
+            }
+            _ => 0,
         }
+    }
+
+    pub fn output_stream(&mut self, mask: u8, table: Option<usize>) {
+        self.terminal.output_stream(mask, table);
     }
 
     pub fn reset(&mut self) {
@@ -675,4 +691,12 @@ pub trait Terminal {
     fn reset(&mut self);
     fn quit(&mut self);
     fn set_colors(&mut self, colors: (Color, Color));
+    // Below are hooks used by TestTerminal as part of unit testing
+    fn split_window(&mut self, _lines: u32) {}
+    fn set_window(&mut self, _window: u8) {}
+    fn erase_window(&mut self, _window: i8) {}
+    fn erase_line(&mut self) {}
+    fn set_style(&mut self, _style: u8) {}
+    fn buffer_mode(&mut self, _mode: u16) {}
+    fn output_stream(&mut self, _stream: u8, _table: Option<usize>) {}
 }

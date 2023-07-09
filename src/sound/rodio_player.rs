@@ -85,6 +85,13 @@ impl Player for RodioPlayer {
     }
 }
 
+pub fn new_player() -> Result<Box<dyn Player>, RuntimeError> {
+    match RodioPlayer::new() {
+        Ok(r) => Ok(Box::new(r)),
+        Err(e) => Err(e),
+    }
+}
+
 impl RodioPlayer {
     pub fn new() -> Result<RodioPlayer, RuntimeError> {
         match OutputStream::try_default() {

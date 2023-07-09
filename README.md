@@ -20,16 +20,16 @@ The current release is `1.0.0-beta.1`
     * `x86_64-pc-windows-msvc` for 64-bit X86 Windows
     * ... More platforms to be added later
 2. Decompress the tar/gzip archive using your favorite decompression tool:
-    * `tar -xzvf mxyzptlk-1.0-beta.1-aarch64-apple-darwin.tar.gz` for Mac/Linux
-    * 7Zip, etc. on Windows
+    * Mac/Linux: `tar -xzvf mxyzptlk-{platform}-1.0-beta.1.tar.gz`
+    * Windows: as above with a unix shell (gitbash, etc), or use a program like (7Zip)[https://www.7-zip.org/]
 
-        Each archive contains 4 binaries named `mxyzptlk-...` as described above.
+        Each archive contains 4 binaries named `mxyzptlk-{features}` as described below.
 3. Choose the terminal and sound configuration binary and copy it to a local `bin/` directory (`/usr/local/bin` on most Linux and Mac installations) for ease of use.  
 
     There are several binaries available for each platform:
     * `-pancurses` - using the `pancurses` crate directly
     * `-easycurses` - using the `easycurses` wrapper for pancurses
-    * `-libsndfile` - using `libsndfile` to convert AIFF sound resources
+    * `-{terminal}-libsndfile` - the above plus `libsndfile` to convert AIFF sound resources
 
     So, for example, `mxyzptlk-pancurses-libsndfile[.exe]` is a build requires `libsndfile`, while `mxyzptlk-easycurses[.exe]` is a build using `easycurses` that does not depend on `libsndfile` (and is, therefore, unable to use AIFF sound resources).
 
@@ -108,7 +108,7 @@ When logging is enabled, execution will dump quite a bit of output to various `.
 The following external system libraries are optional:
 * libsndfile
 
-    The `sndfile` feature controls whether libsndfile is used to convert AIFF sounds to another format.
+    The `sndfile` feature controls whether `libsndfile` is used to convert AIFF sounds to another format.
     
     See the [Installation](#Installation) section above for instructions on installing the library.
 
@@ -135,6 +135,12 @@ cargo build --release --no-default-features --features easycurses
 ```
 
 ### Testing
+
+Unit tests are currently a work in progress.  To run the tests:
+
+```
+cargo test
+```
 
 The `zcode` directory contains several freely available test files.  I did not author these files and provide no guarantee of correctness.  I do wish to thank the authors, however, because these tests were invaluable in the process of tracking down and squashing several bugs resulting from my misinterpretations of the ZMachine standard.
 
