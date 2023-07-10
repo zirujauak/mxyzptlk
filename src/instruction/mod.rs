@@ -3,6 +3,7 @@ use std::fmt;
 pub mod decoder;
 pub mod processor;
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum OpcodeForm {
     Short,
     Long,
@@ -10,13 +11,14 @@ pub enum OpcodeForm {
     Ext,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperandType {
     LargeConstant,
     SmallConstant,
     Variable,
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub struct Operand {
     operand_type: OperandType,
     value: u16,
@@ -89,6 +91,7 @@ impl StoreResult {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub struct Branch {
     address: usize,
     condition: bool,
@@ -124,6 +127,7 @@ impl Branch {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum OperandCount {
     _0OP,
     _1OP,
