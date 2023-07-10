@@ -113,9 +113,8 @@ fn is_store_instruction(opcode: &Opcode) -> bool {
         _ => {
             let mut v = STORE_INSTRUCTIONS.to_vec();
             match opcode.version() {
-                3 => v.push(0xBF),
+                3 => {}
                 4 => {
-                    v.push(0xBF);
                     v.push(0xB5);
                     v.push(0xB6);
                 }
@@ -223,11 +222,14 @@ fn branch(
 }
 
 fn opcode(bytes: &[u8], version: u8, offset: usize) -> Result<(usize, Opcode), RuntimeError> {
-    let opcode = bytes[offset];
+    let mut opcode = bytes[offset];
     let (offset, form) = match opcode {
-        0xBE => (offset + 1, OpcodeForm::Ext),
+        0xBE => {
+            opcode = bytes[offset + 1];
+            (offset + 2, OpcodeForm::Ext)
+        }
         _ => (
-            offset,
+            offset + 1,
             match (opcode >> 6) & 0x3 {
                 3 => OpcodeForm::Var,
                 2 => OpcodeForm::Short,
@@ -274,7 +276,6 @@ pub fn decode_instruction(
     let version = zmachine.version();
     let bytes = zmachine.instruction(address);
     let (offset, opcode) = opcode(&bytes, version, 0)?;
-
     let (offset, operand_types) = operand_types(&bytes, &opcode, offset)?;
     let (offset, operands) = operands(&bytes, &operand_types, offset)?;
     let (offset, store) = result_variable(address + offset, &bytes, &opcode, offset)?;
@@ -548,7 +549,7 @@ mod tests {
             0x55, 0x75, 0xd5, 0x16, 0x36, 0x56, 0x76, 0xd6, 0x17, 0x37, 0x57, 0x77, 0xd7, 0x18,
             0x38, 0x58, 0x78, 0xd8, 0x19, 0x39, 0x59, 0x79, 0xd9, 0x81, 0x91, 0xa1, 0x82, 0x92,
             0xa2, 0x83, 0x93, 0xa3, 0x84, 0x94, 0xa4, 0x88, 0x98, 0xa8, 0x8e, 0x9e, 0xae, 0xe0,
-            0xe7, 0xec, 0xf6, 0xf7, 0xf8, 0xbf,
+            0xe7, 0xec, 0xf6, 0xf7, 0xf8,
         ];
 
         for o in 0..=0xFF {
@@ -570,7 +571,7 @@ mod tests {
                 assert!(
                     r.is_ok_and(|x| x.0 == 1 && x.1.is_none()),
                     "{:02x} should not be a store instruction",
-                    0
+                    o
                 );
             }
         }
@@ -585,7 +586,7 @@ mod tests {
             0x55, 0x75, 0xd5, 0x16, 0x36, 0x56, 0x76, 0xd6, 0x17, 0x37, 0x57, 0x77, 0xd7, 0x18,
             0x38, 0x58, 0x78, 0xd8, 0x19, 0x39, 0x59, 0x79, 0xd9, 0x81, 0x91, 0xa1, 0x82, 0x92,
             0xa2, 0x83, 0x93, 0xa3, 0x84, 0x94, 0xa4, 0x88, 0x98, 0xa8, 0x8e, 0x9e, 0xae, 0xe0,
-            0xe7, 0xec, 0xf6, 0xf7, 0xf8, 0xbf, 0xb5, 0xb6,
+            0xe7, 0xec, 0xf6, 0xf7, 0xf8, 0xb5, 0xb6,
         ];
 
         for o in 0..=0xFF {
@@ -607,7 +608,7 @@ mod tests {
                 assert!(
                     r.is_ok_and(|x| x.0 == 1 && x.1.is_none()),
                     "{:02x} should not be a store instruction",
-                    0
+                    o
                 );
             }
         }
@@ -644,7 +645,7 @@ mod tests {
                 assert!(
                     r.is_ok_and(|x| x.0 == 1 && x.1.is_none()),
                     "{:02x} should not be a store instruction",
-                    0
+                    o
                 );
             }
         }
@@ -673,7 +674,7 @@ mod tests {
                 assert!(
                     r.is_ok_and(|x| x.0 == 1 && x.1.is_none()),
                     "{:02x} should not be a store instruction",
-                    0
+                    o
                 );
             }
         }
@@ -1031,8 +1032,12 @@ mod tests {
     fn test_decode_instruction_zero_op() {
         let mut map = test_map(3);
         // Put instruction above dynamic memory
+        // PIRACY ?(label)
         map[0x600] = 0xBF;
+        // Branch
+        map[0x601] = 0xFE;
         let zmachine = mock_zmachine(map);
+
         let i = decode_instruction(&zmachine, 0x600);
         assert!(i.is_ok());
         let instruction = i.unwrap();
@@ -1042,6 +1047,253 @@ mod tests {
         assert_eq!(instruction.opcode().instruction(), 0xF);
         assert_eq!(instruction.opcode().form(), &OpcodeForm::Short);
         assert_eq!(instruction.operands(), &[]);
-        assert_eq!(instruction.next_address(), 0x601);
+        assert!(instruction.branch().is_some());
+        assert_eq!(instruction.branch().unwrap().address, 0x601);
+        assert!(instruction.branch().unwrap().condition());
+        assert_eq!(instruction.branch().unwrap().branch_address(), 0x63e);
+        assert!(instruction.store().is_none());
+        assert_eq!(instruction.next_address(), 0x602);
+    }
+
+    // Store
+    #[test]
+    fn test_decode_instruction_one_op_large_const() {
+        let mut map = test_map(3);
+        // GET_PARENT_OBJECT -> (result)
+        // Put instruction above dynamic memory
+        map[0x600] = 0x83;
+        // Operand
+        map[0x601] = 0x12;
+        map[0x602] = 0x34;
+        // Store var
+        map[0x603] = 0x80;
+
+        let zmachine = mock_zmachine(map);
+
+        let i = decode_instruction(&zmachine, 0x600);
+        assert!(i.is_ok());
+        let instruction = i.unwrap();
+        assert_eq!(instruction.address(), 0x600);
+        assert_eq!(instruction.opcode().version(), 3);
+        assert_eq!(instruction.opcode().opcode(), 0x83);
+        assert_eq!(instruction.opcode().instruction(), 0x3);
+        assert_eq!(instruction.opcode().form(), &OpcodeForm::Short);
+        assert_eq!(
+            instruction.operands(),
+            &[operand(OperandType::LargeConstant, 0x1234)]
+        );
+        assert!(instruction.branch().is_none());
+        assert!(instruction.store().is_some());
+        assert_eq!(instruction.store().unwrap().address(), 0x603);
+        assert_eq!(instruction.store().unwrap().variable(), 0x80);
+        assert_eq!(instruction.next_address(), 0x604);
+    }
+
+    // Branch + Store
+    #[test]
+    fn test_decode_instruction_one_op_small_const() {
+        let mut map = test_map(3);
+        // Put instruction above dynamic memory
+        // GET_SIBLING_OBJECT -> (result) ?(label)
+        map[0x600] = 0x91;
+        // Operand
+        map[0x601] = 0x12;
+        // Store var
+        map[0x602] = 0x80;
+        // Branch
+        map[0x603] = 0x81;
+        map[0x604] = 0x00;
+
+        let zmachine = mock_zmachine(map);
+
+        let i = decode_instruction(&zmachine, 0x600);
+        assert!(i.is_ok());
+        let instruction = i.unwrap();
+        assert_eq!(instruction.address(), 0x600);
+        assert_eq!(instruction.opcode().version(), 3);
+        assert_eq!(instruction.opcode().opcode(), 0x91);
+        assert_eq!(instruction.opcode().instruction(), 0x1);
+        assert_eq!(instruction.opcode().form(), &OpcodeForm::Short);
+        assert_eq!(
+            instruction.operands(),
+            &[operand(OperandType::SmallConstant, 0x12)]
+        );
+        assert!(instruction.branch().is_some());
+        assert_eq!(instruction.branch().unwrap().address(), 0x603);
+        assert!(instruction.branch().unwrap().condition());
+        assert_eq!(instruction.branch().unwrap().branch_address(), 0x703);
+        assert!(instruction.store().is_some());
+        assert_eq!(instruction.store().unwrap().address(), 0x602);
+        assert_eq!(instruction.store().unwrap().variable(), 0x80);
+        assert_eq!(instruction.next_address(), 0x605);
+    }
+
+    #[test]
+    fn test_decode_instruction_one_op_var() {
+        let mut map = test_map(3);
+        // Put instruction above dynamic memory
+        // REMOVE_OBJ
+        map[0x600] = 0xA9;
+        // Operand
+        map[0x601] = 0x12;
+
+        let zmachine = mock_zmachine(map);
+
+        let i = decode_instruction(&zmachine, 0x600);
+        assert!(i.is_ok());
+        let instruction = i.unwrap();
+        assert_eq!(instruction.address(), 0x600);
+        assert_eq!(instruction.opcode().version(), 3);
+        assert_eq!(instruction.opcode().opcode(), 0xA9);
+        assert_eq!(instruction.opcode().instruction(), 0x9);
+        assert_eq!(instruction.opcode().form(), &OpcodeForm::Short);
+        assert_eq!(
+            instruction.operands(),
+            &[operand(OperandType::Variable, 0x12)]
+        );
+        assert!(instruction.branch().is_none());
+        assert!(instruction.store().is_none());
+        assert_eq!(instruction.next_address(), 0x602);
+    }
+
+    #[test]
+    fn test_decode_instruction_two_op_small_small() {
+        let mut map = test_map(3);
+        // Put instruction above dynamic memory
+        // JE ?(label)
+        map[0x600] = 0x01;
+        // Operands
+        map[0x601] = 0x12;
+        map[0x602] = 0x34;
+        // Branch
+        map[0x603] = 0x7F;
+
+        let zmachine = mock_zmachine(map);
+
+        let i = decode_instruction(&zmachine, 0x600);
+        assert!(i.is_ok());
+        let instruction = i.unwrap();
+        assert_eq!(instruction.address(), 0x600);
+        assert_eq!(instruction.opcode().version(), 3);
+        assert_eq!(instruction.opcode().opcode(), 0x01);
+        assert_eq!(instruction.opcode().instruction(), 0x1);
+        assert_eq!(instruction.opcode().form(), &OpcodeForm::Long);
+        assert_eq!(
+            instruction.operands(),
+            &[
+                operand(OperandType::SmallConstant, 0x12),
+                operand(OperandType::SmallConstant, 0x34)
+            ]
+        );
+        assert!(instruction.branch().is_some());
+        assert_eq!(instruction.branch().unwrap().address(), 0x603);
+        assert!(!instruction.branch().unwrap().condition());
+        assert_eq!(instruction.branch().unwrap().branch_address(), 0x641);
+        assert!(instruction.store().is_none());
+        assert_eq!(instruction.next_address(), 0x604);
+    }
+
+    #[test]
+    fn test_decode_instruction_two_op_small_var() {
+        let mut map = test_map(3);
+        // Put instruction above dynamic memory
+        // OR -> (result)
+        map[0x600] = 0x28;
+        // Operands
+        map[0x601] = 0x12;
+        map[0x602] = 0x34;
+        // Store
+        map[0x603] = 0x80;
+
+        let zmachine = mock_zmachine(map);
+
+        let i = decode_instruction(&zmachine, 0x600);
+        assert!(i.is_ok());
+        let instruction = i.unwrap();
+        assert_eq!(instruction.address(), 0x600);
+        assert_eq!(instruction.opcode().version(), 3);
+        assert_eq!(instruction.opcode().opcode(), 0x28);
+        assert_eq!(instruction.opcode().instruction(), 0x8);
+        assert_eq!(instruction.opcode().form(), &OpcodeForm::Long);
+        assert_eq!(
+            instruction.operands(),
+            &[
+                operand(OperandType::SmallConstant, 0x12),
+                operand(OperandType::Variable, 0x34)
+            ]
+        );
+        assert!(instruction.branch().is_none());
+        assert!(instruction.store().is_some());
+        assert_eq!(instruction.store().unwrap().address(), 0x603);
+        assert_eq!(instruction.store().unwrap().variable(), 0x80);
+        assert_eq!(instruction.next_address(), 0x604);
+    }
+
+    #[test]
+    fn test_decode_instruction_two_op_var_small() {
+        let mut map = test_map(3);
+        // Put instruction above dynamic memory
+        // SET_ATTR
+        map[0x600] = 0x4B;
+        // Operands
+        map[0x601] = 0x12;
+        map[0x602] = 0x34;
+
+        let zmachine = mock_zmachine(map);
+
+        let i = decode_instruction(&zmachine, 0x600);
+        assert!(i.is_ok());
+        let instruction = i.unwrap();
+        assert_eq!(instruction.address(), 0x600);
+        assert_eq!(instruction.opcode().version(), 3);
+        assert_eq!(instruction.opcode().opcode(), 0x4B);
+        assert_eq!(instruction.opcode().instruction(), 0xB);
+        assert_eq!(instruction.opcode().form(), &OpcodeForm::Long);
+        assert_eq!(
+            instruction.operands(),
+            &[
+                operand(OperandType::Variable, 0x12),
+                operand(OperandType::SmallConstant, 0x34)
+            ]
+        );
+        assert!(instruction.branch().is_none());
+        assert!(instruction.store().is_none());
+        assert_eq!(instruction.next_address(), 0x603);
+    }
+
+    #[test]
+    fn test_decode_instruction_two_op_var_var() {
+        let mut map = test_map(3);
+        // Put instruction above dynamic memory
+        // LOADW -> (result)
+        map[0x600] = 0x6F;
+        // Operands
+        map[0x601] = 0x12;
+        map[0x602] = 0x34;
+        // Result
+        map[0x603] = 0x80;
+
+        let zmachine = mock_zmachine(map);
+
+        let i = decode_instruction(&zmachine, 0x600);
+        assert!(i.is_ok());
+        let instruction = i.unwrap();
+        assert_eq!(instruction.address(), 0x600);
+        assert_eq!(instruction.opcode().version(), 3);
+        assert_eq!(instruction.opcode().opcode(), 0x6F);
+        assert_eq!(instruction.opcode().instruction(), 0xF);
+        assert_eq!(instruction.opcode().form(), &OpcodeForm::Long);
+        assert_eq!(
+            instruction.operands(),
+            &[
+                operand(OperandType::Variable, 0x12),
+                operand(OperandType::Variable, 0x34)
+            ]
+        );
+        assert!(instruction.branch().is_none());
+        assert!(instruction.store().is_some());
+        assert_eq!(instruction.store().unwrap().address(), 0x603);
+        assert_eq!(instruction.store().unwrap().variable(), 0x80);
+        assert_eq!(instruction.next_address(), 0x604);
     }
 }

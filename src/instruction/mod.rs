@@ -118,6 +118,10 @@ impl Branch {
         }
     }
 
+    fn address(&self) -> usize {
+        self.address
+    }
+
     fn condition(&self) -> bool {
         self.condition
     }

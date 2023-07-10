@@ -55,7 +55,7 @@ fn save_result(
 pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let pc = if zmachine.version() == 3 {
         match instruction.branch() {
-            Some(b) => b.address,
+            Some(b) => b.address(),
             None => {
                 return Err(RuntimeError::new(
                     ErrorCode::Save,
