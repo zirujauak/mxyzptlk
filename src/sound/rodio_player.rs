@@ -14,15 +14,27 @@ pub struct RodioPlayer {
     sink: Option<Sink>,
 }
 
+#[cfg(target_os = "macos")]
+const VOLUME_FACTOR: f32 = 128.0;
+
+#[cfg(target_os = "linux")]
+const VOLUME_FACTOR: f32 = 8.0;
+
+#[cfg(target_os = "windows")]
+const VOLUME_FACTOR: f32 = 12.0;
+
 fn normalize_volume(volume: u8) -> f32 {
+    // Test this on windows and linux to confirm, then remove
+    error!(target: "app::sound", "VOLUME_FACTOR: {}", VOLUME_FACTOR);
+
     // Volume should range 1 - 8, with -1 being "very load"
     match volume {
-        // Louder than 8
-        0xFF => 1.25,
+        // Louder than 8 by 25%
+        0xFF => (8.0 / VOLUME_FACTOR) * 1.25,
         // range from 0.125 - 1.0 seems to work
-        (1..=8) => volume as f32 / 8.0,
+        (1..=8) => volume as f32 / VOLUME_FACTOR,
         // assume middle of range
-        _ => 0.5625,
+        _ => 4.5 / VOLUME_FACTOR,
     }
 }
 
