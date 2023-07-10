@@ -1296,4 +1296,114 @@ mod tests {
         assert_eq!(instruction.store().unwrap().variable(), 0x80);
         assert_eq!(instruction.next_address(), 0x604);
     }
+
+    #[test]
+    fn test_decode_instruction_var_two_op() {
+        let mut map = test_map(3);
+        // Put instruction above dynamic memory
+        // MOD -> (result)
+        map[0x600] = 0xD8;
+        // Operand types - large, large
+        map[0x601] = 0x0F;
+        // Operands
+        map[0x602] = 0x12;
+        map[0x603] = 0x34;
+        map[0x604] = 0x56;
+        map[0x605] = 0x78;
+        // Store
+        map[0x606] = 0x80;
+
+        let zmachine = mock_zmachine(map);
+
+        let i = decode_instruction(&zmachine, 0x600);
+        assert!(i.is_ok());
+        let instruction = i.unwrap();
+        assert_eq!(instruction.address(), 0x600);
+        assert_eq!(instruction.opcode().version(), 3);
+        assert_eq!(instruction.opcode().opcode(), 0xD8);
+        assert_eq!(instruction.opcode().instruction(), 0x18);
+        assert_eq!(instruction.opcode().form(), &OpcodeForm::Var);
+        assert_eq!(
+            instruction.operands(),
+            &[
+                operand(OperandType::LargeConstant, 0x1234),
+                operand(OperandType::LargeConstant, 0x5678)
+            ]
+        );
+        assert!(instruction.branch().is_none());
+        assert!(instruction.store().is_some());
+        assert_eq!(instruction.store().unwrap().address(), 0x606);
+        assert_eq!(instruction.store().unwrap().variable(), 0x80);
+        assert_eq!(instruction.next_address(), 0x607);
+    }
+
+    #[test]
+    fn test_decode_instruction_var_var() {
+        let mut map = test_map(3);
+        // Put instruction above dynamic memory
+        // PRINT_NUM
+        map[0x600] = 0xE6;
+        // Operand types - large
+        map[0x601] = 0x3F;
+        // Operands
+        map[0x602] = 0x12;
+        map[0x603] = 0x34;
+
+        let zmachine = mock_zmachine(map);
+
+        let i = decode_instruction(&zmachine, 0x600);
+        assert!(i.is_ok());
+        let instruction = i.unwrap();
+        assert_eq!(instruction.address(), 0x600);
+        assert_eq!(instruction.opcode().version(), 3);
+        assert_eq!(instruction.opcode().opcode(), 0xE6);
+        assert_eq!(instruction.opcode().instruction(), 0x6);
+        assert_eq!(instruction.opcode().form(), &OpcodeForm::Var);
+        assert_eq!(
+            instruction.operands(),
+            &[operand(OperandType::LargeConstant, 0x1234)]
+        );
+        assert!(instruction.branch().is_none());
+        assert!(instruction.store().is_none());
+        assert_eq!(instruction.next_address(), 0x604);
+    }
+
+    #[test]
+    fn test_decode_instruction_ext() {
+        let mut map = test_map(5);
+        // Put instruction above dynamic memory
+        // LOG_SHIFT -> (result)
+        map[0x600] = 0xBE;
+        map[0x601] = 0x02;
+        // Operand types - small, small
+        map[0x602] = 0x5F;
+        // Operands
+        map[0x603] = 0x12;
+        map[0x604] = 0x34;
+        // Store
+        map[0x605] = 0x80;
+
+        let zmachine = mock_zmachine(map);
+
+        let i = decode_instruction(&zmachine, 0x600);
+        assert!(i.is_ok());
+        let instruction = i.unwrap();
+        assert_eq!(instruction.address(), 0x600);
+        assert_eq!(instruction.opcode().version(), 5);
+        assert_eq!(instruction.opcode().opcode(), 0x02);
+        assert_eq!(instruction.opcode().instruction(), 0x02);
+        assert_eq!(instruction.opcode().form(), &OpcodeForm::Ext);
+        assert_eq!(
+            instruction.operands(),
+            &[
+                operand(OperandType::SmallConstant, 0x12),
+                operand(OperandType::SmallConstant, 0x34)
+            ]
+        );
+        assert!(instruction.branch().is_none());
+        assert!(instruction.store().is_some());
+        assert_eq!(instruction.store().unwrap().address(), 0x605);
+        assert_eq!(instruction.store().unwrap().variable(), 0x80);
+        assert_eq!(instruction.next_address(), 0x606);
+    }
 }
