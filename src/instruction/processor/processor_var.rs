@@ -701,21 +701,9 @@ mod tests {
     use std::{fs, path::Path};
 
     use crate::{
-        instruction::{
-            processor::{
-                dispatch,
-                tests::{
-                    assert_print, beep, branch, buffer_mode, erase_line, erase_window, input,
-                    mock_branch_instruction, mock_branch_store_instruction, mock_custom_dictionary,
-                    mock_dictionary, mock_instruction, mock_object, mock_properties, mock_routine,
-                    mock_store_instruction, mock_zmachine, operand, output_stream, play_sound,
-                    set_input_delay, set_input_timeout, set_split, set_variable, split, store,
-                    style, test_map, window,
-                },
-            },
-            Opcode, OpcodeForm, OperandCount, OperandType,
-        },
+        instruction::{processor::dispatch, Opcode, OpcodeForm, OperandCount, OperandType},
         object::property,
+        test_util::*,
     };
 
     fn opcode(version: u8, instruction: u8) -> Opcode {

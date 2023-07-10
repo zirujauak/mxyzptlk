@@ -1,4 +1,4 @@
-use crate::{error::RuntimeError, instruction::processor::tests::set_play_sound};
+use crate::{error::RuntimeError, test_util::set_play_sound};
 
 use super::Player;
 

@@ -1,11 +1,10 @@
 use std::thread;
 use std::time::Duration;
 
-use crate::instruction::processor::tests::{
-    input_char, input_delay, input_timeout, print_char, set_beep, set_buffer_mode, set_colors,
-    set_erase_line, set_erase_window, set_output_stream, set_split, set_style, set_window,
+use crate::{
+    test_util::*,
+    zmachine::io::screen::{CellStyle, Color, InputEvent, Terminal},
 };
-use crate::zmachine::io::screen::{CellStyle, Color, InputEvent, Terminal};
 
 pub fn new_terminal() -> Box<dyn Terminal> {
     Box::new(TestTerminal {})

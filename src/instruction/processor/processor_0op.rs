@@ -175,9 +175,9 @@ pub fn piracy(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usiz
 mod tests {
     use std::{fs, path::Path};
 
-    use crate::instruction::{
-        processor::{dispatch, tests::*},
-        Opcode, OpcodeForm, OperandCount,
+    use crate::{
+        instruction::{processor::dispatch, Opcode, OpcodeForm, OperandCount},
+        test_util::*,
     };
 
     fn opcode(version: u8, instruction: u8) -> Opcode {

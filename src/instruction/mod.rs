@@ -43,7 +43,7 @@ impl fmt::Display for Operand {
 }
 
 impl Operand {
-    fn new(operand_type: OperandType, value: u16) -> Operand {
+    pub fn new(operand_type: OperandType, value: u16) -> Operand {
         Operand {
             operand_type,
             value,
@@ -110,7 +110,7 @@ impl fmt::Display for Branch {
 }
 
 impl Branch {
-    fn new(address: usize, condition: bool, branch_address: usize) -> Branch {
+    pub fn new(address: usize, condition: bool, branch_address: usize) -> Branch {
         Branch {
             address,
             condition,
@@ -390,7 +390,7 @@ impl fmt::Display for Instruction {
 }
 
 impl Instruction {
-    fn new(
+    pub fn new(
         address: usize,
         opcode: Opcode,
         operands: Vec<Operand>,

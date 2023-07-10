@@ -17,6 +17,9 @@ pub mod sound;
 pub mod text;
 pub mod zmachine;
 
+#[cfg(test)]
+pub mod test_util;
+
 use crate::config::Config;
 use crate::log::*;
 use iff::blorb::Blorb;

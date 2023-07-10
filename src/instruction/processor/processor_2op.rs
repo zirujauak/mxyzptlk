@@ -359,19 +359,11 @@ pub fn throw(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize
 mod tests {
     use crate::{
         instruction::{
-            processor::{
-                dispatch,
-                tests::{
-                    branch, colors, mock_attributes, mock_branch_instruction,
-                    mock_default_properties, mock_frame, mock_instruction, mock_object,
-                    mock_properties, mock_routine, mock_store_instruction, mock_zmachine, operand,
-                    set_variable, store, test_map,
-                },
-                Opcode,
-            },
+            processor::{dispatch, Opcode},
             OpcodeForm, OperandCount, OperandType,
         },
         object::{self, attribute},
+        test_util::*,
     };
 
     fn opcode_2op(version: u8, instruction: u8) -> Opcode {

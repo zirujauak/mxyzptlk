@@ -293,7 +293,7 @@ pub fn decode_instruction(
 
 #[cfg(test)]
 mod tests {
-    use crate::instruction::processor::tests::{mock_zmachine, test_map};
+    use crate::test_util::{mock_zmachine, test_map};
 
     use super::*;
 

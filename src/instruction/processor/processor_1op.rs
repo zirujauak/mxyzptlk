@@ -187,11 +187,9 @@ pub fn call_1n(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
 #[cfg(test)]
 mod tests {
     use crate::{
-        instruction::{
-            processor::{dispatch, tests::*},
-            Opcode, OpcodeForm, OperandCount, OperandType,
-        },
+        instruction::{processor::dispatch, Opcode, OpcodeForm, OperandCount, OperandType},
         object,
+        test_util::*,
     };
 
     fn opcode(version: u8, instruction: u8) -> Opcode {
