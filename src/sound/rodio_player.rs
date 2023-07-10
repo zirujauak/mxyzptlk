@@ -21,7 +21,7 @@ const VOLUME_FACTOR: f32 = 128.0;
 const VOLUME_FACTOR: f32 = 8.0;
 
 #[cfg(target_os = "windows")]
-const VOLUME_FACTOR: f32 = 128.0;
+const VOLUME_FACTOR: f32 = 12.0;
 
 fn normalize_volume(volume: u8) -> f32 {
     // Test this on windows and linux to confirm, then remove
