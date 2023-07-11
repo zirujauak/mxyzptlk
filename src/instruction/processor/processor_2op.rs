@@ -362,7 +362,8 @@ mod tests {
             processor::{dispatch, Opcode},
             OpcodeForm, OperandCount, OperandType,
         },
-        test_util::*, object::{attribute, self},
+        object::{self, attribute},
+        test_util::*,
     };
 
     fn opcode_2op(version: u8, instruction: u8) -> Opcode {

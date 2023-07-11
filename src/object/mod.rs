@@ -107,4 +107,3 @@ pub fn set_sibling(
 
     set_relative(zmachine, offset, object, sibling)
 }
-
