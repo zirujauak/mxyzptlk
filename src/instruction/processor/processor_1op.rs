@@ -601,6 +601,23 @@ mod tests {
     }
 
     #[test]
+    fn test_get_prop_len_no_prop() {
+        let mut map = test_map(3);
+        set_variable(&mut map, 0x80, 0xFFFF);
+        map[0x300] = 0x2C;
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![operand(OperandType::LargeConstant, 0)],
+            opcode(3, 4),
+            0x403,
+            store(0x402, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
     fn test_inc() {
         let mut map = test_map(3);
         set_variable(&mut map, 0x80, 0x1234);
