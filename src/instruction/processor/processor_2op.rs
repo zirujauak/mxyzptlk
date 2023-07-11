@@ -362,8 +362,7 @@ mod tests {
             processor::{dispatch, Opcode},
             OpcodeForm, OperandCount, OperandType,
         },
-        object::{self, attribute},
-        test_util::*,
+        test_util::*, object::{attribute, self},
     };
 
     fn opcode_2op(version: u8, instruction: u8) -> Opcode {
@@ -799,6 +798,25 @@ mod tests {
             vec![
                 operand(OperandType::SmallConstant, 0x01),
                 operand(OperandType::SmallConstant, 40),
+            ],
+            opcode_2op(4, 10),
+            0x404,
+            branch(0x403, true, 0x40a),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+    }
+
+    #[test]
+    fn test_test_attr_v4_invalid() {
+        let mut map = test_map(4);
+        // Set attributes 0, 4, 9, 14, 19, 24, 29, 34, 39, 44
+        mock_attributes(&mut map, 1, &[0x88, 0x42, 0x10, 0x84, 0x21, 0x08]);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_branch_instruction(
+            0x400,
+            vec![
+                operand(OperandType::SmallConstant, 0x01),
+                operand(OperandType::SmallConstant, 48),
             ],
             opcode_2op(4, 10),
             0x404,
