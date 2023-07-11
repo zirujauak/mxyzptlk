@@ -66,13 +66,13 @@ impl CellStyle {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Interrupt {
     ReadTimeout,
     Sound,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct InputEvent {
     zchar: Option<u16>,
     row: Option<u16>,
