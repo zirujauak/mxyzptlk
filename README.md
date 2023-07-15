@@ -64,7 +64,7 @@ There are a couple of places to get game files:
 
 * The [Interactive Fiction Archive](https://www.ifarchive.org/indexes/if-archive/) 
 
-    The if-archive has quite a number of free games.  This interpreter is for "zcode" games only, generally those with names ending in ".z{version}".  Only versions 3, 4, 5, 7, and 8 are supported, though version 7 is somewhat rare and I have not tried running one yet.
+    The if-archive has quite a number of free games.  This interpreter is for "zcode" games only, generally those with names ending in ".z{version}".  Only versions 3, 4, 5, 7, and 8 are supported, though version 7 is somewhat rare and has not been tested.
 
     Download a zcode file \([Curses](https://www.ifarchive.org/if-archive/games/zcode/curses.z5), for example\) and try it out:
     ```
@@ -165,4 +165,4 @@ Some are interactive, like TerpEtude, while others just run a sequence of tests 
 
 * [`RUSTSEC-2019-0005`](https://rustsec.org/advisories/RUSTSEC-2019-0005) for `pancurses`, related to the `mvprintw` and `printw` functions in `ncurses`, which are not used.
 * ['RUSTSEC-2019-0006'](https://rustsec.org/advisories/RUSTSEC-2019-0006) for `ncurses`, related to the above
-* ['RUSTSEC-2020-0071`](https://rustsec.org/advisories/RUSTSEC-2020-0071) for `time` via `chrono` via `log4rs`
+* [`RUSTSEC-2020-0071`](https://rustsec.org/advisories/RUSTSEC-2020-0071) for `time` via `chrono` via `log4rs`
