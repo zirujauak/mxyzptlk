@@ -56,7 +56,7 @@ For the `-libsndfile` binaries, `libsndfile` must be available, obviously.
 * **Windows**: 
     [`sndfile.dll`](https://github.com/libsndfile/libsndfile/releases) needs to be in the `PATH` environment variable.  If you keep the DLL in the same directory where you run `mxzyptlk.exe`, then it should get loaded.  If you install the binary somewhere and add it to the `PATH`, then copying the DLL to the same location should work fine.  If the DLL can't be located, execution will terminate immediately with an error.
 
-    It's worth pointing out that sound-enabled games will run with a non-libsndfile binary, you just may not hear any sounds play.  Sounds are a gimmick, really, and you don't miss much without them.  It was fun to code.
+    It's worth pointing out that sound-enabled games will run with a non-libsndfile binary, you just may not hear any sounds play.  Sounds are a gimmick, really, and you don't miss much without them.  It was fun to code, however.
 
 ### Games
 
@@ -64,7 +64,7 @@ There are a couple of places to get game files:
 
 * The [Interactive Fiction Archive](https://www.ifarchive.org/indexes/if-archive/) 
 
-    The if-archive has quite a number of free games.  This interpreter is for "zcode" games only, generally those with names ending in ".z{version}".  Only versions 3, 4, 5, 7, and 8 are supported, though version 7 is somewhat rare and I have not tried running one yet.
+    The if-archive has quite a number of free games.  This interpreter is for "zcode" games only, generally those with names ending in ".z{version}".  Only versions 3, 4, 5, 7, and 8 are supported, though version 7 is somewhat rare and has not been tested.
 
     Download a zcode file \([Curses](https://www.ifarchive.org/if-archive/games/zcode/curses.z5), for example\) and try it out:
     ```
@@ -141,6 +141,8 @@ Unit tests are currently a work in progress.  To run the tests:
 ```
 cargo test
 ```
+
+Unit tests create and delete several files named `test-...`.  Avoid saving games or transcripts in the repo with similar names to avoid data loss.
 
 The `zcode` directory contains several freely available test files.  I did not author these files and provide no guarantee of correctness.  I do wish to thank the authors, however, because these tests were invaluable in the process of tracking down and squashing several bugs resulting from my misinterpretations of the ZMachine standard.
 
