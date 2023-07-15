@@ -7,7 +7,10 @@ use crate::{
         Branch, Instruction, Opcode, OpcodeForm, Operand, OperandCount, OperandType, StoreResult,
     },
     sound::Manager,
-    zmachine::{state::memory::Memory, ZMachine},
+    zmachine::{
+        state::{memory::Memory, State},
+        ZMachine,
+    },
 };
 
 thread_local! {
@@ -214,6 +217,13 @@ pub fn mock_zmachine(map: Vec<u8>) -> ZMachine {
     let z = ZMachine::new(m, Config::default(), Some(manager.unwrap()), "test");
     assert!(z.is_ok());
     z.unwrap()
+}
+
+pub fn mock_state(map: Vec<u8>) -> State {
+    let m = Memory::new(map);
+    let s = State::new(m);
+    assert!(s.is_ok());
+    s.unwrap()
 }
 
 pub fn operand(operand_type: OperandType, value: u16) -> Operand {
