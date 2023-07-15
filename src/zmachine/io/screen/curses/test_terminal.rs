@@ -47,19 +47,29 @@ impl Terminal for TestTerminal {
         }
     }
 
-    fn scroll(&mut self, _row: u32) {}
+    fn scroll(&mut self, row: u32) {
+        set_scroll(row);
+    }
 
-    fn backspace(&mut self, _at: (u32, u32)) {}
+    fn backspace(&mut self, at: (u32, u32)) {
+        set_backspace(at);
+    }
 
     fn beep(&mut self) {
         set_beep();
     }
 
-    fn move_cursor(&mut self, _at: (u32, u32)) {}
+    fn move_cursor(&mut self, at: (u32, u32)) {
+        set_cursor(at.0, at.1)
+    }
 
-    fn reset(&mut self) {}
+    fn reset(&mut self) {
+        set_reset();
+    }
 
-    fn quit(&mut self) {}
+    fn quit(&mut self) {
+        set_quit();
+    }
 
     fn set_colors(&mut self, colors: (Color, Color)) {
         set_colors((colors.0 as u8, colors.1 as u8))

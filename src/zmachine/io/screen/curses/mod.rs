@@ -381,4 +381,23 @@ mod tests {
             font += 3;
         }
     }
+
+    #[test]
+    fn test_map_output_font_3() {
+        // ASCII
+        for b in 0x20..=0x73 {
+            assert_u16_to_char(b, 3, b as u8 as char);
+        }
+
+        // Boxes, incomplete
+        assert_u16_to_char(0xb3, 3, '\u{2502}');
+        assert_u16_to_char(0xbf, 3, '\u{2510}');
+        assert_u16_to_char(0xc0, 3, '\u{2514}');
+        assert_u16_to_char(0xc4, 3, '\u{2500}');
+        assert_u16_to_char(0xd9, 3, '\u{2518}');
+        assert_u16_to_char(0xda, 3, '\u{250c}');
+
+        // Unmapped
+        assert_u16_to_char(0x7F, 3, '\u{7F}');
+    }
 }

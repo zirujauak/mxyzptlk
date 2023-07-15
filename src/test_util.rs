@@ -25,6 +25,11 @@ thread_local! {
     pub static STREAM:RefCell<(u8, Option<usize>)> = RefCell::new((0, None));
     pub static BEEP:RefCell<bool> = RefCell::new(false);
     pub static PLAY_SOUND:RefCell<(usize, u8, u8)> = RefCell::new((0, 0, 0));
+    pub static CURSOR:RefCell<(u32, u32)> = RefCell::new((0, 0));
+    pub static SCROLL:RefCell<u32> = RefCell::new(0);
+    pub static BACKSPACE:RefCell<(u32, u32)> = RefCell::new((0, 0));
+    pub static RESET:RefCell<bool> = RefCell::new(false);
+    pub static QUIT:RefCell<bool> = RefCell::new(false);
 }
 
 pub fn print_char(c: char) {
@@ -139,6 +144,46 @@ pub fn play_sound() -> (usize, u8, u8) {
 
 pub fn set_play_sound(size: usize, volume: u8, repeats: u8) {
     PLAY_SOUND.with(|x| x.swap(&RefCell::new((size, volume, repeats))));
+}
+
+pub fn cursor() -> (u32, u32) {
+    CURSOR.with(|x| x.borrow().to_owned())
+}
+
+pub fn set_cursor(row: u32, column: u32) {
+    CURSOR.with(|x| x.swap(&RefCell::new((row, column))));
+}
+
+pub fn scroll() -> u32 {
+    SCROLL.with(|x| x.borrow().to_owned())
+}
+
+pub fn set_scroll(row: u32) {
+    SCROLL.with(|x| x.swap(&RefCell::new(row)))
+}
+
+pub fn backspace() -> (u32, u32) {
+    BACKSPACE.with(|x| x.borrow().to_owned())
+}
+
+pub fn set_backspace(at: (u32, u32)) {
+    BACKSPACE.with(|x| x.swap(&RefCell::new(at)));
+}
+
+pub fn reset() -> bool {
+    RESET.with(|x| x.borrow().to_owned())
+}
+
+pub fn set_reset() {
+    RESET.with(|x| x.swap(&RefCell::new(true)));
+}
+
+pub fn quit() -> bool {
+    QUIT.with(|x| x.borrow().to_owned())
+}
+
+pub fn set_quit() {
+    QUIT.with(|x| x.swap(&RefCell::new(true)));
 }
 
 pub fn test_map(version: u8) -> Vec<u8> {
