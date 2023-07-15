@@ -121,15 +121,14 @@ pub fn property_length(
     } else {
         let size_byte = zmachine.read_byte(property_data_address - 1)?;
         match zmachine.version() {
-            1 | 2 | 3 => size(zmachine, property_data_address - 1),
-            4 | 5 | 6 | 7 | 8 => {
+            3 => size(zmachine, property_data_address - 1),
+            _ => {
                 if size_byte & 0x80 == 0x80 {
                     size(zmachine, property_data_address - 2)
                 } else {
                     size(zmachine, property_data_address - 1)
                 }
             }
-            _ => Ok(0),
         }
     }
 }
@@ -232,3 +231,6 @@ pub fn set_property(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {}

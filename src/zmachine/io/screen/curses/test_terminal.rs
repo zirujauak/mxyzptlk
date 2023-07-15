@@ -1,11 +1,10 @@
 use std::thread;
 use std::time::Duration;
 
-use crate::instruction::processor::tests::{
-    input_char, input_delay, input_timeout, print_char, set_beep, set_buffer_mode, set_colors,
-    set_erase_line, set_erase_window, set_output_stream, set_split, set_style, set_window,
+use crate::{
+    test_util::*,
+    zmachine::io::screen::{CellStyle, Color, InputEvent, Terminal},
 };
-use crate::zmachine::io::screen::{CellStyle, Color, InputEvent, Terminal};
 
 pub fn new_terminal() -> Box<dyn Terminal> {
     Box::new(TestTerminal {})
@@ -48,19 +47,29 @@ impl Terminal for TestTerminal {
         }
     }
 
-    fn scroll(&mut self, _row: u32) {}
+    fn scroll(&mut self, row: u32) {
+        set_scroll(row);
+    }
 
-    fn backspace(&mut self, _at: (u32, u32)) {}
+    fn backspace(&mut self, at: (u32, u32)) {
+        set_backspace(at);
+    }
 
     fn beep(&mut self) {
         set_beep();
     }
 
-    fn move_cursor(&mut self, _at: (u32, u32)) {}
+    fn move_cursor(&mut self, at: (u32, u32)) {
+        set_cursor(at.0, at.1)
+    }
 
-    fn reset(&mut self) {}
+    fn reset(&mut self) {
+        set_reset();
+    }
 
-    fn quit(&mut self) {}
+    fn quit(&mut self) {
+        set_quit();
+    }
 
     fn set_colors(&mut self, colors: (Color, Color)) {
         set_colors((colors.0 as u8, colors.1 as u8))

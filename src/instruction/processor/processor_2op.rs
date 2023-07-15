@@ -359,19 +359,11 @@ pub fn throw(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize
 mod tests {
     use crate::{
         instruction::{
-            processor::{
-                dispatch,
-                tests::{
-                    branch, colors, mock_attributes, mock_branch_instruction,
-                    mock_default_properties, mock_frame, mock_instruction, mock_object,
-                    mock_properties, mock_routine, mock_store_instruction, mock_zmachine, operand,
-                    set_variable, store, test_map,
-                },
-                Opcode,
-            },
+            processor::{dispatch, Opcode},
             OpcodeForm, OperandCount, OperandType,
         },
         object::{self, attribute},
+        test_util::*,
     };
 
     fn opcode_2op(version: u8, instruction: u8) -> Opcode {
@@ -807,6 +799,25 @@ mod tests {
             vec![
                 operand(OperandType::SmallConstant, 0x01),
                 operand(OperandType::SmallConstant, 40),
+            ],
+            opcode_2op(4, 10),
+            0x404,
+            branch(0x403, true, 0x40a),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+    }
+
+    #[test]
+    fn test_test_attr_v4_invalid() {
+        let mut map = test_map(4);
+        // Set attributes 0, 4, 9, 14, 19, 24, 29, 34, 39, 44
+        mock_attributes(&mut map, 1, &[0x88, 0x42, 0x10, 0x84, 0x21, 0x08]);
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_branch_instruction(
+            0x400,
+            vec![
+                operand(OperandType::SmallConstant, 0x01),
+                operand(OperandType::SmallConstant, 48),
             ],
             opcode_2op(4, 10),
             0x404,
@@ -1581,6 +1592,64 @@ mod tests {
     }
 
     #[test]
+    fn test_get_next_prop_v3_0() {
+        let mut map = test_map(3);
+        mock_default_properties(&mut map);
+        mock_object(&mut map, 1, vec![], (0, 0, 0));
+        mock_properties(
+            &mut map,
+            1,
+            &[
+                (20, &vec![0x12, 0x34]),
+                (15, &vec![0x56]),
+                (10, &vec![0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22]),
+            ],
+        );
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::SmallConstant, 0x01),
+                operand(OperandType::SmallConstant, 0),
+            ],
+            opcode_2op(3, 19),
+            0x404,
+            store(0x403, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x14));
+    }
+
+    #[test]
+    fn test_get_next_prop_v3_no_start_prop() {
+        let mut map = test_map(3);
+        mock_default_properties(&mut map);
+        mock_object(&mut map, 1, vec![], (0, 0, 0));
+        mock_properties(
+            &mut map,
+            1,
+            &[
+                (20, &vec![0x12, 0x34]),
+                (15, &vec![0x56]),
+                (10, &vec![0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22]),
+            ],
+        );
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::SmallConstant, 0x01),
+                operand(OperandType::SmallConstant, 12),
+            ],
+            opcode_2op(3, 19),
+            0x404,
+            store(0x403, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
     fn test_get_next_prop_v4() {
         let mut map = test_map(4);
         mock_default_properties(&mut map);
@@ -1636,6 +1705,35 @@ mod tests {
         );
         assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
         assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_get_next_prop_v4_0() {
+        let mut map = test_map(3);
+        mock_default_properties(&mut map);
+        mock_object(&mut map, 1, vec![], (0, 0, 0));
+        mock_properties(
+            &mut map,
+            1,
+            &[
+                (20, &vec![0x12, 0x34]),
+                (15, &vec![0x56]),
+                (10, &vec![0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22]),
+            ],
+        );
+        let mut zmachine = mock_zmachine(map);
+        let i = mock_store_instruction(
+            0x400,
+            vec![
+                operand(OperandType::SmallConstant, 0x01),
+                operand(OperandType::SmallConstant, 0),
+            ],
+            opcode_2op(3, 19),
+            0x404,
+            store(0x403, 0x80),
+        );
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x14));
     }
 
     #[test]

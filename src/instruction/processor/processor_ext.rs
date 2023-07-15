@@ -150,15 +150,9 @@ pub fn restore_undo(
 mod tests {
     use std::{fs, path::Path};
 
-    use crate::instruction::{
-        processor::{
-            dispatch,
-            tests::{
-                input, mock_frame, mock_store_instruction, mock_zmachine, operand, set_variable,
-                store, test_map,
-            },
-        },
-        Opcode, OpcodeForm, OperandCount, OperandType,
+    use crate::{
+        instruction::{processor::dispatch, Opcode, OpcodeForm, OperandCount, OperandType},
+        test_util::*,
     };
 
     fn opcode(instruction: u8) -> Opcode {

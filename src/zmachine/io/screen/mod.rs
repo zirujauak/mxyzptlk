@@ -4,15 +4,15 @@ use crate::config::Config;
 use crate::error::*;
 
 #[cfg(feature = "easycurses")]
-use curses::easy_curses::*;
+use curses::easy_curses::new_terminal;
 
 #[cfg(all(feature = "pancurses", not(feature = "easycurses"), not(test)))]
-use curses::pancurses::*;
+use curses::pancurses::new_terminal;
 
 #[cfg(test)]
 use curses::test_terminal::new_terminal;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Color {
     Black = 2,
     Red = 3,
@@ -32,7 +32,7 @@ pub enum Style {
     Fixed = 8,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct CellStyle {
     mask: u8,
 }
@@ -66,13 +66,13 @@ impl CellStyle {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Interrupt {
     ReadTimeout,
     Sound,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct InputEvent {
     zchar: Option<u16>,
     row: Option<u16>,
@@ -277,12 +277,23 @@ impl Screen {
     }
 
     pub fn move_cursor(&mut self, row: u32, column: u32) {
+        // Constrain the column between 1 and the width of the screen
+        let c = u32::max(1, u32::min(self.columns, column));
         if self.selected_window == 0 {
-            self.cursor_0 = (row, column);
+            // Constrain row between top of window 0 and the bottom of the screen
+            let r = u32::max(self.window_0_top, u32::min(self.rows, row));
+            self.cursor_0 = (r, c);
+            self.terminal.move_cursor((r, c));
         } else {
-            self.cursor_1 = Some((row, column));
+            // Constrain row between top of window 1 and bottom of window 1
+            // unwrap() should be safe here because if window 1 is selected, then top/bottom are Some
+            let r = u32::max(
+                self.window_1_top.unwrap(),
+                u32::min(self.window_1_bottom.unwrap(), row),
+            );
+            self.cursor_1 = Some((r, c));
+            self.terminal.move_cursor((r, c));
         }
-        self.terminal.move_cursor((row, column));
     }
 
     fn map_color(&self, color: u8, current: Color, default: Color) -> Result<Color, RuntimeError> {
@@ -361,7 +372,7 @@ impl Screen {
         match window {
             0 => {
                 for i in self.window_0_top..=self.rows {
-                    for j in 1..self.columns {
+                    for j in 1..=self.columns {
                         self.terminal.as_mut().print_at(
                             0x20,
                             i,
@@ -385,7 +396,7 @@ impl Screen {
                 if let Some(start) = self.window_1_top {
                     if let Some(end) = self.window_1_bottom {
                         for i in start..=end {
-                            for j in 1..self.columns {
+                            for j in 1..=self.columns {
                                 self.terminal.as_mut().print_at(
                                     0x20,
                                     i,
@@ -428,8 +439,8 @@ impl Screen {
                 Ok(())
             }
             -2 => {
-                for i in 1..self.rows {
-                    for j in 1..self.columns {
+                for i in 1..=self.rows {
+                    for j in 1..=self.columns {
                         self.terminal.as_mut().print_at(
                             0x20,
                             i,
@@ -509,6 +520,7 @@ impl Screen {
             self.cursor_0 = (self.rows, 1);
         }
     }
+
     fn advance_cursor(&mut self) {
         if self.selected_window == 0 {
             if self.cursor_0.1 == self.columns {
@@ -546,27 +558,20 @@ impl Screen {
         if zchar == 0xd {
             self.new_line();
         } else if zchar != 0 {
-            if self.selected_window == 0 {
-                self.terminal.print_at(
-                    zchar,
-                    self.cursor_0.0,
-                    self.cursor_0.1,
-                    self.current_colors,
-                    &self.current_style,
-                    self.font,
-                );
+            let (r, c) = if self.selected_window == 0 {
+                self.cursor_0
             } else {
-                // unwrap() should be safe here because when selected_window
-                // is 1, cursor_1 is Some
-                self.terminal.print_at(
-                    zchar,
-                    self.cursor_1.unwrap().0,
-                    self.cursor_1.unwrap().1,
-                    self.current_colors,
-                    &self.current_style,
-                    self.font,
-                );
-            }
+                self.cursor_1.unwrap()
+            };
+
+            self.terminal.print_at(
+                zchar,
+                r,
+                c,
+                self.current_colors,
+                &self.current_style,
+                self.font,
+            );
             self.advance_cursor();
         }
     }
@@ -575,8 +580,8 @@ impl Screen {
         for (i, c) in text.iter().enumerate() {
             self.terminal.print_at(
                 *c,
-                at.0,
-                at.1 + i as u32,
+                u32::min(self.rows, at.0),
+                u32::min(self.columns, at.1 + i as u32),
                 self.current_colors,
                 style,
                 self.font,
@@ -616,9 +621,15 @@ impl Screen {
     }
 
     pub fn backspace(&mut self) -> Result<(), RuntimeError> {
-        self.terminal
-            .backspace((self.cursor_0.0, self.cursor_0.1 - 1));
-        self.cursor_0 = (self.cursor_0.0, self.cursor_0.1 - 1);
+        if self.selected_window == 0 && self.cursor_0.1 > 1 {
+            self.terminal
+                .backspace((self.cursor_0.0, self.cursor_0.1 - 1));
+            self.cursor_0 = (self.cursor_0.0, self.cursor_0.1 - 1);
+        } else if self.selected_window == 1 && self.cursor_1.unwrap().1 > 1 {
+            self.terminal
+                .backspace((self.cursor_1.unwrap().0, self.cursor_1.unwrap().1 - 1));
+            self.cursor_1 = Some((self.cursor_1.unwrap().0, self.cursor_1.unwrap().1 - 1));
+        }
         Ok(())
     }
 
@@ -699,4 +710,1243 @@ pub trait Terminal {
     fn set_style(&mut self, _style: u8) {}
     fn buffer_mode(&mut self, _mode: u16) {}
     fn output_stream(&mut self, _stream: u8, _table: Option<usize>) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test_util::{
+        self, assert_print, backspace, beep, buffer_mode, colors, cursor, input, output_stream,
+        quit, reset, scroll, split, style, COLORS,
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_cellstyle_new() {
+        let cs = CellStyle::new();
+        assert_eq!(cs.mask, 0);
+        assert!(!cs.is_style(Style::Bold));
+        assert!(!cs.is_style(Style::Italic));
+        assert!(!cs.is_style(Style::Reverse));
+        assert!(!cs.is_style(Style::Fixed));
+    }
+
+    #[test]
+    fn test_cellstyle_set() {
+        let mut cs = CellStyle::new();
+        cs.set(Style::Italic as u8);
+        assert!(cs.is_style(Style::Italic));
+        cs.set(Style::Bold as u8);
+        assert!(cs.is_style(Style::Italic));
+        assert!(cs.is_style(Style::Bold));
+        cs.set(Style::Roman as u8);
+        assert!(!cs.is_style(Style::Bold));
+        assert!(!cs.is_style(Style::Italic));
+        assert!(!cs.is_style(Style::Reverse));
+        assert!(!cs.is_style(Style::Fixed));
+    }
+
+    #[test]
+    fn test_cellstyle_clear() {
+        let mut cs = CellStyle::new();
+        cs.set(Style::Italic as u8);
+        cs.set(Style::Bold as u8);
+        assert!(cs.is_style(Style::Italic));
+        assert!(cs.is_style(Style::Bold));
+        cs.clear(Style::Bold as u8);
+        assert!(cs.is_style(Style::Italic));
+        assert!(!cs.is_style(Style::Bold));
+    }
+
+    #[test]
+    fn test_inputevent_no_input() {
+        let ie = InputEvent::no_input();
+        assert!(ie.zchar().is_none());
+        assert!(ie.row().is_none());
+        assert!(ie.column().is_none());
+        assert!(ie.interrupt().is_none());
+    }
+
+    #[test]
+    fn test_inputevent_from_char() {
+        let ie = InputEvent::from_char(0xFFFF);
+        assert!(ie.zchar().is_some_and(|x| x == 0xFFFF));
+        assert!(ie.row().is_none());
+        assert!(ie.column().is_none());
+        assert!(ie.interrupt().is_none());
+    }
+
+    #[test]
+    fn test_inputevent_from_mouse() {
+        let ie = InputEvent::from_mouse(0xFFFF, 1, 2);
+        assert!(ie.zchar().is_some_and(|x| x == 0xFFFF));
+        assert!(ie.row().is_some_and(|x| x == 1));
+        assert!(ie.column().is_some_and(|x| x == 2));
+        assert!(ie.interrupt().is_none());
+    }
+
+    #[test]
+    fn test_inputevent_from_interrupt() {
+        let ie = InputEvent::from_interrupt(Interrupt::ReadTimeout);
+        assert!(ie.zchar().is_none());
+        assert!(ie.row().is_none());
+        assert!(ie.column().is_none());
+        assert!(ie.interrupt().is_some_and(|x| x == &Interrupt::ReadTimeout));
+    }
+
+    #[test]
+    fn test_map_color() {
+        assert!(map_color(2).is_ok_and(|x| x == Color::Black));
+        assert!(map_color(3).is_ok_and(|x| x == Color::Red));
+        assert!(map_color(4).is_ok_and(|x| x == Color::Green));
+        assert!(map_color(5).is_ok_and(|x| x == Color::Yellow));
+        assert!(map_color(6).is_ok_and(|x| x == Color::Blue));
+        assert!(map_color(7).is_ok_and(|x| x == Color::Magenta));
+        assert!(map_color(8).is_ok_and(|x| x == Color::Cyan));
+        assert!(map_color(9).is_ok_and(|x| x == Color::White));
+        assert!(map_color(0).is_err());
+    }
+
+    #[test]
+    fn test_screen_new_v3() {
+        let c = Config::default();
+        let s = Screen::new_v3(c);
+        assert!(s.is_ok());
+        let screen = s.unwrap();
+        assert_eq!(screen.version, 3);
+        assert_eq!(screen.rows(), 24);
+        assert_eq!(screen.columns(), 80);
+        assert_eq!(screen.top, 2);
+        assert_eq!(screen.window_0_top, 2);
+        assert!(screen.window_1_top.is_none());
+        assert!(screen.window_1_bottom.is_none());
+        assert_eq!(screen.selected_window(), 0);
+        assert_eq!(screen.default_colors(), (Color::White, Color::Black));
+        assert_eq!(screen.current_colors, (Color::White, Color::Black));
+        assert_eq!(screen.current_style, CellStyle::new());
+        assert_eq!(screen.font, 1);
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.cursor_1.is_none());
+        assert_eq!(screen.lines_since_input, 0);
+    }
+
+    #[test]
+    fn test_screen_new_v4() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let screen = s.unwrap();
+        assert_eq!(screen.version, 4);
+        assert_eq!(screen.rows(), 24);
+        assert_eq!(screen.columns(), 80);
+        assert_eq!(screen.top, 1);
+        assert_eq!(screen.window_0_top, 1);
+        assert!(screen.window_1_top.is_none());
+        assert!(screen.window_1_bottom.is_none());
+        assert_eq!(screen.selected_window(), 0);
+        assert_eq!(screen.default_colors(), (Color::White, Color::Black));
+        assert_eq!(screen.current_colors, (Color::White, Color::Black));
+        assert_eq!(screen.current_style, CellStyle::new());
+        assert_eq!(screen.font, 1);
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.cursor_1.is_none());
+        assert_eq!(screen.lines_since_input, 0);
+    }
+
+    #[test]
+    fn test_screen_new_v5() {
+        let c = Config::default();
+        let s = Screen::new_v5(c);
+        assert!(s.is_ok());
+        let screen = s.unwrap();
+        assert_eq!(screen.version, 5);
+        assert_eq!(screen.rows(), 24);
+        assert_eq!(screen.columns(), 80);
+        assert_eq!(screen.top, 1);
+        assert_eq!(screen.window_0_top, 1);
+        assert!(screen.window_1_top.is_none());
+        assert!(screen.window_1_bottom.is_none());
+        assert_eq!(screen.selected_window(), 0);
+        assert_eq!(screen.default_colors(), (Color::White, Color::Black));
+        assert_eq!(screen.current_colors, (Color::White, Color::Black));
+        assert_eq!(screen.current_style, CellStyle::new());
+        assert_eq!(screen.font, 1);
+        assert_eq!(screen.cursor_0, (1, 1));
+        assert!(screen.cursor_1.is_none());
+        assert_eq!(screen.lines_since_input, 0);
+    }
+
+    #[test]
+    fn test_screen_cursor_0() {
+        let c = Config::default();
+        let s = Screen::new_v5(c);
+        assert!(s.is_ok());
+        let screen = s.unwrap();
+        assert_eq!(screen.cursor(), (1, 1));
+    }
+
+    #[test]
+    fn test_screen_cursor_1() {
+        let c = Config::default();
+        let s = Screen::new_v5(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(12);
+        assert_eq!(screen.cursor(), (13, 1));
+        assert!(screen.select_window(1).is_ok());
+        assert_eq!(screen.cursor(), (1, 1));
+    }
+
+    #[test]
+    fn test_screen_move_cursor_no_split() {
+        let c = Config::default();
+        let s = Screen::new_v5(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        assert_eq!(screen.cursor(), (1, 1));
+        screen.move_cursor(12, 40);
+        assert_eq!(screen.cursor(), (12, 40));
+        screen.move_cursor(0, 0);
+        assert_eq!(screen.cursor(), (1, 1));
+        screen.move_cursor(25, 81);
+        assert_eq!(screen.cursor(), (24, 80));
+    }
+
+    #[test]
+    fn test_screen_move_cursor_split() {
+        let c = Config::default();
+        let s = Screen::new_v5(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(12);
+        assert_eq!(screen.cursor(), (13, 1));
+        screen.move_cursor(18, 40);
+        assert_eq!(screen.cursor(), (18, 40));
+        screen.move_cursor(12, 0);
+        assert_eq!(screen.cursor(), (13, 1));
+        screen.move_cursor(25, 81);
+        assert_eq!(screen.cursor(), (24, 80));
+        assert!(screen.select_window(1).is_ok());
+        assert_eq!(screen.cursor(), (1, 1));
+        screen.move_cursor(6, 40);
+        assert_eq!(screen.cursor(), (6, 40));
+        screen.move_cursor(0, 0);
+        assert_eq!(screen.cursor(), (1, 1));
+        screen.move_cursor(13, 81);
+        assert_eq!(screen.cursor(), (12, 80));
+    }
+
+    #[test]
+    fn test_screen_map_color() {
+        let c = Config::default();
+        let s = Screen::new_v5(c);
+        assert!(s.is_ok());
+        let screen = s.unwrap();
+        assert!(screen
+            .map_color(0, Color::Black, Color::White)
+            .is_ok_and(|x| x == Color::Black));
+        assert!(screen
+            .map_color(1, Color::Black, Color::White)
+            .is_ok_and(|x| x == Color::White));
+        assert!(screen
+            .map_color(2, Color::Red, Color::White)
+            .is_ok_and(|x| x == Color::Black));
+        assert!(screen
+            .map_color(3, Color::Black, Color::White)
+            .is_ok_and(|x| x == Color::Red));
+        assert!(screen
+            .map_color(4, Color::Black, Color::White)
+            .is_ok_and(|x| x == Color::Green));
+        assert!(screen
+            .map_color(5, Color::Black, Color::White)
+            .is_ok_and(|x| x == Color::Yellow));
+        assert!(screen
+            .map_color(6, Color::Black, Color::White)
+            .is_ok_and(|x| x == Color::Blue));
+        assert!(screen
+            .map_color(7, Color::Black, Color::White)
+            .is_ok_and(|x| x == Color::Magenta));
+        assert!(screen
+            .map_color(8, Color::Black, Color::White)
+            .is_ok_and(|x| x == Color::Cyan));
+        assert!(screen
+            .map_color(9, Color::Black, Color::Red)
+            .is_ok_and(|x| x == Color::White));
+        assert!(screen.map_color(10, Color::Black, Color::White).is_err());
+    }
+
+    #[test]
+    fn test_screen_map_colors() {
+        let c = Config::default();
+        let s = Screen::new_v5(c);
+        assert!(s.is_ok());
+        let screen = s.unwrap();
+        assert!(screen
+            .map_colors(8, 5)
+            .is_ok_and(|x| x == (Color::Cyan, Color::Yellow)));
+        assert!(screen
+            .map_colors(1, 1)
+            .is_ok_and(|x| x == (Color::White, Color::Black)));
+        assert!(screen
+            .map_colors(0, 0)
+            .is_ok_and(|x| x == (Color::White, Color::Black)));
+        assert!(screen.map_colors(0, 10).is_err());
+        assert!(screen.map_colors(10, 0).is_err());
+    }
+
+    #[test]
+    fn test_screen_set_colors() {
+        let c = Config::default();
+        let s = Screen::new_v5(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        assert!(screen.set_colors(4, 6).is_ok());
+        assert_eq!(screen.current_colors, (Color::Green, Color::Blue));
+        assert_eq!(screen.default_colors(), (Color::White, Color::Black));
+        assert_eq!(colors(), (4, 6));
+        assert!(screen.set_colors(1, 1).is_ok());
+        assert_eq!(screen.current_colors, (Color::White, Color::Black));
+        assert_eq!(colors(), (9, 2));
+    }
+
+    #[test]
+    fn test_screen_split_window_v3() {
+        let c = Config::default();
+        let s = Screen::new_v3(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.cursor_1.is_none());
+        screen.split_window(12);
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert!(screen.window_1_top.is_some_and(|x| x == 2));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 13));
+        assert_eq!(screen.window_0_top, 14);
+        assert_eq!(split(), 12);
+    }
+
+    #[test]
+    fn test_screen_split_window_v4() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.cursor_1.is_none());
+        screen.split_window(12);
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 12));
+        assert_eq!(screen.window_0_top, 13);
+        assert_eq!(split(), 12);
+    }
+
+    #[test]
+    fn test_screen_split_window_v5() {
+        let c = Config::default();
+        let s = Screen::new_v5(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        assert_eq!(screen.cursor_0, (1, 1));
+        assert!(screen.cursor_1.is_none());
+        screen.split_window(12);
+        assert_eq!(screen.cursor_0, (13, 1));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 12));
+        assert_eq!(screen.window_0_top, 13);
+        assert_eq!(split(), 12);
+    }
+
+    #[test]
+    fn test_screen_unsplit_window_v3() {
+        let c = Config::default();
+        let s = Screen::new_v3(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(12);
+        screen.unsplit_window();
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.cursor_1.is_none());
+        assert!(screen.window_1_top.is_none());
+        assert!(screen.window_1_bottom.is_none());
+        assert_eq!(screen.window_0_top, 2);
+        assert_eq!(split(), 0);
+    }
+
+    #[test]
+    fn test_screen_unsplit_window_v4() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(12);
+        screen.unsplit_window();
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.cursor_1.is_none());
+        assert!(screen.window_1_top.is_none());
+        assert!(screen.window_1_bottom.is_none());
+        assert_eq!(screen.window_0_top, 1);
+        assert_eq!(split(), 0);
+    }
+
+    #[test]
+    fn test_screen_select_window_v3() {
+        let c = Config::default();
+        let s = Screen::new_v3(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(12);
+        assert_eq!(screen.selected_window(), 0);
+        screen.cursor_1 = Some((12, 1));
+        assert!(screen.select_window(1).is_ok());
+        assert_eq!(screen.selected_window(), 1);
+        assert!(screen.cursor_1.is_some_and(|x| x == (2, 1)));
+    }
+
+    #[test]
+    fn test_screen_select_window_v4() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(12);
+        assert_eq!(screen.selected_window(), 0);
+        screen.cursor_1 = Some((12, 1));
+        assert!(screen.select_window(1).is_ok());
+        assert_eq!(screen.selected_window(), 1);
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+    }
+
+    #[test]
+    fn test_screen_select_window_1_not_split() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        assert!(screen.select_window(1).is_err());
+    }
+
+    #[test]
+    fn test_screen_erase_window_0_v4() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(12);
+        assert!(screen.erase_window(0).is_ok());
+        assert_print(&vec![' '; 960].iter().collect::<String>());
+        assert_eq!(screen.cursor_0, (24, 1));
+    }
+
+    #[test]
+    fn test_screen_erase_window_0_v5() {
+        let c = Config::default();
+        let s = Screen::new_v5(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(12);
+        assert!(screen.erase_window(0).is_ok());
+        assert_print(&vec![' '; 960].iter().collect::<String>());
+        assert_eq!(screen.cursor_0, (13, 1));
+    }
+
+    #[test]
+    fn test_screen_erase_window_1() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        assert!(screen.erase_window(1).is_ok());
+        assert_print(&vec![' '; 800].iter().collect::<String>());
+        assert_eq!(screen.cursor_1.unwrap(), (1, 1));
+    }
+
+    #[test]
+    fn test_screen_erase_window_minus_1_v4() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        assert!(screen.erase_window(-1).is_ok());
+        assert_print(&vec![' '; 1920].iter().collect::<String>());
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_none());
+        assert!(screen.window_1_bottom.is_none());
+        assert!(screen.cursor_1.is_none());
+        assert_eq!(screen.window_0_top, 1);
+    }
+
+    #[test]
+    fn test_screen_erase_window_minus_1_v5() {
+        let c = Config::default();
+        let s = Screen::new_v5(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        assert!(screen.erase_window(-1).is_ok());
+        assert_print(&vec![' '; 1920].iter().collect::<String>());
+        assert_eq!(screen.cursor_0, (1, 1));
+        assert!(screen.window_1_top.is_none());
+        assert!(screen.window_1_bottom.is_none());
+        assert!(screen.cursor_1.is_none());
+        assert_eq!(screen.window_0_top, 1);
+    }
+
+    #[test]
+    fn test_screen_erase_window_minus_2_v4() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        assert!(screen.erase_window(-2).is_ok());
+        assert_print(&vec![' '; 1920].iter().collect::<String>());
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+    }
+
+    #[test]
+    fn test_screen_erase_window_minus_2_v5() {
+        let c = Config::default();
+        let s = Screen::new_v5(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        assert!(screen.erase_window(-2).is_ok());
+        assert_print(&vec![' '; 1920].iter().collect::<String>());
+        assert_eq!(screen.cursor_0, (11, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+    }
+
+    #[test]
+    fn test_screen_erase_window_invalid() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        assert!(screen.erase_window(-3).is_err());
+        assert_print("");
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+    }
+
+    #[test]
+    fn test_screen_erase_line_window_0() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(15, 5);
+        screen.erase_line();
+        assert_print(&vec![' '; 75].iter().collect::<String>());
+        assert_eq!(screen.cursor_0, (15, 5));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+    }
+
+    #[test]
+    fn test_screen_erase_line_window_1() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(15, 5);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(5, 15);
+        screen.erase_line();
+        assert_print(&vec![' '; 65].iter().collect::<String>());
+        assert_eq!(screen.cursor_0, (15, 5));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (5, 15)));
+        assert_eq!(screen.window_0_top, 11);
+    }
+
+    #[test]
+    fn test_screen_next_line() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(15, 5);
+        screen.next_line();
+        assert_eq!(screen.cursor_0, (16, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(scroll(), 0);
+        assert_eq!(screen.lines_since_input, 1);
+    }
+
+    #[test]
+    fn test_screen_next_line_scroll() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 5);
+        screen.next_line();
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(scroll(), 11);
+    }
+
+    #[test]
+    fn test_screen_next_line_scroll_prompt() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 5);
+        screen.lines_since_input = 13;
+        input(&[' ']);
+        screen.next_line();
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_print("[MORE]      ");
+        assert_eq!(screen.lines_since_input, 0);
+        assert_eq!(scroll(), 11);
+    }
+
+    #[test]
+    fn test_screen_advance_cursor_window_0() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 5);
+        screen.advance_cursor();
+        assert_eq!(screen.cursor_0, (24, 6));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+    }
+
+    #[test]
+    fn test_screen_advance_cursor_window_0_end_of_line() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(23, 80);
+        screen.advance_cursor();
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 1);
+    }
+
+    #[test]
+    fn test_screen_advance_cursor_window_0_end_of_line_scroll() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 80);
+        screen.advance_cursor();
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 1);
+    }
+
+    #[test]
+    fn test_screen_advance_cursor_window_1() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 80);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(10, 5);
+        screen.advance_cursor();
+        assert_eq!(screen.cursor_0, (24, 80));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (10, 6)));
+        assert_eq!(screen.window_0_top, 11);
+    }
+
+    #[test]
+    fn test_screen_advance_cursor_window_1_end_of_line() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 80);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(9, 80);
+        screen.advance_cursor();
+        assert_eq!(screen.cursor_0, (24, 80));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (10, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+    }
+
+    #[test]
+    fn test_screen_advance_cursor_window_1_end_of_window() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 80);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(10, 80);
+        screen.advance_cursor();
+        assert_eq!(screen.cursor_0, (24, 80));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (10, 80)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+    }
+
+    #[test]
+    fn test_screen_print_window_0() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 1);
+        screen.print(&vec!['a' as u16; 10]);
+        assert_eq!(screen.cursor_0, (24, 11));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+        assert_print("aaaaaaaaaa");
+    }
+
+    #[test]
+    fn test_screen_print_window_0_wrap() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(23, 76);
+        screen.print(&vec!['a' as u16; 10]);
+        assert_eq!(screen.cursor_0, (24, 6));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 1);
+        assert_print("aaaaaaaaaa");
+    }
+
+    #[test]
+    fn test_screen_print_window_0_wrap_scroll() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 76);
+        screen.print(&vec!['a' as u16; 10]);
+        assert_eq!(screen.cursor_0, (24, 6));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 1);
+        assert_print("aaaaaaaaaa");
+    }
+
+    #[test]
+    fn test_screen_print_window_1() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 1);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(10, 5);
+        screen.print(&vec!['a' as u16; 10]);
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (10, 15)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+        assert_print("aaaaaaaaaa");
+    }
+
+    #[test]
+    fn test_screen_print_window_1_wrap() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 1);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(9, 76);
+        screen.print(&vec!['a' as u16; 10]);
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (10, 6)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+        assert_print("aaaaaaaaaa");
+    }
+
+    #[test]
+    fn test_screen_print_window_1_end_of_screen() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 1);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(10, 76);
+        screen.print(&vec!['a' as u16; 10]);
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (10, 80)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+        assert_print("aaaaaaaaaa");
+    }
+
+    #[test]
+    fn test_screen_print_char_window_0() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 1);
+        screen.print_char('b' as u16);
+        assert_eq!(screen.cursor_0, (24, 2));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+        assert_print("b");
+    }
+
+    #[test]
+    fn test_screen_print_char_window_0_wrap() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(23, 80);
+        screen.print_char('b' as u16);
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 1);
+        assert_print("b");
+    }
+
+    #[test]
+    fn test_screen_print_char_window_0_wrap_scroll() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 80);
+        screen.print_char('b' as u16);
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 1);
+        assert_print("b");
+    }
+
+    #[test]
+    fn test_screen_print_char_window_1() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(23, 80);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(10, 5);
+        screen.print_char('b' as u16);
+        assert_eq!(screen.cursor_0, (23, 80));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (10, 6)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+        assert_print("b");
+    }
+
+    #[test]
+    fn test_screen_print_char_window_1_wrap() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(23, 80);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(9, 80);
+        screen.print_char('b' as u16);
+        assert_eq!(screen.cursor_0, (23, 80));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (10, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+        assert_print("b");
+    }
+
+    #[test]
+    fn test_screen_print_char_window_1_end_of_window() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(23, 80);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(10, 80);
+        screen.print_char('b' as u16);
+        assert_eq!(screen.cursor_0, (23, 80));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (10, 80)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+        assert_print("b");
+    }
+
+    #[test]
+    fn test_screen_print_at() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(23, 80);
+        screen.print_at(&['c' as u16; 15], (12, 20), &CellStyle::new());
+        assert_eq!(screen.cursor_0, (23, 80));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+        assert_print("ccccccccccccccc");
+    }
+
+    #[test]
+    fn test_screen_new_line_window_0() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(23, 80);
+        screen.new_line();
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 1);
+        assert_print("");
+    }
+
+    #[test]
+    fn test_screen_new_line_window_0_scroll() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(24, 80);
+        screen.new_line();
+        assert_eq!(screen.cursor_0, (24, 1));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (1, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 1);
+        assert_print("");
+    }
+
+    #[test]
+    fn test_screen_new_line_window_1() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(23, 80);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(8, 7);
+        screen.new_line();
+        assert_eq!(screen.cursor_0, (23, 80));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (9, 1)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+        assert_print("");
+    }
+
+    #[test]
+    fn test_screen_new_line_window_1_bottom() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        screen.move_cursor(23, 80);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(10, 7);
+        screen.new_line();
+        assert_eq!(screen.cursor_0, (23, 80));
+        assert!(screen.window_1_top.is_some_and(|x| x == 1));
+        assert!(screen.window_1_bottom.is_some_and(|x| x == 10));
+        assert!(screen.cursor_1.is_some_and(|x| x == (10, 7)));
+        assert_eq!(screen.window_0_top, 11);
+        assert_eq!(screen.lines_since_input, 0);
+        assert_print("");
+    }
+
+    #[test]
+    fn test_screen_read_key_window_0() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        input(&[' ']);
+        assert_eq!(screen.read_key(true), InputEvent::from_char(' ' as u16));
+    }
+
+    #[test]
+    fn test_screen_read_key_window_1() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.split_window(10);
+        assert!(screen.select_window(1).is_ok());
+        input(&[' ']);
+        assert_eq!(screen.read_key(true), InputEvent::from_char(' ' as u16));
+    }
+
+    #[test]
+    fn test_screen_backspace_window_0() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.move_cursor(10, 10);
+        assert!(screen.backspace().is_ok());
+        assert_eq!(screen.cursor_0, (10, 9));
+        assert_eq!(backspace(), (10, 9));
+    }
+
+    #[test]
+    fn test_screen_backspace_window_0_left_edge() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.move_cursor(10, 1);
+        assert!(screen.backspace().is_ok());
+        assert_eq!(screen.cursor_0, (10, 1));
+        assert_eq!(backspace(), (0, 0));
+    }
+
+    #[test]
+    fn test_screen_backspace_window_1() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.move_cursor(18, 10);
+        screen.split_window(12);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(5, 10);
+        assert!(screen.backspace().is_ok());
+        assert_eq!(screen.cursor_0, (18, 10));
+        assert_eq!(screen.cursor_1.unwrap(), (5, 9));
+        assert_eq!(backspace(), (5, 9));
+    }
+
+    #[test]
+    fn test_screen_backspace_window_1_left_edge() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.move_cursor(18, 10);
+        screen.split_window(12);
+        assert!(screen.select_window(1).is_ok());
+        screen.move_cursor(5, 1);
+        assert!(screen.backspace().is_ok());
+        assert_eq!(screen.cursor_0, (18, 10));
+        assert_eq!(screen.cursor_1.unwrap(), (5, 1));
+        assert_eq!(backspace(), (0, 0));
+    }
+
+    #[test]
+    fn test_screen_set_style() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        assert!(screen.set_style(Style::Italic as u8).is_ok());
+        assert_eq!(style(), Style::Italic as u8);
+        assert!(screen.set_style(Style::Bold as u8).is_ok());
+        assert_eq!(style(), Style::Italic as u8 + Style::Bold as u8);
+    }
+
+    #[test]
+    fn test_screen_buffer_mode() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.buffer_mode(1);
+        assert_eq!(buffer_mode(), 1);
+    }
+
+    #[test]
+    fn test_screen_beep() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        assert!(!beep());
+        screen.beep();
+        assert!(beep());
+    }
+
+    #[test]
+    fn test_screen_reset_cursor_window_0() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.cursor_0 = (23, 80);
+        screen.reset_cursor();
+        assert_eq!(cursor(), (23, 80));
+    }
+
+    #[test]
+    fn test_screen_reset_cursor_window_1() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.cursor_0 = (23, 80);
+        screen.split_window(12);
+        assert!(screen.select_window(1).is_ok());
+        screen.cursor_1 = Some((10, 10));
+        screen.reset_cursor();
+        assert_eq!(cursor(), (10, 10));
+    }
+
+    #[test]
+    fn test_screen_set_font() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        assert_eq!(screen.font, 1);
+        assert_eq!(screen.set_font(3), 1);
+        assert_eq!(screen.font, 3);
+        assert_eq!(screen.set_font(0), 3);
+        assert_eq!(screen.font, 3);
+        assert_eq!(screen.set_font(4), 3);
+        assert_eq!(screen.font, 4);
+        assert_eq!(screen.set_font(1), 4);
+        assert_eq!(screen.font, 1);
+        assert_eq!(screen.set_font(2), 0);
+        assert_eq!(screen.font, 1);
+    }
+
+    #[test]
+    fn test_screen_ouptut_stream() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.output_stream(5, Some(0x1234));
+        assert_eq!(output_stream(), (5, Some(0x1234)));
+    }
+
+    #[test]
+    fn test_screen_reset() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.reset();
+        assert!(reset());
+    }
+
+    #[test]
+    fn test_screen_quit() {
+        let c = Config::default();
+        let s = Screen::new_v4(c);
+        assert!(s.is_ok());
+        let mut screen = s.unwrap();
+        screen.quit();
+        assert!(quit());
+    }
 }

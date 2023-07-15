@@ -175,9 +175,9 @@ pub fn piracy(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usiz
 mod tests {
     use std::{fs, path::Path};
 
-    use crate::instruction::{
-        processor::{dispatch, tests::*},
-        Opcode, OpcodeForm, OperandCount,
+    use crate::{
+        instruction::{processor::dispatch, Opcode, OpcodeForm, OperandCount},
+        test_util::*,
     };
 
     fn opcode(version: u8, instruction: u8) -> Opcode {
@@ -542,11 +542,11 @@ mod tests {
     fn test_new_line() {
         let map = test_map(3);
         let mut zmachine = mock_zmachine(map);
-        assert!(zmachine.set_cursor(1, 1).is_ok());
+        assert!(zmachine.set_cursor(2, 1).is_ok());
         let i = mock_instruction(0x400, vec![], opcode(3, 11), 0x401);
         assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x401));
         let cursor = zmachine.cursor().unwrap();
-        assert_eq!(cursor, (2, 1));
+        assert_eq!(cursor, (3, 1));
     }
 
     #[test]

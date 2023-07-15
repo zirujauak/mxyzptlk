@@ -59,7 +59,7 @@ pub fn sibling(zmachine: &ZMachine, object: usize) -> Result<usize, RuntimeError
     relative(zmachine, object, offset)
 }
 
-pub fn set_relative(
+fn set_relative(
     zmachine: &mut ZMachine,
     offset: usize,
     object: usize,
