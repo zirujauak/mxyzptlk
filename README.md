@@ -56,7 +56,7 @@ For the `-libsndfile` binaries, `libsndfile` must be available, obviously.
 * **Windows**: 
     [`sndfile.dll`](https://github.com/libsndfile/libsndfile/releases) needs to be in the `PATH` environment variable.  If you keep the DLL in the same directory where you run `mxzyptlk.exe`, then it should get loaded.  If you install the binary somewhere and add it to the `PATH`, then copying the DLL to the same location should work fine.  If the DLL can't be located, execution will terminate immediately with an error.
 
-    It's worth pointing out that sound-enabled games will run with a non-libsndfile binary, you just may not hear any sounds play.  Sounds are a gimmick, really, and you don't miss much without them.  It was fun to code.
+    It's worth pointing out that sound-enabled games will run with a non-libsndfile binary, you just may not hear any sounds play.  Sounds are a gimmick, really, and you don't miss much without them.  It was fun to code, however.
 
 ### Games
 
