@@ -715,8 +715,8 @@ pub trait Terminal {
 #[cfg(test)]
 mod tests {
     use crate::test_util::{
-        self, assert_print, backspace, beep, buffer_mode, colors, cursor, input, output_stream,
-        quit, reset, scroll, split, style, COLORS,
+        assert_print, backspace, beep, buffer_mode, colors, cursor, input, output_stream, quit,
+        reset, scroll, split, style,
     };
 
     use super::*;

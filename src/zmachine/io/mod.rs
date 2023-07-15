@@ -198,8 +198,8 @@ impl IO {
                 for c in text {
                     match *c {
                         0 => {}
-                        0xa => s.buffer.push(0xd),
-                        _ => s.buffer.push(*c),
+                        0xa => s.push(0xd),
+                        _ => s.push(*c),
                     }
                 }
             } else {

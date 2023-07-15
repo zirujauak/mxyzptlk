@@ -1639,15 +1639,22 @@ mod tests {
         assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
         let i = mock_store_instruction(
             0x400,
-            vec![operand(OperandType::LargeConstant, 8)],
+            vec![operand(OperandType::LargeConstant, 7)],
             opcode(3, 7),
             0x404,
             store(0x403, 0x080),
         );
-        for r in 1..9 {
+        // 1, 2, 3, 4, 5, 6, 7, 8, 1
+        // But the range is 7, so that becomes
+        // 1, 2, 3, 4, 5, 6, 7, 8 % 7, 1
+        for r in 1..8 {
             assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
             assert!(zmachine.variable(0x80).is_ok_and(|x| x == r % 8));
         }
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 8 % 7));
+        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 1));
     }
 
     #[test]

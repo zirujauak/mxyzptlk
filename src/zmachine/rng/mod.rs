@@ -1,5 +1,6 @@
 pub mod chacha_rng;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Mode {
     Random,
     Predictable,
