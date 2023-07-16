@@ -249,25 +249,6 @@ impl Frame {
             return_address,
         ))
     }
-
-    pub fn call_input_interrupt(
-        address: usize,
-        initial_pc: usize,
-        local_variables: Vec<u16>,
-        return_address: usize,
-    ) -> Result<Frame, RuntimeError> {
-        let mut f = Frame::new(
-            address,
-            initial_pc,
-            &local_variables,
-            0,
-            &Vec::new(),
-            None,
-            return_address,
-        );
-        f.input_interrupt = true;
-        Ok(f)
-    }
 }
 
 #[cfg(test)]
@@ -601,22 +582,6 @@ mod tests {
         assert_eq!(frame.return_address(), 0x4321);
         assert!(frame.stack().is_empty());
         assert!(!frame.input_interrupt());
-        assert!(!frame.sound_interrupt());
-    }
-
-    #[test]
-    fn test_call_input_interrupt() {
-        let f = Frame::call_input_interrupt(0x1234, 0x1235, vec![0x1122, 0x3344], 0x4321);
-        assert!(f.is_ok());
-        let frame = f.unwrap();
-        assert_eq!(frame.address(), 0x1234);
-        assert_eq!(frame.pc(), 0x1235);
-        assert_eq!(frame.local_variables(), &[0x1122, 0x3344]);
-        assert_eq!(frame.argument_count(), 0);
-        assert!(frame.stack().is_empty());
-        assert!(frame.result().is_none());
-        assert_eq!(frame.return_address(), 0x4321);
-        assert!(frame.input_interrupt());
         assert!(!frame.sound_interrupt());
     }
 }

@@ -415,6 +415,8 @@ mod tests {
         for i in 0x40..0x800 {
             assert!(m.read_byte(i).is_ok_and(|x| x == i as u8));
         }
+
+        assert!(m.read_byte(0x800).is_err());
     }
 
     #[test]
@@ -432,6 +434,8 @@ mod tests {
             let w = word_value(i as u8, u8::overflowing_add(i as u8, 1).0);
             assert!(m.read_word(i).is_ok_and(|x| x == w));
         }
+
+        assert!(m.read_word(0x7FF).is_err());
     }
 
     #[test]
@@ -453,6 +457,8 @@ mod tests {
             assert!(m.read_byte(i).is_ok_and(|x| x == i as u8 + 1));
         }
         assert!(m.read_byte(0x81).is_ok_and(|x| x == 0x81));
+
+        assert!(m.write_byte(0x800, 0).is_err());
     }
 
     #[test]
@@ -474,6 +480,8 @@ mod tests {
             assert!(m.read_word(i * 2).is_ok_and(|x| x == i as u16 * 0x10));
         }
         assert!(m.read_word(0x81).is_ok_and(|x| x == 0x8182));
+
+        assert!(m.write_word(0x7FF, 0).is_err());
     }
 
     #[test]
