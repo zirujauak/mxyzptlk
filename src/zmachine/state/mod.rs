@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::VecDeque, fmt};
 
 use crate::{
     error::{ErrorCode, RuntimeError},
@@ -27,7 +27,7 @@ pub struct State {
     memory: Memory,
     static_mark: usize,
     frames: Vec<Frame>,
-    undo_stack: Vec<Quetzal>,
+    undo_stack: VecDeque<Quetzal>,
     // read_interrupt_pending is set when the READ starts, read_interrupt_result is set when the interrupt routine returns
     read_interrupt_pending: bool,
     read_interrupt_result: Option<u16>,
@@ -145,7 +145,7 @@ impl State {
             memory,
             static_mark,
             frames: Vec::new(),
-            undo_stack: Vec::new(),
+            undo_stack: VecDeque::new(),
             read_interrupt_pending: false,
             read_interrupt_result: None,
             sound_interrupt: None,
@@ -247,6 +247,8 @@ impl State {
         self.write_byte(0x32, 1)?;
         self.write_byte(0x33, 0)?;
 
+        // Initializing after a restore will already have stack frames,
+        // so check before pushing a dummy frame
         if self.frames.is_empty() {
             let pc = header::field_word(self, HeaderField::InitialPC)? as usize;
             let f = Frame::new(pc, pc, &[], 0, &[], None, 0);
@@ -581,9 +583,6 @@ impl State {
     }
 
     fn restore_state(&mut self, quetzal: Quetzal) -> Result<Option<usize>, RuntimeError> {
-        // Reset the frame stack
-        self.frames = Vec::from(quetzal.stks());
-
         // Capture flags 2, default colors, rows, and columns from header
         let flags2 = header::field_word(self, HeaderField::Flags2)?;
         let fg = header::field_byte(self, HeaderField::DefaultForeground)?;
@@ -603,6 +602,10 @@ impl State {
                 "No CMem/UMem chunk in save file".to_string(),
             ));
         }
+
+        // Reset the frame stack after memory, so missing CMem + UMem case
+        // can return error without leaving the stack frame empty
+        self.frames = Vec::from(quetzal.stks());
 
         // Re-initialize the state, which will set the default colors, rows, and columns
         // Ignore sound (for now), since it's in Flags2
@@ -634,13 +637,16 @@ impl State {
     pub fn save_undo(&mut self, pc: usize) -> Result<(), RuntimeError> {
         let quetzal = Quetzal::try_from((&*self, pc))?;
         debug!(target: "app::quetzal", "Storing undo state");
-        self.undo_stack.push(quetzal);
-        self.undo_stack.truncate(10);
+        self.undo_stack.push_back(quetzal);
+        while self.undo_stack.len() > 10 {
+            // Remove the first (oldest) entries
+            self.undo_stack.pop_front();
+        }
         Ok(())
     }
 
     pub fn restore_undo(&mut self) -> Result<Option<usize>, RuntimeError> {
-        if let Some(quetzal) = self.undo_stack.pop() {
+        if let Some(quetzal) = self.undo_stack.pop_back() {
             debug!(target: "app::quetzal", "Restoring undo state");
             self.restore_state(quetzal)
         } else {
@@ -2259,6 +2265,25 @@ mod tests {
     }
 
     #[test]
+    fn test_return_routine_no_frame() {
+        let mut map = vec![0; 0x11000];
+        map[0] = 5;
+        map[0x0E] = 0x04;
+        map[0x0C] = 0x01;
+        map[0x10000] = 0xF;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let m = Memory::new(map);
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        assert_eq!(state.frame_count(), 0);
+        assert!(state.return_routine(0x9876).is_err());
+        assert_eq!(state.frame_count(), 0);
+    }
+
+    #[test]
     fn test_return_routine_input_interrupt() {
         let mut map = vec![0; 0x11000];
         map[0] = 5;
@@ -2402,5 +2427,679 @@ mod tests {
         ));
         assert!(state.argument_count().is_ok_and(|x| x == 1));
         assert_eq!(state.current_frame().unwrap().argument_count(), 1);
+    }
+
+    #[test]
+    fn test_save() {
+        let mut map = test_map(3);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x34;
+        map[0x12] = b'2';
+        map[0x13] = b'3';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x56;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        // See memory.rs tests ... change dynamic memory a little bit
+        // so the compressed memory isn't just runs of 0s
+        assert!(state.write_byte(0x200, 0xFC).is_ok());
+        assert!(state.write_byte(0x280, 0x10).is_ok());
+        assert!(state.write_byte(0x300, 0xFD).is_ok());
+
+        state.frames.push(Frame::new(
+            0x500,
+            0x501,
+            &[0x1122, 0x3344, 0x5566],
+            2,
+            &[0x1111, 0x2222],
+            Some(StoreResult::new(0x402, 0x80)),
+            0x48E,
+        ));
+        state.frames.push(Frame::new(
+            0x480,
+            0x48C,
+            &[0x8899, 0xaabb],
+            0,
+            &[],
+            None,
+            0x623,
+        ));
+
+        let state = s.unwrap();
+        let v = state.save(0x9abc);
+        assert!(v.is_ok_and(|x| x
+            == [
+                b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x56, b'I', b'F', b'Z', b'S', b'I', b'F',
+                b'h', b'd', 0x00, 0x00, 0x00, 0x0D, 0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x31, 0x35,
+                0x56, 0x78, 0x00, 0x9a, 0xbc, 0x00, b'C', b'M', b'e', b'm', 0x00, 0x00, 0x00, 0x0D,
+                0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE, 0x00,
+                b'S', b't', b'k', b's', 0x00, 0x00, 0x00, 0x1E, 0x00, 0x04, 0x8E, 0x03, 0x80, 0x03,
+                0x00, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x11, 0x11, 0x22, 0x22, 0x00, 0x06,
+                0x23, 0x12, 0x00, 0x00, 0x00, 0x00, 0x88, 0x99, 0xaa, 0xbb
+            ]));
+    }
+
+    #[test]
+    fn test_restore_state_cmem() {
+        let mut map = test_map(5);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x34;
+        map[0x12] = b'2';
+        map[0x13] = b'3';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x56;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        assert!(state.initialize(40, 132, (3, 6), true).is_ok());
+        // Turn on transcripting ... it should survive the restore
+        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+
+        assert_eq!(state.frame_count(), 1);
+
+        let quetzal = Quetzal::try_from(vec![
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x56, b'I', b'F', b'Z', b'S', b'I', b'F',
+            b'h', b'd', 0x00, 0x00, 0x00, 0x0D, 0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x31, 0x35,
+            0x56, 0x78, 0x00, 0x9a, 0xbc, 0x00, b'C', b'M', b'e', b'm', 0x00, 0x00, 0x00, 0x0D,
+            0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE, 0x00,
+            b'S', b't', b'k', b's', 0x00, 0x00, 0x00, 0x1E, 0x00, 0x04, 0x8E, 0x03, 0x80, 0x03,
+            0x00, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x11, 0x11, 0x22, 0x22, 0x00, 0x06,
+            0x23, 0x12, 0x00, 0x00, 0x00, 0x00, 0x88, 0x99, 0xaa, 0xbb,
+        ]);
+        assert!(quetzal.is_ok());
+        assert!(state
+            .restore_state(quetzal.unwrap())
+            .is_ok_and(|x| x.is_some_and(|y| y == 0x9abc)));
+        assert!(header::flag2(state, Flags2::Transcripting).is_ok_and(|x| x == 1));
+        assert!(header::field_byte(state, HeaderField::DefaultForeground).is_ok_and(|x| x == 3));
+        assert!(header::field_byte(state, HeaderField::DefaultBackground).is_ok_and(|x| x == 6));
+        assert!(header::field_byte(state, HeaderField::ScreenLines).is_ok_and(|x| x == 40));
+        assert!(header::field_byte(state, HeaderField::ScreenColumns).is_ok_and(|x| x == 132));
+        assert!(state.read_byte(0x200).is_ok_and(|x| x == 0xFC));
+        assert!(state.read_byte(0x280).is_ok_and(|x| x == 0x10));
+        assert!(state.read_byte(0x300).is_ok_and(|x| x == 0xFD));
+        assert_eq!(state.frame_count(), 2);
+    }
+
+    #[test]
+    fn test_restore_state_umem() {
+        let mut map = test_map(5);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x34;
+        map[0x12] = b'2';
+        map[0x13] = b'3';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x56;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        assert!(state.initialize(40, 132, (3, 6), true).is_ok());
+        // Turn on transcripting ... it should survive the restore
+        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+
+        assert_eq!(state.frame_count(), 1);
+
+        let mut mem_data = map[..0x400].to_vec();
+        mem_data[0x200] = 0xFC;
+        mem_data[0x280] = 0x10;
+        mem_data[0x300] = 0xFD;
+        let mut qvec = [
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x04, 0x49, b'I', b'F', b'Z', b'S', b'I', b'F',
+            b'h', b'd', 0x00, 0x00, 0x00, 0x0D, 0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x31, 0x35,
+            0x56, 0x78, 0x00, 0x9a, 0xbc, 0x00, b'U', b'M', b'e', b'm', 0x00, 0x00, 0x04, 0x00,
+        ]
+        .to_vec();
+        qvec.append(&mut mem_data);
+        qvec.append(
+            &mut [
+                b'S', b't', b'k', b's', 0x00, 0x00, 0x00, 0x1E, 0x00, 0x04, 0x8E, 0x03, 0x80, 0x03,
+                0x00, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x11, 0x11, 0x22, 0x22, 0x00, 0x06,
+                0x23, 0x12, 0x00, 0x00, 0x00, 0x00, 0x88, 0x99, 0xaa, 0xbb,
+            ]
+            .to_vec(),
+        );
+        let quetzal = Quetzal::try_from(qvec);
+        assert!(quetzal.is_ok());
+        assert!(state
+            .restore_state(quetzal.unwrap())
+            .is_ok_and(|x| x.is_some_and(|y| y == 0x9abc)));
+        assert!(header::flag2(state, Flags2::Transcripting).is_ok_and(|x| x == 1));
+        assert!(header::field_byte(state, HeaderField::DefaultForeground).is_ok_and(|x| x == 3));
+        assert!(header::field_byte(state, HeaderField::DefaultBackground).is_ok_and(|x| x == 6));
+        assert!(header::field_byte(state, HeaderField::ScreenLines).is_ok_and(|x| x == 40));
+        assert!(header::field_byte(state, HeaderField::ScreenColumns).is_ok_and(|x| x == 132));
+        assert!(state.read_byte(0x200).is_ok_and(|x| x == 0xFC));
+        assert!(state.read_byte(0x280).is_ok_and(|x| x == 0x10));
+        assert!(state.read_byte(0x300).is_ok_and(|x| x == 0xFD));
+        assert_eq!(state.frame_count(), 2);
+    }
+
+    #[test]
+    fn test_restore_state_no_mem() {
+        let mut map = test_map(5);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x34;
+        map[0x12] = b'2';
+        map[0x13] = b'3';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x56;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        assert!(state.initialize(40, 132, (3, 6), true).is_ok());
+        // Turn on transcripting ... it should survive the restore
+        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+
+        assert_eq!(state.frame_count(), 1);
+        let quetzal = Quetzal::new(
+            IFhd::new(
+                0x1234,
+                &[b'2', b'3', b'0', b'7', b'1', b'6'],
+                0x5678,
+                0x9abcde,
+            ),
+            None,
+            None,
+            Stks::new(vec![]),
+        );
+        assert!(state.restore_state(quetzal).is_err());
+        assert_eq!(state.frame_count(), 1);
+    }
+
+    #[test]
+    fn test_restore() {
+        let mut map = test_map(5);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x34;
+        map[0x12] = b'2';
+        map[0x13] = b'3';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x56;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        assert!(state.initialize(40, 132, (3, 6), true).is_ok());
+        // Turn on transcripting ... it should survive the restore
+        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+
+        assert_eq!(state.frame_count(), 1);
+
+        let restore_data = vec![
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x56, b'I', b'F', b'Z', b'S', b'I', b'F',
+            b'h', b'd', 0x00, 0x00, 0x00, 0x0D, 0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x31, 0x35,
+            0x56, 0x78, 0x00, 0x9a, 0xbc, 0x00, b'C', b'M', b'e', b'm', 0x00, 0x00, 0x00, 0x0D,
+            0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE, 0x00,
+            b'S', b't', b'k', b's', 0x00, 0x00, 0x00, 0x1E, 0x00, 0x04, 0x8E, 0x03, 0x80, 0x03,
+            0x00, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x11, 0x11, 0x22, 0x22, 0x00, 0x06,
+            0x23, 0x12, 0x00, 0x00, 0x00, 0x00, 0x88, 0x99, 0xaa, 0xbb,
+        ];
+        assert!(state
+            .restore(restore_data)
+            .is_ok_and(|x| x.is_some_and(|y| y == 0x9abc)));
+        assert!(header::flag2(state, Flags2::Transcripting).is_ok_and(|x| x == 1));
+        assert!(header::field_byte(state, HeaderField::DefaultForeground).is_ok_and(|x| x == 3));
+        assert!(header::field_byte(state, HeaderField::DefaultBackground).is_ok_and(|x| x == 6));
+        assert!(header::field_byte(state, HeaderField::ScreenLines).is_ok_and(|x| x == 40));
+        assert!(header::field_byte(state, HeaderField::ScreenColumns).is_ok_and(|x| x == 132));
+        assert!(state.read_byte(0x200).is_ok_and(|x| x == 0xFC));
+        assert!(state.read_byte(0x280).is_ok_and(|x| x == 0x10));
+        assert!(state.read_byte(0x300).is_ok_and(|x| x == 0xFD));
+        assert_eq!(state.frame_count(), 2);
+    }
+
+    #[test]
+    fn test_restore_wrong_release() {
+        let mut map = test_map(5);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x35;
+        map[0x12] = b'2';
+        map[0x13] = b'3';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x56;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        assert!(state.initialize(40, 132, (3, 6), true).is_ok());
+        // Turn on transcripting ... it should survive the restore
+        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+
+        assert_eq!(state.frame_count(), 1);
+
+        let restore_data = vec![
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x56, b'I', b'F', b'Z', b'S', b'I', b'F',
+            b'h', b'd', 0x00, 0x00, 0x00, 0x0D, 0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x31, 0x35,
+            0x56, 0x78, 0x00, 0x9a, 0xbc, 0x00, b'C', b'M', b'e', b'm', 0x00, 0x00, 0x00, 0x0D,
+            0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE, 0x00,
+            b'S', b't', b'k', b's', 0x00, 0x00, 0x00, 0x1E, 0x00, 0x04, 0x8E, 0x03, 0x80, 0x03,
+            0x00, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x11, 0x11, 0x22, 0x22, 0x00, 0x06,
+            0x23, 0x12, 0x00, 0x00, 0x00, 0x00, 0x88, 0x99, 0xaa, 0xbb,
+        ];
+        assert!(state.restore(restore_data).is_err());
+        assert_eq!(state.frame_count(), 1);
+    }
+
+    #[test]
+    fn test_restore_wrong_serial() {
+        let mut map = test_map(5);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x34;
+        map[0x12] = b'2';
+        map[0x13] = b'1';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x56;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        assert!(state.initialize(40, 132, (3, 6), true).is_ok());
+        // Turn on transcripting ... it should survive the restore
+        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+
+        assert_eq!(state.frame_count(), 1);
+
+        let restore_data = vec![
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x56, b'I', b'F', b'Z', b'S', b'I', b'F',
+            b'h', b'd', 0x00, 0x00, 0x00, 0x0D, 0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x31, 0x35,
+            0x56, 0x78, 0x00, 0x9a, 0xbc, 0x00, b'C', b'M', b'e', b'm', 0x00, 0x00, 0x00, 0x0D,
+            0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE, 0x00,
+            b'S', b't', b'k', b's', 0x00, 0x00, 0x00, 0x1E, 0x00, 0x04, 0x8E, 0x03, 0x80, 0x03,
+            0x00, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x11, 0x11, 0x22, 0x22, 0x00, 0x06,
+            0x23, 0x12, 0x00, 0x00, 0x00, 0x00, 0x88, 0x99, 0xaa, 0xbb,
+        ];
+        assert!(state.restore(restore_data).is_err());
+        assert_eq!(state.frame_count(), 1);
+    }
+
+    #[test]
+    fn test_restore_wrong_checksum() {
+        let mut map = test_map(5);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x34;
+        map[0x12] = b'2';
+        map[0x13] = b'3';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x57;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        assert!(state.initialize(40, 132, (3, 6), true).is_ok());
+        // Turn on transcripting ... it should survive the restore
+        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+
+        assert_eq!(state.frame_count(), 1);
+
+        let restore_data = vec![
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x56, b'I', b'F', b'Z', b'S', b'I', b'F',
+            b'h', b'd', 0x00, 0x00, 0x00, 0x0D, 0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x31, 0x35,
+            0x56, 0x78, 0x00, 0x9a, 0xbc, 0x00, b'C', b'M', b'e', b'm', 0x00, 0x00, 0x00, 0x0D,
+            0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE, 0x00,
+            b'S', b't', b'k', b's', 0x00, 0x00, 0x00, 0x1E, 0x00, 0x04, 0x8E, 0x03, 0x80, 0x03,
+            0x00, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x11, 0x11, 0x22, 0x22, 0x00, 0x06,
+            0x23, 0x12, 0x00, 0x00, 0x00, 0x00, 0x88, 0x99, 0xaa, 0xbb,
+        ];
+        assert!(state.restore(restore_data).is_err());
+        assert_eq!(state.frame_count(), 1);
+    }
+
+    #[test]
+    fn test_save_undo() {
+        let mut map = test_map(3);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x34;
+        map[0x12] = b'2';
+        map[0x13] = b'3';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x56;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        // See memory.rs tests ... change dynamic memory a little bit
+        // so the compressed memory isn't just runs of 0s
+        assert!(state.write_byte(0x200, 0xFC).is_ok());
+        assert!(state.write_byte(0x280, 0x10).is_ok());
+        assert!(state.write_byte(0x300, 0xFD).is_ok());
+
+        state.frames.push(Frame::new(
+            0x500,
+            0x501,
+            &[0x1122, 0x3344, 0x5566],
+            2,
+            &[0x1111, 0x2222],
+            Some(StoreResult::new(0x402, 0x80)),
+            0x48E,
+        ));
+        state.frames.push(Frame::new(
+            0x480,
+            0x48C,
+            &[0x8899, 0xaabb],
+            0,
+            &[],
+            None,
+            0x623,
+        ));
+
+        let mut state = s.unwrap();
+        assert_eq!(state.undo_stack.len(), 0);
+        assert!(state.save_undo(0x9abc).is_ok());
+        assert!(state.undo_stack.back().is_some());
+        let quetzal = state.undo_stack.back().unwrap();
+        let ifhd = quetzal.ifhd();
+        assert_eq!(ifhd.release_number(), 0x1234);
+        assert_eq!(ifhd.serial_number(), "230715".as_bytes());
+        assert_eq!(ifhd.checksum(), 0x5678);
+        assert_eq!(ifhd.pc(), 0x9abc);
+        assert!(quetzal.umem().is_none());
+        assert!(quetzal.cmem().is_some());
+        let cmem = quetzal.cmem().unwrap();
+        assert_eq!(
+            cmem.data(),
+            &[0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE]
+        );
+        let stks = quetzal.stks();
+        assert_eq!(stks.stks().len(), 2);
+        assert_eq!(stks.stks()[0].return_address(), 0x48E);
+        assert_eq!(stks.stks()[0].flags(), 0x3);
+        assert_eq!(stks.stks()[0].result_variable(), 0x80);
+        assert_eq!(stks.stks()[0].arguments(), 3);
+        assert_eq!(stks.stks()[0].local_variables(), &[0x1122, 0x3344, 0x5566]);
+        assert_eq!(stks.stks()[0].stack(), &[0x1111, 0x2222]);
+        assert_eq!(stks.stks()[1].return_address(), 0x623);
+        assert_eq!(stks.stks()[1].flags(), 0x12);
+        assert_eq!(stks.stks()[1].result_variable(), 0);
+        assert_eq!(stks.stks()[1].arguments(), 0);
+        assert_eq!(stks.stks()[1].local_variables(), &[0x8899, 0xaabb]);
+        assert!(stks.stks()[1].stack().is_empty());
+    }
+
+    #[test]
+    fn test_save_undo_multiple() {
+        let mut map = test_map(3);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x34;
+        map[0x12] = b'2';
+        map[0x13] = b'3';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x56;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        // See memory.rs tests ... change dynamic memory a little bit
+        // so the compressed memory isn't just runs of 0s
+        assert!(state.write_byte(0x200, 0xFC).is_ok());
+        assert!(state.write_byte(0x280, 0x10).is_ok());
+        assert!(state.write_byte(0x300, 0xFD).is_ok());
+
+        state.frames.push(Frame::new(
+            0x500,
+            0x501,
+            &[0x1122, 0x3344, 0x5566],
+            2,
+            &[0x1111, 0x2222],
+            Some(StoreResult::new(0x402, 0x80)),
+            0x48E,
+        ));
+        state.frames.push(Frame::new(
+            0x480,
+            0x48C,
+            &[0x8899, 0xaabb],
+            0,
+            &[],
+            None,
+            0x623,
+        ));
+
+        let mut state = s.unwrap();
+        for i in 0..10 {
+            assert_eq!(state.undo_stack.len(), i);
+            assert!(state.save_undo(0x1111 * (i + 1)).is_ok());
+        }
+        assert_eq!(state.undo_stack.len(), 10);
+        assert!(state.save_undo(0xcccc).is_ok());
+        assert_eq!(state.undo_stack.len(), 10);
+        // The oldest entry (pc = 0x1111) should have been dropped
+        assert!(state
+            .undo_stack
+            .front()
+            .is_some_and(|x| x.ifhd().pc() == 0x2222))
+    }
+
+    #[test]
+    fn test_restore_undo() {
+        let mut map = test_map(3);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x34;
+        map[0x12] = b'2';
+        map[0x13] = b'3';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x56;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        // See memory.rs tests ... change dynamic memory a little bit
+        // so the compressed memory isn't just runs of 0s
+        assert!(state.write_byte(0x200, 0xFC).is_ok());
+        assert!(state.write_byte(0x280, 0x10).is_ok());
+        assert!(state.write_byte(0x300, 0xFD).is_ok());
+
+        state.frames.push(Frame::new(
+            0x500,
+            0x501,
+            &[0x1122, 0x3344, 0x5566],
+            2,
+            &[0x1111, 0x2222],
+            Some(StoreResult::new(0x402, 0x80)),
+            0x48E,
+        ));
+        state.frames.push(Frame::new(
+            0x480,
+            0x48C,
+            &[0x8899, 0xaabb],
+            0,
+            &[],
+            None,
+            0x623,
+        ));
+
+        let mut state = s.unwrap();
+        assert!(state.save_undo(0x9876).is_ok());
+        // Change dynamic memory
+        assert!(state.write_byte(0x200, 0x0C).is_ok());
+        assert!(state.write_byte(0x280, 0x90).is_ok());
+        assert!(state.write_byte(0x300, 0x0D).is_ok());
+        // Drop a frame
+        assert!(state.frames.pop().is_some());
+
+        assert_eq!(state.frame_count(), 1);
+        assert_eq!(state.undo_stack.len(), 1);
+        assert!(state
+            .restore_undo()
+            .is_ok_and(|x| x.is_some_and(|y| y == 0x9876)));
+        assert_eq!(state.undo_stack.len(), 0);
+        assert_eq!(state.frame_count(), 2);
+        assert!(state.read_byte(0x200).is_ok_and(|x| x == 0xFC));
+        assert!(state.read_byte(0x280).is_ok_and(|x| x == 0x10));
+        assert!(state.read_byte(0x300).is_ok_and(|x| x == 0xFD));
+    }
+
+    #[test]
+    fn test_restore_undo_no_state() {
+        let mut map = test_map(3);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x34;
+        map[0x12] = b'2';
+        map[0x13] = b'3';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x56;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        // See memory.rs tests ... change dynamic memory a little bit
+        // so the compressed memory isn't just runs of 0s
+        assert!(state.write_byte(0x200, 0xFC).is_ok());
+        assert!(state.write_byte(0x280, 0x10).is_ok());
+        assert!(state.write_byte(0x300, 0xFD).is_ok());
+
+        state.frames.push(Frame::new(
+            0x500,
+            0x501,
+            &[0x1122, 0x3344, 0x5566],
+            2,
+            &[0x1111, 0x2222],
+            Some(StoreResult::new(0x402, 0x80)),
+            0x48E,
+        ));
+
+        let mut state = s.unwrap();
+        assert_eq!(state.undo_stack.len(), 0);
+        assert!(state.restore_undo().is_err());
+        assert_eq!(state.undo_stack.len(), 0);
+        assert_eq!(state.frame_count(), 1);
+        assert!(state.read_byte(0x200).is_ok_and(|x| x == 0xFC));
+        assert!(state.read_byte(0x280).is_ok_and(|x| x == 0x10));
+        assert!(state.read_byte(0x300).is_ok_and(|x| x == 0xFD));
+    }
+
+    #[test]
+    fn test_restart() {
+        let mut map = test_map(5);
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        map[0x02] = 0x12;
+        map[0x03] = 0x34;
+        map[0x12] = b'2';
+        map[0x13] = b'3';
+        map[0x14] = b'0';
+        map[0x15] = b'7';
+        map[0x16] = b'1';
+        map[0x17] = b'5';
+        map[0x1C] = 0x56;
+        map[0x1D] = 0x78;
+
+        let m = Memory::new(map.clone());
+        let mut s = State::new(m);
+        assert!(s.is_ok());
+        let state = s.as_mut().unwrap();
+        assert!(state.initialize(24, 80, (9, 2), true).is_ok());
+        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+        assert!(state.write_byte(0x200, 0xFC).is_ok());
+        assert!(state.write_byte(0x280, 0x10).is_ok());
+        assert!(state.write_byte(0x300, 0xFD).is_ok());
+        assert!(state.set_variable(0x80, 0x8899).is_ok());
+
+        assert!(state.restart().is_ok_and(|x| x == 0x400));
+        assert!(header::flag2(state, Flags2::Transcripting).is_ok_and(|x| x == 1));
+        assert!(header::field_byte(state, HeaderField::DefaultForeground).is_ok_and(|x| x == 9));
+        assert!(header::field_byte(state, HeaderField::DefaultBackground).is_ok_and(|x| x == 2));
+        assert!(header::field_byte(state, HeaderField::ScreenLines).is_ok_and(|x| x == 24));
+        assert!(header::field_byte(state, HeaderField::ScreenColumns).is_ok_and(|x| x == 80));
     }
 }
