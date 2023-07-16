@@ -37,7 +37,7 @@ pub struct State {
 
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "State: version: {}, address space: {:06x}, dynamic space: {:04x}, execution frames: {}", self. version, self.memory.len(), self.static_mark - 1, self.frames.len())
+        write!(f, "State: version: {}, address space: {:06x}, dynamic space: {:04x}, execution frames: {}", self. version, self.memory.size(), self.static_mark - 1, self.frames.len())
     }
 }
 
