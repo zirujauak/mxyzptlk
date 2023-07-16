@@ -142,3 +142,421 @@ pub fn set_extension(state: &mut State, index: usize, value: u16) -> Result<(), 
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        test_util::{mock_state, test_map},
+        zmachine::state::header::{self, Flags1v3, Flags1v4, Flags2, HeaderField},
+    };
+
+    #[test]
+    fn test_fields() {
+        let mut map = test_map(3);
+        for (i, b) in (0..0x40).enumerate() {
+            map[i] = b + 1;
+        }
+        map[0x0e] = 0x4;
+
+        let state = mock_state(map);
+        assert!(header::field_byte(&state, HeaderField::Version).is_ok_and(|x| x == 0x1));
+        assert!(header::field_byte(&state, HeaderField::Flags1).is_ok_and(|x| x == 0x2));
+        assert!(header::field_word(&state, HeaderField::Release).is_ok_and(|x| x == 0x304));
+        assert!(header::field_word(&state, HeaderField::HighMark).is_ok_and(|x| x == 0x506));
+        assert!(header::field_word(&state, HeaderField::InitialPC).is_ok_and(|x| x == 0x708));
+        assert!(header::field_word(&state, HeaderField::Dictionary).is_ok_and(|x| x == 0x90a));
+        assert!(header::field_word(&state, HeaderField::ObjectTable).is_ok_and(|x| x == 0xb0c));
+        assert!(header::field_word(&state, HeaderField::GlobalTable).is_ok_and(|x| x == 0xd0e));
+        assert!(header::field_word(&state, HeaderField::StaticMark).is_ok_and(|x| x == 0x410));
+        assert!(header::field_word(&state, HeaderField::Flags2).is_ok_and(|x| x == 0x1112));
+        assert!(header::field_word(&state, HeaderField::Serial).is_ok_and(|x| x == 0x1314));
+        assert!(
+            header::field_word(&state, HeaderField::AbbreviationsTable).is_ok_and(|x| x == 0x191a)
+        );
+        assert!(header::field_word(&state, HeaderField::FileLength).is_ok_and(|x| x == 0x1b1c));
+        assert!(header::field_word(&state, HeaderField::Checksum).is_ok_and(|x| x == 0x1d1e));
+        assert!(header::field_byte(&state, HeaderField::InterpreterNumber).is_ok_and(|x| x == 0x1f));
+        assert!(
+            header::field_byte(&state, HeaderField::InterpreterVersion).is_ok_and(|x| x == 0x20)
+        );
+        assert!(header::field_byte(&state, HeaderField::ScreenLines).is_ok_and(|x| x == 0x21));
+        assert!(header::field_byte(&state, HeaderField::ScreenColumns).is_ok_and(|x| x == 0x22));
+        assert!(header::field_word(&state, HeaderField::ScreenWidth).is_ok_and(|x| x == 0x2324));
+        assert!(header::field_word(&state, HeaderField::ScreenHeight).is_ok_and(|x| x == 0x2526));
+        assert!(header::field_byte(&state, HeaderField::FontWidth).is_ok_and(|x| x == 0x27));
+        assert!(header::field_byte(&state, HeaderField::FontHeight).is_ok_and(|x| x == 0x28));
+        assert!(header::field_word(&state, HeaderField::RoutinesOffset).is_ok_and(|x| x == 0x292a));
+        assert!(header::field_word(&state, HeaderField::StringsOffset).is_ok_and(|x| x == 0x2b2c));
+        assert!(header::field_byte(&state, HeaderField::DefaultBackground).is_ok_and(|x| x == 0x2d));
+        assert!(header::field_byte(&state, HeaderField::DefaultForeground).is_ok_and(|x| x == 0x2e));
+        assert!(header::field_word(&state, HeaderField::TerminatorTable).is_ok_and(|x| x == 0x2f30));
+        assert!(header::field_word(&state, HeaderField::Revision).is_ok_and(|x| x == 0x3334));
+        assert!(header::field_word(&state, HeaderField::AlphabetTable).is_ok_and(|x| x == 0x3536));
+        assert!(header::field_word(&state, HeaderField::ExtensionTable).is_ok_and(|x| x == 0x3738));
+        assert!(header::field_word(&state, HeaderField::InformVersion).is_ok_and(|x| x == 0x3d3e));
+    }
+    #[test]
+    fn test_field_byte() {
+        let mut map = test_map(3);
+        map[0x1D] = 0xf0;
+        map[0x1E] = 0x12;
+        map[0x1F] = 0x34;
+        let state = mock_state(map);
+        assert!(header::field_byte(&state, HeaderField::InterpreterNumber).is_ok_and(|x| x == 0x12));
+    }
+
+    #[test]
+    fn test_field_word() {
+        let mut map = test_map(3);
+        map[0x0D] = 0x12;
+        map[0x0E] = 0x04;
+        map[0x0F] = 0x00;
+        map[0x10] = 0x78;
+        let state = mock_state(map);
+        assert!(header::field_word(&state, HeaderField::StaticMark).is_ok_and(|x| x == 0x400));
+    }
+
+    #[test]
+    fn test_set_byte() {
+        let mut map = test_map(3);
+        map[0x1D] = 0xf0;
+        map[0x1E] = 0x12;
+        map[0x1F] = 0x34;
+        let mut state = mock_state(map);
+        assert!(header::set_byte(&mut state, HeaderField::InterpreterNumber, 0xFF).is_ok());
+        assert!(state.read_byte(0x1E).is_ok_and(|x| x == 0xFF));
+    }
+
+    #[test]
+    fn test_set_word() {
+        let mut map = test_map(3);
+        map[0x0D] = 0x12;
+        map[0x0E] = 0x04;
+        map[0x0F] = 0x00;
+        map[0x10] = 0x78;
+        let mut state = mock_state(map);
+        assert!(header::set_word(&mut state, HeaderField::StaticMark, 0x3456).is_ok());
+        assert!(state.read_word(0x0E).is_ok_and(|x| x == 0x3456));
+    }
+
+    #[test]
+    fn test_flag1_v3() {
+        let map = test_map(3);
+        let mut state = mock_state(map);
+
+        assert!(header::flag1(&state, Flags1v3::ScreenSplitAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(
+            header::flag1(&state, Flags1v3::StatusLineNotAvailable as u8).is_ok_and(|x| x == 0)
+        );
+        assert!(header::flag1(&state, Flags1v3::StatusLineType as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v3::VariablePitchDefault as u8).is_ok_and(|x| x == 0));
+        assert!(header::set_flag1(&mut state, Flags1v3::ScreenSplitAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v3::ScreenSplitAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(
+            header::flag1(&state, Flags1v3::StatusLineNotAvailable as u8).is_ok_and(|x| x == 0)
+        );
+        assert!(header::flag1(&state, Flags1v3::StatusLineType as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v3::VariablePitchDefault as u8).is_ok_and(|x| x == 0));
+        assert!(header::set_flag1(&mut state, Flags1v3::StatusLineNotAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v3::ScreenSplitAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(
+            header::flag1(&state, Flags1v3::StatusLineNotAvailable as u8).is_ok_and(|x| x == 1)
+        );
+        assert!(header::flag1(&state, Flags1v3::StatusLineType as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v3::VariablePitchDefault as u8).is_ok_and(|x| x == 0));
+        assert!(header::set_flag1(&mut state, Flags1v3::StatusLineType as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v3::ScreenSplitAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(
+            header::flag1(&state, Flags1v3::StatusLineNotAvailable as u8).is_ok_and(|x| x == 1)
+        );
+        assert!(header::flag1(&state, Flags1v3::StatusLineType as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v3::VariablePitchDefault as u8).is_ok_and(|x| x == 0));
+        assert!(header::set_flag1(&mut state, Flags1v3::VariablePitchDefault as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v3::ScreenSplitAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(
+            header::flag1(&state, Flags1v3::StatusLineNotAvailable as u8).is_ok_and(|x| x == 1)
+        );
+        assert!(header::flag1(&state, Flags1v3::StatusLineType as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v3::VariablePitchDefault as u8).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag1(&mut state, Flags1v3::StatusLineNotAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v3::ScreenSplitAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(
+            header::flag1(&state, Flags1v3::StatusLineNotAvailable as u8).is_ok_and(|x| x == 0)
+        );
+        assert!(header::flag1(&state, Flags1v3::StatusLineType as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v3::VariablePitchDefault as u8).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag1(&mut state, Flags1v3::VariablePitchDefault as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v3::ScreenSplitAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(
+            header::flag1(&state, Flags1v3::StatusLineNotAvailable as u8).is_ok_and(|x| x == 0)
+        );
+        assert!(header::flag1(&state, Flags1v3::StatusLineType as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v3::VariablePitchDefault as u8).is_ok_and(|x| x == 0));
+        assert!(header::clear_flag1(&mut state, Flags1v3::StatusLineType as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v3::ScreenSplitAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(
+            header::flag1(&state, Flags1v3::StatusLineNotAvailable as u8).is_ok_and(|x| x == 0)
+        );
+        assert!(header::flag1(&state, Flags1v3::StatusLineType as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v3::VariablePitchDefault as u8).is_ok_and(|x| x == 0));
+        assert!(header::clear_flag1(&mut state, Flags1v3::ScreenSplitAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v3::ScreenSplitAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(
+            header::flag1(&state, Flags1v3::StatusLineNotAvailable as u8).is_ok_and(|x| x == 0)
+        );
+        assert!(header::flag1(&state, Flags1v3::StatusLineType as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v3::VariablePitchDefault as u8).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_flag1_v4() {
+        let map = test_map(4);
+        let mut state = mock_state(map);
+
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::set_flag1(&mut state, Flags1v4::BoldfaceAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::set_flag1(&mut state, Flags1v4::ColoursAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::set_flag1(&mut state, Flags1v4::FixedSpaceAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::set_flag1(&mut state, Flags1v4::ItalicAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::set_flag1(&mut state, Flags1v4::PicturesAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::set_flag1(&mut state, Flags1v4::SoundEffectsAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::set_flag1(&mut state, Flags1v4::TimedInputAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag1(&mut state, Flags1v4::ColoursAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag1(&mut state, Flags1v4::ItalicAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag1(&mut state, Flags1v4::SoundEffectsAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag1(&mut state, Flags1v4::FixedSpaceAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag1(&mut state, Flags1v4::PicturesAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag1(&mut state, Flags1v4::TimedInputAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::clear_flag1(&mut state, Flags1v4::BoldfaceAvailable as u8).is_ok());
+        assert!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
+        assert!(header::flag1(&state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 0));
+    }
+
+    #[test]
+    fn test_flag2() {
+        let map = test_map(4);
+        let mut state = mock_state(map);
+
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 0));
+        assert!(header::set_flag2(&mut state, Flags2::ForceFixedPitch).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 0));
+        assert!(header::set_flag2(&mut state, Flags2::RequestColours).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 0));
+        assert!(header::set_flag2(&mut state, Flags2::RequestMouse).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 0));
+        assert!(header::set_flag2(&mut state, Flags2::RequestPictures).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 0));
+        assert!(header::set_flag2(&mut state, Flags2::RequestSoundEffects).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 0));
+        assert!(header::set_flag2(&mut state, Flags2::RequestUndo).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 0));
+        assert!(header::set_flag2(&mut state, Flags2::Transcripting).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag2(&mut state, Flags2::RequestUndo).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag2(&mut state, Flags2::RequestColours).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag2(&mut state, Flags2::RequestSoundEffects).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag2(&mut state, Flags2::RequestMouse).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag2(&mut state, Flags2::RequestPictures).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 1));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag2(&mut state, Flags2::ForceFixedPitch).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 1));
+        assert!(header::clear_flag2(&mut state, Flags2::Transcripting).is_ok());
+        assert!(header::flag2(&state, Flags2::ForceFixedPitch).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestColours).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestMouse).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestPictures).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::RequestUndo).is_ok_and(|x| x == 0));
+        assert!(header::flag2(&state, Flags2::Transcripting).is_ok_and(|x| x == 0));
+    }
+}

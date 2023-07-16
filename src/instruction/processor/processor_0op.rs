@@ -667,8 +667,8 @@ mod tests {
     fn test_verify() {
         let mut map = test_map(3);
         // Put some data in the map
-        for i in 0x40..0x800 {
-            map[i] = i as u8;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
         }
         // Add the checksum
         map[0x1C] = 0xf6;
@@ -689,8 +689,8 @@ mod tests {
     fn test_verify_fail() {
         let mut map = test_map(3);
         // Put some data in the map
-        for i in 0x40..0x800 {
-            map[i] = i as u8;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
         }
         // Add the checksum
         map[0x1C] = 0xf6;

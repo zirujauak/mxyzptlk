@@ -50,12 +50,8 @@ impl Memory {
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.map.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
     }
 
     pub fn slice(&self, start: usize, length: usize) -> Vec<u8> {
@@ -67,11 +63,11 @@ impl Memory {
         let mut checksum = 0;
         let size = self.read_word(HeaderField::FileLength as usize)? as usize
             * match self.version {
-                1 | 2 | 3 => 2,
+                3 => 2,
                 4 | 5 => 4,
-                6 | 7 | 8 => 8,
-                _ => 0,
+                _ => 8,
             };
+
         for i in 0x40..self.dynamic.len() {
             checksum = u16::overflowing_add(checksum, self.dynamic[i] as u16).0;
         }
@@ -229,5 +225,427 @@ impl Memory {
     pub fn restore_compressed(&mut self, cdata: &[u8]) -> Result<(), RuntimeError> {
         let data = self.decompress(cdata);
         self.restore(&data)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, io::Write, path::Path};
+
+    use super::*;
+
+    #[test]
+    fn test_word_value() {
+        for i in 0..=0xFFFF {
+            let bytes = (i as u32).to_be_bytes();
+            assert_eq!(word_value(bytes[2], bytes[3]), i as u16);
+        }
+    }
+
+    #[test]
+    fn test_byte_values() {
+        for i in 0..=0xFFFF {
+            let bytes = (i as u32).to_be_bytes();
+            assert_eq!(byte_values(i), (bytes[2], bytes[3]));
+        }
+    }
+
+    #[test]
+    fn test_from_file() {
+        let mut map = vec![0; 0x800];
+        map[0] = 5;
+        map[0xE] = 0x4;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open("test-code.z5");
+        assert!(file.is_ok());
+        let mut f = file.unwrap();
+        assert!(f.write_all(&map).is_ok());
+        assert!(f.flush().is_ok());
+        assert!(Path::new("test-code.z5").exists());
+        let mut read_file = fs::OpenOptions::new().read(true).open("test-code.z5");
+        assert!(read_file.is_ok());
+        let memory = Memory::try_from(read_file.as_mut().unwrap());
+        assert!(fs::remove_file("test-code.z5").is_ok());
+        assert!(memory.is_ok());
+        let m = memory.unwrap();
+        assert!(m.read_byte(0).is_ok_and(|x| x == 5));
+        assert!(m.read_word(0xE).is_ok_and(|x| x == 0x400));
+        for i in 1..0x40 {
+            if i != 0x0E && i != 0x0F {
+                assert!(m.read_byte(i).is_ok_and(|x| x == 0));
+            }
+        }
+        for i in 0x40..0x800 {
+            assert!(m.read_byte(i).is_ok_and(|x| x == i as u8));
+        }
+
+        assert_eq!(m.dynamic.len(), 0x400);
+        for i in 0..0x400 {
+            assert!(m.read_byte(i).is_ok_and(|x| x == m.dynamic[i]));
+        }
+    }
+
+    #[test]
+    fn test_new() {
+        let mut map = vec![0; 0x800];
+        map[0] = 5;
+        map[0xE] = 0x4;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let m = Memory::new(map);
+        assert!(m.read_byte(0).is_ok_and(|x| x == 5));
+        assert!(m.read_word(0xE).is_ok_and(|x| x == 0x400));
+        for i in 1..0x40 {
+            if i != 0x0E && i != 0x0F {
+                assert!(m.read_byte(i).is_ok_and(|x| x == 0));
+            }
+        }
+        for i in 0x40..0x800 {
+            assert!(m.read_byte(i).is_ok_and(|x| x == i as u8));
+        }
+
+        assert_eq!(m.dynamic.len(), 0x400);
+        for i in 0..0x400 {
+            assert!(m.read_byte(i).is_ok_and(|x| x == m.dynamic[i]));
+        }
+    }
+
+    #[test]
+    fn test_size() {
+        let mut map = vec![0; 0x800];
+        map[0] = 5;
+        map[0xE] = 0x4;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let m = Memory::new(map);
+        assert_eq!(m.size(), 0x800);
+    }
+
+    #[test]
+    fn test_slice() {
+        let mut map = vec![0; 0x800];
+        map[0] = 5;
+        map[0xE] = 0x4;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let m = Memory::new(map);
+        let s = m.slice(0x400, 0x10);
+        assert_eq!(s.len(), 0x10);
+        for (i, b) in (0..0x10).enumerate() {
+            assert_eq!(s[i], b);
+        }
+    }
+
+    #[test]
+    fn test_checksum_v3() {
+        let mut map = vec![0; 0x800];
+        map[0] = 3;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x4;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let m = Memory::new(map);
+        assert!(m.checksum().is_ok_and(|x| x == 0xf420));
+    }
+
+    #[test]
+    fn test_checksum_v4() {
+        let mut map = vec![0; 0x800];
+        map[0] = 4;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x2;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let m = Memory::new(map);
+        assert!(m.checksum().is_ok_and(|x| x == 0xf420));
+    }
+
+    #[test]
+    fn test_checksum_v5() {
+        let mut map = vec![0; 0x800];
+        map[0] = 5;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x2;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let m = Memory::new(map);
+        assert!(m.checksum().is_ok_and(|x| x == 0xf420));
+    }
+
+    #[test]
+    fn test_checksum_v8() {
+        let mut map = vec![0; 0x800];
+        map[0] = 8;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x1;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let m = Memory::new(map);
+        assert!(m.checksum().is_ok_and(|x| x == 0xf420));
+    }
+
+    #[test]
+    fn test_read_byte() {
+        let mut map = vec![0; 0x800];
+        map[0] = 8;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x1;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let m = Memory::new(map);
+        for i in 0x40..0x800 {
+            assert!(m.read_byte(i).is_ok_and(|x| x == i as u8));
+        }
+
+        assert!(m.read_byte(0x800).is_err());
+    }
+
+    #[test]
+    fn test_read_word() {
+        let mut map = vec![0; 0x800];
+        map[0] = 8;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x1;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let m = Memory::new(map);
+        for i in 0x40..0x7FF {
+            let w = word_value(i as u8, u8::overflowing_add(i as u8, 1).0);
+            assert!(m.read_word(i).is_ok_and(|x| x == w));
+        }
+
+        assert!(m.read_word(0x7FF).is_err());
+    }
+
+    #[test]
+    fn test_write_byte() {
+        let mut map = vec![0; 0x800];
+        map[0] = 8;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x1;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let mut m = Memory::new(map);
+        for i in 0x40..0x80 {
+            assert!(m.write_byte(i, i as u8 + 1).is_ok());
+        }
+        assert!(m.read_byte(0x39).is_ok_and(|x| x == 0));
+        for i in 0x40..0x80 {
+            assert!(m.read_byte(i).is_ok_and(|x| x == i as u8 + 1));
+        }
+        assert!(m.read_byte(0x81).is_ok_and(|x| x == 0x81));
+
+        assert!(m.write_byte(0x800, 0).is_err());
+    }
+
+    #[test]
+    fn test_write_word() {
+        let mut map = vec![0; 0x800];
+        map[0] = 8;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x1;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let mut m = Memory::new(map);
+        for i in 0x20..0x40 {
+            assert!(m.write_word(i * 2, i as u16 * 0x10).is_ok());
+        }
+        assert!(m.read_word(0x38).is_ok_and(|x| x == 0));
+        for i in 0x20..0x40 {
+            assert!(m.read_word(i * 2).is_ok_and(|x| x == i as u16 * 0x10));
+        }
+        assert!(m.read_word(0x81).is_ok_and(|x| x == 0x8182));
+
+        assert!(m.write_word(0x7FF, 0).is_err());
+    }
+
+    #[test]
+    fn test_compress() {
+        let mut map = vec![0; 0x800];
+        map[0] = 8;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x1;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let mut m = Memory::new(map);
+        // Change dynamic memory just a bit
+        assert!(m.write_byte(0x200, 0xFC).is_ok());
+        assert!(m.write_byte(0x280, 0x10).is_ok());
+        assert!(m.write_byte(0x300, 0xFD).is_ok());
+        // 0x0000 - 0x0100 is unchanged: 0x00, 0xFF
+        // 0x0100 - 0x01FF is unchanged: 0x00, 0xFE
+        // 0x0201 is changed: 0xFC
+        // 0x0202 - 0x027F is unchanged: 0x00, 0x7E
+        // 0x0280 is changed: 0x10 ^ 0x80 = 0x90
+        // 0x0281 - 0x02FF is unchanged: 0x00, 0x7E
+        // 0x0301 is changed: 0xFD
+        // 0x0302 - 0x03FF is unchanged: 0x00, 0xFE
+        assert_eq!(
+            m.compress(),
+            vec![0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE]
+        );
+    }
+
+    #[test]
+    fn test_reset() {
+        let mut map = vec![0; 0x800];
+        map[0] = 8;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x1;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let mut m = Memory::new(map);
+        for i in 0x40..0x400 {
+            assert!(m.write_byte(i, 0).is_ok());
+        }
+        for i in 0x40..0x400 {
+            assert!(m.read_byte(i).is_ok_and(|x| x == 0))
+        }
+        m.reset();
+        for i in 0x40..0x400 {
+            assert!(m.read_byte(i).is_ok_and(|x| x == i as u8))
+        }
+    }
+
+    #[test]
+    fn test_restore() {
+        let mut map = vec![0; 0x800];
+        map[0] = 8;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x1;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let mut restore = vec![0; 0x400];
+        for (i, b) in map[0..0x40].iter().enumerate() {
+            restore[i] = *b;
+        }
+        for (i, b) in (0x40..0x400).enumerate() {
+            restore[i + 0x40] = !(b as u8);
+        }
+        let mut m = Memory::new(map.clone());
+        for i in 0x40..0x400 {
+            assert!(m.read_byte(i).is_ok_and(|x| x == i as u8))
+        }
+        assert!(m.restore(&restore).is_ok());
+        for (i, _) in (0..0x40).enumerate() {
+            assert!(m.read_byte(i).is_ok_and(|x| x == map[i]));
+        }
+        for i in 0x40..0x400 {
+            assert!(m.read_byte(i).is_ok_and(|x| x == !(i as u8)));
+        }
+    }
+
+    #[test]
+    fn test_decompress() {
+        let mut map = vec![0; 0x800];
+        map[0] = 8;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x1;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let m = Memory::new(map.clone());
+        let dc = m.decompress(&[
+            0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE,
+        ]);
+        assert_eq!(dc[0..0x200], map[0..0x200]);
+        assert_eq!(dc[0x200], 0xFC);
+        assert_eq!(dc[0x201..0x280], map[0x201..0x280]);
+        assert_eq!(dc[0x280], 0x10);
+        assert_eq!(dc[0x281..0x300], map[0x281..0x300]);
+        assert_eq!(dc[0x300], 0xFD);
+        assert_eq!(dc[0x301..], map[0x301..0x400]);
+    }
+
+    #[test]
+    fn test_restore_compressed() {
+        let mut map = vec![0; 0x800];
+        map[0] = 8;
+        map[0xE] = 0x4;
+        map[0x1A] = 0x1;
+        map[0x1B] = 0;
+        for (i, b) in (0x40..0x800).enumerate() {
+            map[i + 0x40] = b as u8;
+        }
+        let mut m = Memory::new(map.clone());
+        assert!(m
+            .restore_compressed(&[
+                0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE,
+            ])
+            .is_ok());
+        for (i, _) in (0..0x200).enumerate() {
+            assert!(
+                m.read_byte(i).is_ok_and(|x| x == map[i]),
+                "{:04x}: {:02x}/{:02x}",
+                i,
+                m.read_byte(i).unwrap(),
+                map[i]
+            );
+        }
+        for (i, _) in (0x201..0x280).enumerate() {
+            let offset = i + 0x201;
+            assert!(
+                m.read_byte(offset).is_ok_and(|x| x == map[offset]),
+                "{:04x}: {:02x}/{:02x}",
+                offset,
+                m.read_byte(offset).unwrap(),
+                map[offset]
+            );
+        }
+        for (i, _) in (0x281..0x300).enumerate() {
+            let offset = i + 0x281;
+            assert!(
+                m.read_byte(offset).is_ok_and(|x| x == map[offset]),
+                "{:04x}: {:02x}/{:02x}",
+                offset,
+                m.read_byte(offset).unwrap(),
+                map[offset]
+            );
+        }
+        for (i, _) in (0x301..0x800).enumerate() {
+            let offset = i + 0x301;
+            assert!(
+                m.read_byte(offset).is_ok_and(|x| x == map[offset]),
+                "{:04x}: {:02x}/{:02x}",
+                offset,
+                m.read_byte(offset).unwrap(),
+                map[offset]
+            );
+        }
+        assert!(m.read_byte(0x200).is_ok_and(|x| x == 0xFC));
+        assert!(m.read_byte(0x280).is_ok_and(|x| x == 0x10));
+        assert!(m.read_byte(0x300).is_ok_and(|x| x == 0xFD));
     }
 }
