@@ -2517,11 +2517,11 @@ mod tests {
         let m = Memory::new(map);
         let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
         input(&['T', 'e', 's', 't', 'i', 'n', 'g']);
-        set_input_delay(50);
+        set_input_delay(30);
         assert!(zmachine
             .read_line(&[], 16, &['\r' as u16], 100)
-            .is_ok_and(|x| x == [b'T' as u16, b'e' as u16,]));
-        assert_print("Te");
+            .is_ok_and(|x| x == [b'T' as u16, b'e' as u16, b's' as u16]));
+        assert_print("Tes");
     }
 
     #[test]
