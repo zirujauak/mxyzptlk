@@ -43,7 +43,6 @@ pub struct ZMachine {
     input_interrupt: Option<u16>,
     input_interrupt_print: bool,
     sound_manager: Option<Manager>,
-    sound_interrupt: Option<usize>,
 }
 
 impl ZMachine {
@@ -84,7 +83,6 @@ impl ZMachine {
             input_interrupt: None,
             input_interrupt_print: false,
             sound_manager,
-            sound_interrupt: None,
         })
     }
 
@@ -527,12 +525,11 @@ impl ZMachine {
             0
         };
 
-        let check_sound = self.sound_interrupt.is_some();
-
+        let check_sound = self.state.sound_interrupt().is_some();
         loop {
             // If a sound interrupt is set and there is no sound playing,
             // return buffer and clear any pending input_interrupt
-            if self.sound_interrupt.is_some() {
+            if self.state.sound_interrupt().is_some() {
                 if let Some(sounds) = self.sound_manager.as_mut() {
                     if !sounds.is_playing() {
                         info!(target: "app::input", "Sound interrupt firing");
@@ -548,7 +545,6 @@ impl ZMachine {
             }
 
             let key = self.io.read_key(end == 0 && !check_sound);
-
             if let Some(c) = key.zchar() {
                 if c == 253 || c == 254 {
                     self.mouse_data(&key)?;
@@ -686,7 +682,7 @@ impl ZMachine {
             }
         }
 
-        match Regex::new(r".*\.z\d$") {
+        match Regex::new(r"^((.*\.z\d)|(.*\.blb)|(.*\.blorb))$") {
             Ok(r) => {
                 if r.is_match(&filename) {
                     Err(RuntimeError::new(
@@ -793,7 +789,7 @@ impl ZMachine {
         repeats: u8,
         routine: Option<usize>,
     ) -> Result<(), RuntimeError> {
-        let repeats = if self.version > 4 && repeats > 0 {
+        let r = if self.version > 4 && repeats > 0 {
             Some(repeats)
         } else {
             None
@@ -810,7 +806,7 @@ impl ZMachine {
                 sounds.change_volume(volume);
                 Ok(())
             } else {
-                sounds.play_sound(effect, volume, repeats)
+                sounds.play_sound(effect, volume, r)
             }
         } else {
             Ok(())
@@ -865,10 +861,20 @@ impl ZMachine {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::{
+        iff::blorb::{
+            aiff::AIFF,
+            oggv::OGGV,
+            ridx::{Index, RIdx},
+            sloop::{Entry, Loop},
+            Blorb,
+        },
         test_util::{
-            assert_ok, assert_print, beep, buffer_mode, colors, cursor, erase_line, erase_window,
-            input, mock_object, mock_routine, split, style, test_map, window,
+            assert_ok, assert_print, backspace, beep, buffer_mode, colors, cursor, erase_line,
+            erase_window, input, mock_object, mock_routine, play_sound, quit, scroll,
+            set_input_delay, set_input_timeout, split, style, test_map, window,
         },
         zmachine::{io::screen::Style, state::header::Flags2},
     };
@@ -2040,6 +2046,14 @@ mod tests {
     }
 
     #[test]
+    fn test_output_stream_invalid() {
+        let map = test_map(3);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        assert!(zmachine.output_stream(5, None).is_err());
+    }
+
+    #[test]
     fn test_print() {
         let map = test_map(3);
         let m = Memory::new(map);
@@ -2048,6 +2062,23 @@ mod tests {
             .print(&vec![b'T' as u16, b'e' as u16, b's' as u16, b't' as u16])
             .is_ok(),);
         assert_print("Test");
+    }
+
+    #[test]
+    fn test_print_in_input_interrupt() {
+        let mut map = test_map(5);
+        mock_routine(&mut map, 0x400, &[]);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        zmachine.state.set_read_interrupt();
+        assert!(zmachine
+            .call_read_interrupt(0x400, 0x500)
+            .is_ok_and(|x| x == 0x401));
+        assert!(zmachine
+            .print(&vec![b'T' as u16, b'e' as u16, b's' as u16, b't' as u16])
+            .is_ok(),);
+        assert_print("Test");
+        assert!(zmachine.input_interrupt_print());
     }
 
     #[test]
@@ -2313,5 +2344,767 @@ mod tests {
         let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
         assert!(zmachine.set_colors(6, 3).is_ok());
         assert_eq!(colors(), (6, 3));
+    }
+
+    #[test]
+    fn test_read_key() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&[' ']);
+        assert!(zmachine
+            .read_key(0)
+            .is_ok_and(|x| x == InputEvent::from_char(' ' as u16)));
+    }
+
+    #[test]
+    fn test_read_key_with_timeout() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&[' ']);
+        set_input_delay(50);
+        assert!(zmachine
+            .read_key(100)
+            .is_ok_and(|x| x == InputEvent::from_char(' ' as u16)));
+    }
+
+    #[test]
+    fn test_read_key_timeout() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&[' ']);
+        set_input_timeout();
+        assert!(zmachine
+            .read_key(100)
+            .is_ok_and(|x| x == InputEvent::from_interrupt(Interrupt::ReadTimeout)));
+    }
+
+    #[test]
+    fn test_read_key_sound_interrupt() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let ridx = RIdx::new(&[
+            Index::new("Snd ".to_string(), 1, 0x100),
+            Index::new("Snd ".to_string(), 2, 0x200),
+            Index::new("Pic ".to_string(), 1, 0x300),
+            Index::new("Snd ".to_string(), 4, 0x400),
+        ]);
+        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
+        let mut oggv = HashMap::new();
+        let mut aiff = HashMap::new();
+        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
+        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
+        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
+        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let manager = assert_ok(Manager::new(blorb));
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), Some(manager), "test"));
+        zmachine.set_sound_interrupt(0x1234);
+        let manager = zmachine.sound_manager.as_mut().unwrap();
+        assert!(!manager.is_playing());
+        assert!(zmachine
+            .read_key(0)
+            .is_ok_and(|x| x == InputEvent::from_interrupt(Interrupt::Sound)));
+    }
+
+    #[test]
+    fn test_read_key_mouse_click() {
+        let mut map = test_map(5);
+        map[0x101] = 2;
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        assert!(header::set_word(&mut zmachine.state, HeaderField::ExtensionTable, 0x100).is_ok());
+        input(&['\u{FD}']);
+        // test_terminal returns fixed mouse coordinates 12,18
+        assert!(zmachine
+            .read_key(0)
+            .is_ok_and(|x| x == InputEvent::from_mouse(0xFD, 18, 12)));
+        assert!(zmachine.read_word(0x102).is_ok_and(|x| x == 12));
+        assert!(zmachine.read_word(0x104).is_ok_and(|x| x == 18));
+    }
+
+    #[test]
+    fn test_read_key_mouse_double_click() {
+        let mut map = test_map(5);
+        map[0x101] = 2;
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        assert!(header::set_word(&mut zmachine.state, HeaderField::ExtensionTable, 0x100).is_ok());
+        input(&['\u{FE}']);
+        // test_terminal returns fixed mouse coordinates 12,18
+        assert!(zmachine
+            .read_key(0)
+            .is_ok_and(|x| x == InputEvent::from_mouse(0xFE, 18, 12)));
+        assert!(zmachine.read_word(0x102).is_ok_and(|x| x == 12));
+        assert!(zmachine.read_word(0x104).is_ok_and(|x| x == 18));
+    }
+
+    #[test]
+    fn test_read_line() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        // Tests length limit
+        // Tests backspace
+        // Tests terminator
+        input(&['T', 'e', 's', 't', 'i', 'n', 'g', '\u{08}', '\u{0d}']);
+        assert!(zmachine
+            .read_line(&[], 6, &['\r' as u16], 0)
+            .is_ok_and(|x| x
+                == [
+                    b'T' as u16,
+                    b'e' as u16,
+                    b's' as u16,
+                    b't' as u16,
+                    b'i' as u16,
+                    b'\r' as u16
+                ]));
+        assert_print("Testin");
+    }
+
+    #[test]
+    fn test_read_line_fn_terminator() {
+        let mut map = test_map(5);
+        map[0x101] = 2;
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        assert!(header::set_word(&mut zmachine.state, HeaderField::ExtensionTable, 0x100).is_ok());
+        input(&['T', 'e', 's', 't', 'i', 'n', 'g', 'x', '\u{08}', '\u{FD}']);
+        assert!(zmachine
+            .read_line(&[], 16, &['\r' as u16, 255], 0)
+            .is_ok_and(|x| x
+                == [
+                    b'T' as u16,
+                    b'e' as u16,
+                    b's' as u16,
+                    b't' as u16,
+                    b'i' as u16,
+                    b'n' as u16,
+                    b'g' as u16,
+                    0xFD
+                ]));
+        // The x is printed, even though it is erased by the backspace
+        assert_print("Testingx");
+        assert!(zmachine.read_word(0x102).is_ok_and(|x| x == 12));
+        assert!(zmachine.read_word(0x104).is_ok_and(|x| x == 18));
+    }
+
+    #[test]
+    fn test_read_line_with_timeout() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['T', 'e', 's', 't', 'i', 'n', 'g']);
+        assert!(zmachine
+            .read_line(&[], 16, &['\r' as u16], 100)
+            .is_ok_and(|x| x
+                == [
+                    b'T' as u16,
+                    b'e' as u16,
+                    b's' as u16,
+                    b't' as u16,
+                    b'i' as u16,
+                    b'n' as u16,
+                    b'g' as u16,
+                    b'\r' as u16
+                ]));
+        assert_print("Testing");
+    }
+    #[test]
+    fn test_read_line_timeout() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['T', 'e', 's', 't', 'i', 'n', 'g']);
+        set_input_delay(50);
+        assert!(zmachine
+            .read_line(&[], 16, &['\r' as u16], 100)
+            .is_ok_and(|x| x == [b'T' as u16, b'e' as u16,]));
+        assert_print("Te");
+    }
+
+    #[test]
+    fn test_read_line_sound_interrupt() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let ridx = RIdx::new(&[
+            Index::new("Snd ".to_string(), 1, 0x100),
+            Index::new("Snd ".to_string(), 2, 0x200),
+            Index::new("Pic ".to_string(), 1, 0x300),
+            Index::new("Snd ".to_string(), 4, 0x400),
+        ]);
+        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
+        let mut oggv = HashMap::new();
+        let mut aiff = HashMap::new();
+        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
+        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
+        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
+        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let manager = assert_ok(Manager::new(blorb));
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), Some(manager), "test"));
+        zmachine.set_sound_interrupt(0x1234);
+        let manager = zmachine.sound_manager.as_mut().unwrap();
+        assert!(!manager.is_playing());
+        assert!(zmachine
+            .read_line(&[], 16, &[b'\r' as u16], 0)
+            .is_ok_and(|x| x.is_empty()));
+    }
+
+    #[test]
+    fn test_prompt_filename_first() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['\r']);
+        assert!(zmachine
+            .prompt_filename("Filename? ", "pf01", false, true)
+            .is_ok_and(|x| x == "test-01.pf01"));
+        assert_print("Filename? test-01.pf01");
+    }
+
+    #[test]
+    fn test_prompt_filename_first_existing() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['\r']);
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("test-01.pf02");
+        assert!(f.is_ok());
+        assert!(Path::new("test-01.pf02").exists());
+        let r = zmachine.prompt_filename("Filename? ", "pf02", false, true);
+        assert!(fs::remove_file("test-01.pf02").is_ok());
+        assert!(r.is_ok_and(|x| x == "test-02.pf02"));
+        assert_print("Filename? test-02.pf02");
+    }
+
+    #[test]
+    fn test_prompt_filename_first_last_none() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['\r']);
+        let r = zmachine.prompt_filename("Filename? ", "pf03", true, false);
+        assert!(r.is_ok_and(|x| x == "test.pf03"));
+        assert_print("Filename? test.pf03");
+    }
+
+    #[test]
+    fn test_prompt_filename_first_last_existing() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['\r']);
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("test-01.pf04");
+        assert!(f.is_ok());
+        assert!(Path::new("test-01.pf04").exists());
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("test-02.pf04");
+        assert!(f.is_ok());
+        assert!(Path::new("test-02.pf04").exists());
+        let r = zmachine.prompt_filename("Filename? ", "pf04", true, false);
+        assert!(fs::remove_file("test-01.pf04").is_ok());
+        assert!(fs::remove_file("test-02.pf04").is_ok());
+        assert!(r.is_ok_and(|x| x == "test-02.pf04"));
+        assert_print("Filename? test-02.pf04");
+    }
+
+    #[test]
+    fn test_prompt_filename_overwrite_existing() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['\r']);
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("test-01.pf05");
+        assert!(f.is_ok());
+        assert!(Path::new("test-01.pf05").exists());
+        let r = zmachine.prompt_filename("Filename? ", "pf05", false, false);
+        assert!(fs::remove_file("test-01.pf05").is_ok());
+        assert!(r.is_err());
+        assert_print("Filename? test-01.pf05");
+    }
+
+    #[test]
+    fn test_prompt_filename_invalid_filename_z() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['\u{08}', '\u{08}', '\u{08}', '\u{08}', 'z', '5', '\r']);
+        let r = zmachine.prompt_filename("Filename? ", "pf06", false, false);
+        assert!(r.is_err());
+        assert_print("Filename? test.pf06z5");
+    }
+
+    #[test]
+    fn test_prompt_filename_invalid_filename_blb() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['\u{08}', '\u{08}', '\u{08}', '\u{08}', 'b', 'l', 'b', '\r']);
+        let r = zmachine.prompt_filename("Filename? ", "pf06", false, false);
+        assert!(r.is_err());
+        assert_print("Filename? test.pf06blb");
+    }
+
+    #[test]
+    fn test_prompt_filename_invalid_filename_blorb() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&[
+            '\u{08}', '\u{08}', '\u{08}', '\u{08}', 'b', 'l', 'o', 'r', 'b', '\r',
+        ]);
+        let r = zmachine.prompt_filename("Filename? ", "pf06", false, false);
+        assert!(r.is_err());
+        assert_print("Filename? test.pf06blorb");
+    }
+
+    #[test]
+    fn test_prompt_and_create() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['\r']);
+        let r = zmachine.prompt_and_create("Filename? ", "pc01", false);
+        assert!(Path::new("test-01.pc01").exists());
+        assert!(fs::remove_file("test-01.pc01").is_ok());
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn test_prompt_and_create_exists() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("test-01.pc02");
+        assert!(f.is_ok());
+        assert!(Path::new("test-01.pc02").exists());
+        input(&[
+            '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '-',
+            '0', '1', '.', 'p', 'c', '0', '2', '\r',
+        ]);
+        let r = zmachine.prompt_and_create("Filename? ", "pc02", false);
+        assert!(Path::new("test-01.pc02").exists());
+        assert!(fs::remove_file("test-01.pc02").is_ok());
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn test_prompt_and_create_exists_overwrite() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("test-01.pc03");
+        assert!(f.is_ok());
+        assert!(Path::new("test-01.pc03").exists());
+        input(&[
+            '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '-',
+            '0', '1', '.', 'p', 'c', '0', '3', '\r',
+        ]);
+        let r = zmachine.prompt_and_create("Filename? ", "pc03", true);
+        assert!(Path::new("test-01.pc03").exists());
+        assert!(fs::remove_file("test-01.pc03").is_ok());
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn test_prompt_and_write() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['\r']);
+        let r = zmachine.prompt_and_write("Filename? ", "pw01", &[1, 2, 3, 4], false);
+        assert!(Path::new("test-01.pw01").exists());
+        let data = fs::read("test-01.pw01");
+        assert!(fs::remove_file("test-01.pw01").is_ok());
+        assert!(r.is_ok());
+        assert!(data.is_ok_and(|x| x == vec![1, 2, 3, 4]));
+    }
+
+    #[test]
+    fn test_prompt_and_write_exists() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("test-01.pw02");
+        assert!(f.is_ok());
+        assert!(f.unwrap().write_all(&[1, 2, 3, 4]).is_ok());
+        assert!(Path::new("test-01.pw02").exists());
+        input(&[
+            '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '-',
+            '0', '1', '.', 'p', 'w', '0', '2', '\r',
+        ]);
+        let r = zmachine.prompt_and_write("Filename? ", "pw02", &[5, 6, 7, 8], false);
+        assert!(Path::new("test-01.pw02").exists());
+        let data = fs::read("test-01.pw02");
+        assert!(fs::remove_file("test-01.pw02").is_ok());
+        assert!(r.is_err());
+        assert!(data.is_ok_and(|x| x == vec![1, 2, 3, 4]));
+    }
+
+    #[test]
+    fn test_prompt_and_write_exists_overwrite() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("test-01.pw04");
+        assert!(f.is_ok());
+        assert!(f.unwrap().write_all(&[1, 2, 3, 4]).is_ok());
+        assert!(Path::new("test-01.pw04").exists());
+        input(&[
+            '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '\u{08}', '-',
+            '0', '1', '.', 'p', 'w', '0', '4', '\r',
+        ]);
+        let r = zmachine.prompt_and_write("Filename? ", "pw04", &[5, 6, 7, 8], true);
+        assert!(Path::new("test-01.pw04").exists());
+        let data = fs::read("test-01.pw04");
+        assert!(fs::remove_file("test-01.pw04").is_ok());
+        assert!(r.is_ok());
+        assert!(data.is_ok_and(|x| x == vec![5, 6, 7, 8]));
+    }
+
+    #[test]
+    fn test_prompt_and_read() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("test-01.pr01");
+        assert!(f.is_ok());
+        assert!(f.unwrap().write_all(&[1, 2, 3, 4]).is_ok());
+        assert!(Path::new("test-01.pr01").exists());
+        input(&['\r']);
+        let r = zmachine.prompt_and_read("Filename? ", "pr01");
+        assert!(fs::remove_file("test-01.pr01").is_ok());
+        assert!(r.is_ok_and(|x| x == [1, 2, 3, 4]));
+    }
+
+    #[test]
+    fn test_prompt_and_read_error() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['\r']);
+        let r = zmachine.prompt_and_read("Filename? ", "pr02");
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn test_quit() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&['\r']);
+        assert!(zmachine.quit().is_ok());
+        assert_print("Press any key to exit");
+        assert!(quit());
+    }
+
+    #[test]
+    fn test_new_line() {
+        let map = test_map(3);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        assert!(zmachine.new_line().is_ok());
+        assert_eq!(scroll(), 2);
+    }
+
+    #[test]
+    fn test_backspace() {
+        let map = test_map(3);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        assert!(zmachine.set_cursor(23, 2).is_ok());
+        assert!(zmachine.backspace().is_ok());
+        assert_eq!(backspace(), (23, 1));
+    }
+
+    #[test]
+    fn test_play_sound_v3() {
+        let map = test_map(3);
+        let m = Memory::new(map);
+        let ridx = RIdx::new(&[
+            Index::new("Snd ".to_string(), 1, 0x100),
+            Index::new("Snd ".to_string(), 2, 0x200),
+            Index::new("Pic ".to_string(), 1, 0x300),
+            Index::new("Snd ".to_string(), 4, 0x400),
+        ]);
+        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
+        let mut oggv = HashMap::new();
+        let mut aiff = HashMap::new();
+        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
+        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
+        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
+        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let manager = assert_ok(Manager::new(blorb));
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), Some(manager), "test"));
+        assert!(zmachine.play_sound(1, 8, 0, None).is_ok());
+        assert_eq!(play_sound(), (4, 8, 10));
+        assert!(zmachine.is_sound_playing());
+    }
+
+    #[test]
+    fn test_play_sound_v5() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let ridx = RIdx::new(&[
+            Index::new("Snd ".to_string(), 1, 0x100),
+            Index::new("Snd ".to_string(), 2, 0x200),
+            Index::new("Pic ".to_string(), 1, 0x300),
+            Index::new("Snd ".to_string(), 4, 0x400),
+        ]);
+        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
+        let mut oggv = HashMap::new();
+        let mut aiff = HashMap::new();
+        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
+        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
+        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
+        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let manager = assert_ok(Manager::new(blorb));
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), Some(manager), "test"));
+        assert!(zmachine.play_sound(1, 8, 0, None).is_ok());
+        assert_eq!(play_sound(), (4, 8, 0));
+        assert!(zmachine.is_sound_playing());
+    }
+
+    #[test]
+    fn test_play_sound_v5_with_repeats() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let ridx = RIdx::new(&[
+            Index::new("Snd ".to_string(), 1, 0x100),
+            Index::new("Snd ".to_string(), 2, 0x200),
+            Index::new("Pic ".to_string(), 1, 0x300),
+            Index::new("Snd ".to_string(), 4, 0x400),
+        ]);
+        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
+        let mut oggv = HashMap::new();
+        let mut aiff = HashMap::new();
+        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
+        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
+        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
+        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let manager = assert_ok(Manager::new(blorb));
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), Some(manager), "test"));
+        assert!(zmachine.play_sound(4, 8, 5, None).is_ok());
+        assert_eq!(play_sound(), (4, 8, 5));
+        assert!(zmachine.is_sound_playing());
+    }
+
+    #[test]
+    fn test_play_sound_v5_with_interrupt() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let ridx = RIdx::new(&[
+            Index::new("Snd ".to_string(), 1, 0x100),
+            Index::new("Snd ".to_string(), 2, 0x200),
+            Index::new("Pic ".to_string(), 1, 0x300),
+            Index::new("Snd ".to_string(), 4, 0x400),
+        ]);
+        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
+        let mut oggv = HashMap::new();
+        let mut aiff = HashMap::new();
+        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
+        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
+        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
+        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let manager = assert_ok(Manager::new(blorb));
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), Some(manager), "test"));
+        assert!(zmachine.play_sound(4, 8, 5, Some(0x500)).is_ok());
+        assert!(zmachine.sound_interrupt().is_some_and(|x| x == 0x500));
+        assert_eq!(play_sound(), (4, 8, 5));
+        assert!(zmachine.is_sound_playing());
+    }
+
+    #[test]
+    fn test_play_sound_change_volume() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let ridx = RIdx::new(&[
+            Index::new("Snd ".to_string(), 1, 0x100),
+            Index::new("Snd ".to_string(), 2, 0x200),
+            Index::new("Pic ".to_string(), 1, 0x300),
+            Index::new("Snd ".to_string(), 4, 0x400),
+        ]);
+        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
+        let mut oggv = HashMap::new();
+        let mut aiff = HashMap::new();
+        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
+        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
+        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
+        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let manager = assert_ok(Manager::new(blorb));
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), Some(manager), "test"));
+        assert!(zmachine.play_sound(4, 8, 5, None).is_ok());
+        assert_eq!(play_sound(), (4, 8, 5));
+        assert!(zmachine.is_sound_playing());
+        assert!(zmachine.play_sound(4, 4, 5, None).is_ok());
+        assert_eq!(play_sound(), (0, 4, 0));
+        assert!(zmachine.is_sound_playing());
+    }
+
+    #[test]
+    fn test_play_sound_no_effect() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let ridx = RIdx::new(&[
+            Index::new("Snd ".to_string(), 1, 0x100),
+            Index::new("Snd ".to_string(), 2, 0x200),
+            Index::new("Pic ".to_string(), 1, 0x300),
+            Index::new("Snd ".to_string(), 4, 0x400),
+        ]);
+        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
+        let mut oggv = HashMap::new();
+        let mut aiff = HashMap::new();
+        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
+        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
+        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
+        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let manager = assert_ok(Manager::new(blorb));
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), Some(manager), "test"));
+        assert!(zmachine.play_sound(2, 8, 5, None).is_ok());
+        assert_eq!(play_sound(), (0, 0, 0));
+        assert!(!zmachine.is_sound_playing());
+    }
+
+    #[test]
+    fn test_play_sound_no_manager() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        assert!(zmachine.play_sound(2, 8, 5, None).is_ok());
+        assert_eq!(play_sound(), (0, 0, 0));
+        assert!(!zmachine.is_sound_playing());
+    }
+
+    #[test]
+    fn test_stop_sound() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let ridx = RIdx::new(&[
+            Index::new("Snd ".to_string(), 1, 0x100),
+            Index::new("Snd ".to_string(), 2, 0x200),
+            Index::new("Pic ".to_string(), 1, 0x300),
+            Index::new("Snd ".to_string(), 4, 0x400),
+        ]);
+        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
+        let mut oggv = HashMap::new();
+        let mut aiff = HashMap::new();
+        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
+        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
+        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
+        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let manager = assert_ok(Manager::new(blorb));
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), Some(manager), "test"));
+        assert!(zmachine.play_sound(4, 8, 5, None).is_ok());
+        assert_eq!(play_sound(), (4, 8, 5));
+        assert!(zmachine.is_sound_playing());
+        assert!(zmachine.stop_sound().is_ok());
+        assert_eq!(play_sound(), (0, 0, 0));
+        assert!(!zmachine.is_sound_playing());
+    }
+
+    #[test]
+    fn test_stop_sound_not_playing() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let ridx = RIdx::new(&[
+            Index::new("Snd ".to_string(), 1, 0x100),
+            Index::new("Snd ".to_string(), 2, 0x200),
+            Index::new("Pic ".to_string(), 1, 0x300),
+            Index::new("Snd ".to_string(), 4, 0x400),
+        ]);
+        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
+        let mut oggv = HashMap::new();
+        let mut aiff = HashMap::new();
+        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
+        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
+        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
+        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let manager = assert_ok(Manager::new(blorb));
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), Some(manager), "test"));
+        assert!(!zmachine.is_sound_playing());
+        assert!(zmachine.stop_sound().is_ok());
+        assert_eq!(play_sound(), (0, 0, 0));
+        assert!(!zmachine.is_sound_playing());
+    }
+
+    #[test]
+    fn test_stop_sound_no_manager() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        assert!(zmachine.stop_sound().is_ok());
+        assert_eq!(play_sound(), (0, 0, 0));
+        assert!(!zmachine.is_sound_playing());
+    }
+
+    #[test]
+    fn test_is_sound_playing() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let ridx = RIdx::new(&[
+            Index::new("Snd ".to_string(), 1, 0x100),
+            Index::new("Snd ".to_string(), 2, 0x200),
+            Index::new("Pic ".to_string(), 1, 0x300),
+            Index::new("Snd ".to_string(), 4, 0x400),
+        ]);
+        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
+        let mut oggv = HashMap::new();
+        let mut aiff = HashMap::new();
+        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
+        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
+        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
+        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let manager = assert_ok(Manager::new(blorb));
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), Some(manager), "test"));
+        assert!(!zmachine.is_sound_playing());
+        assert!(zmachine.play_sound(4, 5, 5, None).is_ok());
+        assert!(zmachine.is_sound_playing());
+    }
+
+    #[test]
+    fn test_is_sound_playing_no_manager() {
+        let map = test_map(5);
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        assert!(!zmachine.is_sound_playing());
+    }
+
+    #[test]
+    fn test_run() {
+        let mut map = test_map(5);
+        // NOP and QUIT
+        map[0x400] = 0xB4;
+        map[0x401] = 0xBA;
+        let m = Memory::new(map);
+        let mut zmachine = assert_ok(ZMachine::new(m, Config::default(), None, "test"));
+        input(&[' ']);
+        assert!(zmachine.run().is_ok());
     }
 }
