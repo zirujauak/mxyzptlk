@@ -571,7 +571,7 @@ mod tests {
         let i = mock_instruction(0x400, vec![], opcode(3, 12), 0x401);
         assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x401));
         assert_print(
-            " Status Object                                                         -246/4567",
+            " Status Object                                                         -99/4567 ",
         );
     }
 
@@ -600,7 +600,7 @@ mod tests {
         let i = mock_instruction(0x400, vec![], opcode(3, 12), 0x401);
         assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x401));
         assert_print(
-            " Status Object                                                          12:00 AM",
+            " Status Object                                                         12:00 AM ",
         );
     }
 
@@ -630,7 +630,7 @@ mod tests {
         let i = mock_instruction(0x400, vec![], opcode(3, 12), 0x401);
         assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x401));
         assert_print(
-            " Status Object                                                          12:00 PM",
+            " Status Object                                                         12:00 PM ",
         );
     }
 
@@ -659,7 +659,7 @@ mod tests {
         let i = mock_instruction(0x400, vec![], opcode(3, 12), 0x401);
         assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x401));
         assert_print(
-            " Status Object                                                           1:59 AM",
+            " Status Object                                                          1:59 AM ",
         );
     }
 

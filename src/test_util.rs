@@ -495,6 +495,11 @@ pub fn mock_custom_dictionary(map: &mut [u8], address: usize) {
     map[address + 30] = 0xA5;
 }
 
+pub fn assert_ok<T>(result: Result<T, RuntimeError>) -> T {
+    assert!(result.is_ok());
+    result.unwrap()
+}
+
 pub fn assert_eq_ok<T: std::fmt::Debug + std::cmp::PartialEq>(
     s: Result<T, RuntimeError>,
     value: T,

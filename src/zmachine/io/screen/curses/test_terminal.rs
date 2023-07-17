@@ -40,7 +40,11 @@ impl Terminal for TestTerminal {
             }
 
             if let Some(c) = input_char() {
-                InputEvent::from_char(c as u16)
+                if c == '\u{FD}' || c == '\u{FE}' {
+                    InputEvent::from_mouse(c as u16, 18, 12)
+                } else {
+                    InputEvent::from_char(c as u16)
+                }
             } else {
                 InputEvent::from_char('\r' as u16)
             }

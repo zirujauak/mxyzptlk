@@ -316,11 +316,12 @@ impl IO {
             left.push('.' as u16);
         }
 
-        let mut spaces = vec![0x20; width - left.len() - right.len() - 1];
-        let mut status_line = vec![0x20];
+        let mut spaces = vec![b' ' as u16; width - left.len() - right.len() - 2];
+        let mut status_line = vec![b' ' as u16];
         status_line.append(left);
         status_line.append(&mut spaces);
         status_line.append(right);
+        status_line.push(b' ' as u16);
         let mut style = CellStyle::new();
         style.set(Style::Reverse as u8);
 
@@ -731,7 +732,6 @@ mod tests {
         io.buffered = true;
         assert!(io.print_vec(&"This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on".bytes().map(|x| x as u16).collect::<Vec<u16>>()).is_ok());
         assert_print("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
-        println!("{:?}", io.cursor().unwrap());
         assert!(io.cursor().is_ok_and(|x| x == (2, 46)));
     }
 
@@ -752,7 +752,6 @@ mod tests {
         assert!(fs::remove_file(Path::new("test-buffer.txt")).is_ok());
         assert!(s.is_ok_and(|x| x.eq("This is a very long string greater than 80 characters in length that will not \nbe wrapped because buffering is not turned on")));
         assert_print("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
-        println!("{:?}", io.cursor().unwrap());
         assert!(io.cursor().is_ok_and(|x| x == (2, 46)));
     }
 
@@ -1001,7 +1000,7 @@ mod tests {
         assert!(io
             .status_line(
                 &mut "(Darkness)".bytes().map(|x| x as u16).collect::<Vec<u16>>(),
-                &mut "    0/999 ".bytes().map(|x| x as u16).collect::<Vec<u16>>()
+                &mut "    0/999".bytes().map(|x| x as u16).collect::<Vec<u16>>()
             )
             .is_ok());
         assert!(io.cursor().is_ok_and(|x| x == (24, 1)));
