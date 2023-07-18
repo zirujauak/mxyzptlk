@@ -17,7 +17,7 @@ pub fn rfalse(zmachine: &mut ZMachine, _instruction: &Instruction) -> Result<usi
 
 pub fn print(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let ztext = zmachine.string_literal(instruction.address() + 1)?;
-    let text = text::from_vec(zmachine, &ztext)?;
+    let text = text::from_vec(zmachine, &ztext, false)?;
     zmachine.print(&text)?;
     Ok(instruction.next_address() + (ztext.len() * 2))
 }
@@ -27,7 +27,7 @@ pub fn print_ret(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let ztext = zmachine.string_literal(instruction.address + 1)?;
-    let text = text::from_vec(zmachine, &ztext)?;
+    let text = text::from_vec(zmachine, &ztext, false)?;
 
     zmachine.print(&text)?;
     zmachine.new_line()?;

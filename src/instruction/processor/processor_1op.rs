@@ -74,7 +74,7 @@ pub fn print_addr(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let text = text::as_text(zmachine, operands[0] as usize)?;
+    let text = text::as_text(zmachine, operands[0] as usize, false)?;
 
     zmachine.print(&text)?;
     Ok(instruction.next_address())
@@ -136,7 +136,7 @@ pub fn print_obj(
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let ztext = property::short_name(zmachine, operands[0] as usize)?;
-    let text = text::from_vec(zmachine, &ztext)?;
+    let text = text::from_vec(zmachine, &ztext, false)?;
     zmachine.print(&text)?;
     Ok(instruction.next_address())
 }
@@ -159,7 +159,7 @@ pub fn print_paddr(
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let address = zmachine.packed_string_address(operands[0])?;
-    let text = text::as_text(zmachine, address)?;
+    let text = text::as_text(zmachine, address, false)?;
     zmachine.print(&text)?;
     Ok(instruction.next_address())
 }

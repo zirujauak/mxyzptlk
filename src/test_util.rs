@@ -495,6 +495,216 @@ pub fn mock_custom_dictionary(map: &mut [u8], address: usize) {
     map[address + 30] = 0xA5;
 }
 
+pub fn mock_sorted_dictionary(map: &mut [u8]) {
+    // Sorted dictionary with 8 entries
+    // and
+    // brutus
+    // hello
+    // inventory
+    // look
+    // mxyzptlk
+    // sailor
+    // xyzzy
+    // Set the dictionary address to 0x300
+    map[0x08] = 0x03;
+
+    map[0x300] = 3;
+    map[0x301] = b'.';
+    map[0x302] = b',';
+    map[0x303] = b'"';
+
+    // Entry length is 9 bytes
+    map[0x304] = 0x9;
+    // There are 8 entries
+    map[0x306] = 8;
+
+    // and
+    //   6     13    9        5     5     5        5     5     5
+    // 0 00110 10011 01001  0 00101 00101 00101  1 00101 00101 00101
+    // 1A69 14A5 94A5
+    map[0x307] = 0x1A;
+    map[0x308] = 0x69;
+    map[0x309] = 0x14;
+    map[0x30A] = 0xA5;
+    map[0x30B] = 0x94;
+    map[0x30C] = 0xA5;
+    // brutus
+    //   7     17    1A       19    1a    18       5     5     5
+    // 0 00111 10111 11010  0 11001 11010 11000  1 00101 00101 00101
+    // 1EFA 6758 94A5
+    map[0x310] = 0x1E;
+    map[0x311] = 0xFA;
+    map[0x312] = 0x67;
+    map[0x313] = 0x58;
+    map[0x314] = 0x94;
+    map[0x315] = 0xA5;
+    // hello
+    //   D     A     11       11    14    5        5     5     5
+    // 0 01101 01010 10001  0 10001 10100 00101  1 00101 00101 00101
+    // 3551 4685 94A5
+    map[0x319] = 0x35;
+    map[0x31A] = 0x51;
+    map[0x31B] = 0x46;
+    map[0x31C] = 0x85;
+    map[0x31D] = 0x94;
+    map[0x31E] = 0xA5;
+    // inventory
+    //   E     13    1B       4     13    19       14    17    1E
+    // 0 01110 10011 11011  0 01010 10011 11001  1 10100 10111 11110
+    // 3A7B 2A79 D2FE
+    map[0x322] = 0x3A;
+    map[0x323] = 0x7B;
+    map[0x324] = 0x2A;
+    map[0x325] = 0x79;
+    map[0x326] = 0xD2;
+    map[0x327] = 0xFE;
+    // look
+    //   11    14    14       10    5     5
+    // 0 10001 10100 10100  0 10000 00101 00101
+    // 4694 40A5 94A5;
+    map[0x32B] = 0x46;
+    map[0x32C] = 0x94;
+    map[0x32D] = 0x40;
+    map[0x32E] = 0xA5;
+    map[0x32F] = 0x94;
+    map[0x330] = 0xA5;
+    // mxyzptlk
+    //   12    1D    1E       1F    15    19       11    10    5
+    // 0 10010 11101 11110  0 11111 10101 11001  1 10001 10000 00101
+    // 4BBE 7EB9 C605
+    map[0x334] = 0x4B;
+    map[0x335] = 0xBE;
+    map[0x336] = 0x7E;
+    map[0x337] = 0xB9;
+    map[0x338] = 0xC6;
+    map[0x339] = 0x05;
+    // sailor
+    //   18    6     E        11    14    17
+    // 0 11000 00110 01110  0 10001 10100 10111
+    // 60CE 4697 94A5
+    map[0x33D] = 0x60;
+    map[0x33E] = 0xCE;
+    map[0x33F] = 0x46;
+    map[0x340] = 0x97;
+    map[0x341] = 0x94;
+    map[0x342] = 0xA5;
+    // xyzzy
+    //   1D    1E    1F       1F    1E    5
+    // 0 11101 11110 11111  0 11111 11110 00101
+    // 77DF 7FC5
+    map[0x346] = 0x77;
+    map[0x347] = 0xDF;
+    map[0x348] = 0x7F;
+    map[0x349] = 0xC5;
+    map[0x34A] = 0x94;
+    map[0x34B] = 0xA5;
+}
+
+pub fn mock_unsorted_dictionary(map: &mut [u8]) {
+    // Unsorted dictionary with 8 entries
+    // look
+    // and
+    // inventory
+    // brutus
+    // xyzzy
+    // hello
+    // sailor
+    // mxyzptlk
+    // Set the dictionary address to 0x300
+    map[0x08] = 0x03;
+
+    map[0x300] = 3;
+    map[0x301] = b'.';
+    map[0x302] = b',';
+    map[0x303] = b'"';
+
+    // Entry length is 9 bytes
+    map[0x304] = 0x9;
+    // There are -8 entries (unsorted)
+    map[0x305] = 0xFF;
+    map[0x306] = 0xF8;
+
+    // look
+    //   11    14    14       10    5     5
+    // 0 10001 10100 10100  0 01000 00101 00101
+    // 4694 40A5 94A5;
+    map[0x307] = 0x46;
+    map[0x308] = 0x94;
+    map[0x309] = 0x40;
+    map[0x30A] = 0xA5;
+    map[0x30B] = 0x94;
+    map[0x30C] = 0xA5;
+    // and
+    //   6     13    9        5     5     5        5     5     5
+    // 0 00110 10011 01001  0 00101 00101 00101  1 00101 00101 00101
+    // 1A69 14A5 94A5
+    map[0x310] = 0x1A;
+    map[0x311] = 0x69;
+    map[0x312] = 0x14;
+    map[0x313] = 0xA5;
+    map[0x314] = 0x94;
+    map[0x315] = 0xA5;
+    // inventory
+    //   E     13    1B       4     13    19       14    17    1E
+    // 0 01110 10011 11011  0 01010 10011 11001  1 10100 10111 11110
+    // 3A7B 2A79 D2FE
+    map[0x319] = 0x3A;
+    map[0x31A] = 0x7B;
+    map[0x31B] = 0x2A;
+    map[0x31C] = 0x79;
+    map[0x31D] = 0xD2;
+    map[0x31E] = 0xFE;
+    // brutus
+    //   7     16    1A       19    1a    18       5     5     5
+    // 0 00111 10110 11010  0 11001 11010 11000  1 00101 00101 00101
+    // 1EFA 6758 94A5
+    map[0x322] = 0x1E;
+    map[0x323] = 0xFA;
+    map[0x324] = 0x67;
+    map[0x325] = 0x58;
+    map[0x326] = 0x94;
+    map[0x327] = 0xA5;
+    // xyzzy
+    //   1D    1E    1F       1F    1E    5
+    // 0 11101 11110 11111  1 11111 11110 00101
+    // 77DF 7FC5
+    map[0x32B] = 0x77;
+    map[0x32C] = 0xDF;
+    map[0x32D] = 0x7F;
+    map[0x32E] = 0xC5;
+    map[0x32F] = 0x94;
+    map[0x330] = 0xA5;
+    // hello
+    //   D     A     11       11    14    5        5     5     5
+    // 0 01101 01010 10001  0 10001 10100 00101  1 00101 00101 00101
+    // 3551 4685 94A5
+    map[0x334] = 0x35;
+    map[0x335] = 0x51;
+    map[0x336] = 0x46;
+    map[0x337] = 0x85;
+    map[0x338] = 0x94;
+    map[0x339] = 0xA5;
+    // sailor
+    //   18    6     E        11    14    17
+    // 0 11000 00110 01110  0 10001 10100 10111
+    // 60CE 4697 94A5
+    map[0x33D] = 0x60;
+    map[0x33E] = 0xCE;
+    map[0x33F] = 0x46;
+    map[0x340] = 0x97;
+    map[0x341] = 0x94;
+    map[0x342] = 0xA5;
+    // mxyzptlk
+    //   12    1D    1E       1F    15    19       11    10    5
+    // 0 10010 11101 11110  0 11111 10101 11001  1 10001 10000 00101
+    // 4BBE 7E99 C605
+    map[0x346] = 0x4B;
+    map[0x347] = 0xBE;
+    map[0x348] = 0x7E;
+    map[0x349] = 0xB9;
+    map[0x34A] = 0xC6;
+    map[0x34B] = 0x05;
+}
 pub fn assert_ok<T>(result: Result<T, RuntimeError>) -> T {
     assert!(result.is_ok());
     result.unwrap()

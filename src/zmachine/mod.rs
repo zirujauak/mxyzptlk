@@ -414,7 +414,7 @@ impl ZMachine {
     pub fn status_line(&mut self) -> Result<(), RuntimeError> {
         let status_type = header::flag1(&self.state, Flags1v3::StatusLineType as u8)?;
         let object = self.state.variable(16)? as usize;
-        let mut left = text::from_vec(self, &property::short_name(self, object)?)?;
+        let mut left = text::from_vec(self, &property::short_name(self, object)?, false)?;
         let mut right: Vec<u16> = if status_type == 0 {
             // Score is between -99 and 999 inclusive
             let score = i16::min(999, i16::max(-99, self.state.variable(17)? as i16));
