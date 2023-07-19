@@ -35,9 +35,7 @@ fn abbreviation(
 ) -> Result<Vec<u16>, RuntimeError> {
     let abbreviation_table = zmachine.header_word(HeaderField::AbbreviationsTable)? as usize;
     let entry = (64 * (abbrev_table - 1)) + (index * 2);
-    println!("{:04x}/{:02x}", abbreviation_table, entry);
     let word_addr = zmachine.read_word(abbreviation_table + entry as usize)? as usize;
-    println!("{:04x}", word_addr * 2);
     as_text(zmachine, word_addr * 2, true)
 }
 
@@ -85,7 +83,6 @@ pub fn from_vec(
         let b2 = (w >> 5 & 0x1F) as u8;
         let b3 = (w & 0x1F) as u8;
 
-        println!("{:02x} {:02x} {:02x}", b1, b2, b3);
         for b in [b1, b2, b3] {
             if abbrev > 0 {
                 let mut abbreviation = abbreviation(zmachine, abbrev, b)?;
@@ -198,7 +195,6 @@ fn search_entry(
     // If min exceeds max, the entry was not found
     'outer: loop {
         let addr = address + (pivot * entry_size);
-        println!("{}/{}/{} {:04x}", min, max, pivot, addr);
         for (i, wrd) in word.iter().enumerate() {
             let w = zmachine.read_word(addr + (i * 2))?;
             match w.cmp(wrd) {
