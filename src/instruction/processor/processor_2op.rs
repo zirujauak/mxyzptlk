@@ -358,12 +358,13 @@ pub fn throw(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize
 #[cfg(test)]
 mod tests {
     use crate::{
+        assert_ok_eq,
         instruction::{
             processor::{dispatch, Opcode},
             OpcodeForm, OperandCount, OperandType,
         },
         object::{self, attribute},
-        test_util::*, assert_ok_eq,
+        test_util::*,
     };
 
     fn opcode_2op(version: u8, instruction: u8) -> Opcode {

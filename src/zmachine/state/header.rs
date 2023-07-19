@@ -397,7 +397,8 @@ mod tests {
             0
         );
         assert_ok_eq!(
-            header::flag1(&state, Flags1v3::StatusLineNotAvailable as u8), 0
+            header::flag1(&state, Flags1v3::StatusLineNotAvailable as u8),
+            0
         );
         assert_ok_eq!(header::flag1(&state, Flags1v3::StatusLineType as u8), 0);
         assert_ok_eq!(

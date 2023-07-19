@@ -751,7 +751,7 @@ macro_rules! assert_some_eq {
 macro_rules! assert_print {
     ($value:expr) => {{
         assert_eq!(&$crate::test_util::print(), $value)
-    }}
+    }};
 }
 
 // pub fn assert_print(str: &str) {

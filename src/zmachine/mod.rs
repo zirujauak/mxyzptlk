@@ -864,7 +864,7 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::{
-        assert_ok, assert_ok_eq, assert_some, assert_some_eq,
+        assert_ok, assert_ok_eq, assert_print, assert_some, assert_some_eq,
         iff::blorb::{
             aiff::AIFF,
             oggv::OGGV,
@@ -873,11 +873,11 @@ mod tests {
             Blorb,
         },
         test_util::{
-            backspace, beep, buffer_mode, colors, cursor, erase_line, erase_window,
-            input, mock_object, mock_routine, play_sound, quit, scroll, set_input_delay,
+            backspace, beep, buffer_mode, colors, cursor, erase_line, erase_window, input,
+            mock_object, mock_routine, play_sound, quit, scroll, set_input_delay,
             set_input_timeout, split, style, test_map, window,
         },
-        zmachine::{io::screen::Style, state::header::Flags2}, assert_print,
+        zmachine::{io::screen::Style, state::header::Flags2},
     };
 
     use super::*;

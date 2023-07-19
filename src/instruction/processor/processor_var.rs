@@ -701,9 +701,10 @@ mod tests {
     use std::{fs, path::Path};
 
     use crate::{
+        assert_ok_eq, assert_print, assert_some_eq,
         instruction::{processor::dispatch, Opcode, OpcodeForm, OperandCount, OperandType},
         object::property,
-        test_util::*, assert_ok_eq, assert_some_eq, assert_print,
+        test_util::*,
     };
 
     fn opcode(version: u8, instruction: u8) -> Opcode {

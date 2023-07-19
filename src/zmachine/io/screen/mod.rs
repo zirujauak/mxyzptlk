@@ -715,10 +715,10 @@ pub trait Terminal {
 #[cfg(test)]
 mod tests {
     use crate::{
-        assert_ok, assert_ok_eq, assert_some_eq, assert_print,
+        assert_ok, assert_ok_eq, assert_print, assert_some_eq,
         test_util::{
-            backspace, beep, buffer_mode, colors, cursor, input, output_stream, quit,
-            reset, scroll, split, style,
+            backspace, beep, buffer_mode, colors, cursor, input, output_stream, quit, reset,
+            scroll, split, style,
         },
     };
 
@@ -921,38 +921,40 @@ mod tests {
     #[test]
     fn test_screen_map_color() {
         let screen = assert_ok!(Screen::new_v5(Config::default()));
-        assert_ok_eq!(screen
-            .map_color(0, Color::Black, Color::White), Color::Black);
-        assert_ok_eq!(screen
-            .map_color(1, Color::Black, Color::White), Color::White);
-        assert_ok_eq!(screen
-            .map_color(2, Color::Red, Color::White), Color::Black);
-        assert_ok_eq!(screen
-            .map_color(3, Color::Black, Color::White), Color::Red);
-        assert_ok_eq!(screen
-            .map_color(4, Color::Black, Color::White), Color::Green);
-        assert_ok_eq!(screen
-            .map_color(5, Color::Black, Color::White), Color::Yellow);
-        assert_ok_eq!(screen
-            .map_color(6, Color::Black, Color::White), Color::Blue);
-        assert_ok_eq!(screen
-            .map_color(7, Color::Black, Color::White), Color::Magenta);
-        assert_ok_eq!(screen
-            .map_color(8, Color::Black, Color::White), Color::Cyan);
-        assert_ok_eq!(screen
-            .map_color(9, Color::Black, Color::Red), Color::White);
+        assert_ok_eq!(
+            screen.map_color(0, Color::Black, Color::White),
+            Color::Black
+        );
+        assert_ok_eq!(
+            screen.map_color(1, Color::Black, Color::White),
+            Color::White
+        );
+        assert_ok_eq!(screen.map_color(2, Color::Red, Color::White), Color::Black);
+        assert_ok_eq!(screen.map_color(3, Color::Black, Color::White), Color::Red);
+        assert_ok_eq!(
+            screen.map_color(4, Color::Black, Color::White),
+            Color::Green
+        );
+        assert_ok_eq!(
+            screen.map_color(5, Color::Black, Color::White),
+            Color::Yellow
+        );
+        assert_ok_eq!(screen.map_color(6, Color::Black, Color::White), Color::Blue);
+        assert_ok_eq!(
+            screen.map_color(7, Color::Black, Color::White),
+            Color::Magenta
+        );
+        assert_ok_eq!(screen.map_color(8, Color::Black, Color::White), Color::Cyan);
+        assert_ok_eq!(screen.map_color(9, Color::Black, Color::Red), Color::White);
         assert!(screen.map_color(10, Color::Black, Color::White).is_err());
     }
 
     #[test]
     fn test_screen_map_colors() {
         let screen = assert_ok!(Screen::new_v5(Config::default()));
-        assert_ok_eq!(screen
-            .map_colors(8, 5), (Color::Cyan, Color::Yellow));
-        assert_ok_eq!(screen
-            .map_colors(1, 1), (Color::White, Color::Black));
-        assert_ok_eq!(screen
-            .map_colors(0, 0), (Color::White, Color::Black));
+        assert_ok_eq!(screen.map_colors(8, 5), (Color::Cyan, Color::Yellow));
+        assert_ok_eq!(screen.map_colors(1, 1), (Color::White, Color::Black));
+        assert_ok_eq!(screen.map_colors(0, 0), (Color::White, Color::Black));
         assert!(screen.map_colors(0, 10).is_err());
         assert!(screen.map_colors(10, 0).is_err());
     }

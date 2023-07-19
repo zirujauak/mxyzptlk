@@ -223,10 +223,7 @@ mod tests {
         );
         let ifhd = assert_some!(blorb.ifhd());
         assert_eq!(ifhd.release_number(), 0x1122);
-        assert_eq!(
-            ifhd.serial_number(),
-            &[b'1', b'2', b'3', b'4', b'5', b'6']
-        );
+        assert_eq!(ifhd.serial_number(), &[b'1', b'2', b'3', b'4', b'5', b'6']);
         assert_eq!(ifhd.checksum(), 0x3344);
         assert_eq!(ifhd.pc(), 0x556677);
         let sloop = assert_some!(blorb.sloop());

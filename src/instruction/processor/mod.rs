@@ -263,7 +263,7 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
 
 #[cfg(test)]
 pub mod tests {
-    use crate::{test_util::*, assert_ok, assert_ok_eq};
+    use crate::{assert_ok, assert_ok_eq, test_util::*};
 
     use super::*;
 

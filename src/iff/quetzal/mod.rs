@@ -131,7 +131,7 @@ impl Quetzal {
 
 #[cfg(test)]
 mod tests {
-    use crate::{assert_some, assert_ok};
+    use crate::{assert_ok, assert_some};
 
     use super::{stks::StackFrame, *};
 
@@ -173,7 +173,10 @@ mod tests {
         assert_eq!(quetzal.ifhd().serial_number(), &[1, 2, 3, 4, 5, 6]);
         assert_eq!(quetzal.ifhd().checksum(), 0x5678);
         assert_eq!(quetzal.ifhd().pc(), 0x112233);
-        assert_eq!(assert_some!(quetzal.cmem()).data(), &[1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(
+            assert_some!(quetzal.cmem()).data(),
+            &[1, 2, 3, 4, 5, 6, 7, 8]
+        );
         assert!(quetzal.umem().is_none());
         assert_eq!(quetzal.stks().stks().len(), 2);
         assert_eq!(quetzal.stks().stks()[0].return_address(), 0x123456);
