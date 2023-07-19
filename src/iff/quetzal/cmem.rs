@@ -48,15 +48,13 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let c = CMem::new(&[1, 2, 3, 4]);
-        assert_eq!(c.data(), &[1, 2, 3, 4]);
+        assert_eq!(CMem::new(&[1, 2, 3, 4]).data(), &[1, 2, 3, 4]);
     }
 
     #[test]
     fn test_from_vec_u8() {
         let v = vec![1, 2, 3, 4];
-        let c = CMem::from(v);
-        assert_eq!(c.data(), &[1, 2, 3, 4]);
+        assert_eq!(CMem::from(v).data(), &[1, 2, 3, 4]);
     }
 
     #[test]
@@ -67,7 +65,6 @@ mod tests {
             "CMem".to_string(),
             &vec![1, 2, 3, 4],
         );
-        let c = CMem::from(chunk);
-        assert_eq!(c.data(), &[1, 2, 3, 4])
+        assert_eq!(CMem::from(chunk).data(), &[1, 2, 3, 4])
     }
 }

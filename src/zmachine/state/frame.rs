@@ -253,6 +253,8 @@ impl Frame {
 
 #[cfg(test)]
 mod tests {
+    use crate::{assert_ok, assert_ok_eq, assert_some_eq};
+
     use super::*;
 
     #[test]
@@ -324,9 +326,7 @@ mod tests {
         assert_eq!(frames[1].local_variables(), &[0x8765, 0xcba9]);
         assert_eq!(frames[1].argument_count(), 0x2);
         assert!(frames[1].stack().is_empty());
-        assert!(frames[1]
-            .result()
-            .is_some_and(|x| x == &StoreResult::new(0, 0x80)));
+        assert_some_eq!(frames[1].result(), &StoreResult::new(0, 0x80));
         assert_eq!(frames[1].return_address(), 0x4321);
     }
 
@@ -368,9 +368,7 @@ mod tests {
         assert_eq!(frame.local_variables(), &[0x1122, 0x3344, 0x5566, 0x7788]);
         assert_eq!(frame.argument_count(), 3);
         assert_eq!(frame.stack(), &[0x1111, 0x2222]);
-        assert!(frame
-            .result()
-            .is_some_and(|x| x == &StoreResult::new(0x4321, 0x80)));
+        assert_some_eq!(frame.result(), &StoreResult::new(0x4321, 0x80));
         assert_eq!(frame.return_address(), 0x9876);
         assert!(!frame.input_interrupt());
         assert!(!frame.sound_interrupt());
@@ -387,8 +385,8 @@ mod tests {
             Some(StoreResult::new(0x4321, 0x80)),
             0x9876,
         );
-        assert!(frame.pop().is_ok_and(|x| x == 0x2222));
-        assert!(frame.pop().is_ok_and(|x| x == 0x1111));
+        assert_ok_eq!(frame.pop(), 0x2222);
+        assert_ok_eq!(frame.pop(), 0x1111);
         assert!(frame.pop().is_err());
     }
 
@@ -403,10 +401,10 @@ mod tests {
             Some(StoreResult::new(0x4321, 0x80)),
             0x9876,
         );
-        assert!(frame.peek().is_ok_and(|x| x == 0x2222));
-        assert!(frame.pop().is_ok_and(|x| x == 0x2222));
-        assert!(frame.peek().is_ok_and(|x| x == 0x1111));
-        assert!(frame.pop().is_ok_and(|x| x == 0x1111));
+        assert_ok_eq!(frame.peek(), 0x2222);
+        assert_ok_eq!(frame.pop(), 0x2222);
+        assert_ok_eq!(frame.peek(), 0x1111);
+        assert_ok_eq!(frame.pop(), 0x1111);
         assert!(frame.peek().is_err());
     }
 
@@ -426,11 +424,11 @@ mod tests {
         assert_eq!(frame.stack().len(), 3);
         frame.push(0x789a);
         assert_eq!(frame.stack().len(), 4);
-        assert!(frame.pop().is_ok_and(|x| x == 0x789a));
+        assert_ok_eq!(frame.pop(), 0x789a);
         assert_eq!(frame.stack().len(), 3);
-        assert!(frame.pop().is_ok_and(|x| x == 0x3456));
+        assert_ok_eq!(frame.pop(), 0x3456);
         assert_eq!(frame.stack().len(), 2);
-        assert!(frame.peek().is_ok_and(|x| x == 0x2222));
+        assert_ok_eq!(frame.peek(), 0x2222);
         assert_eq!(frame.stack().len(), 2);
     }
 
@@ -445,15 +443,15 @@ mod tests {
             Some(StoreResult::new(0x4321, 0x80)),
             0x9876,
         );
-        assert!(frame.local_variable(1).is_ok_and(|x| x == 0x1122));
-        assert!(frame.local_variable(2).is_ok_and(|x| x == 0x3344));
-        assert!(frame.local_variable(3).is_ok_and(|x| x == 0x5566));
-        assert!(frame.local_variable(4).is_ok_and(|x| x == 0x7788));
+        assert_ok_eq!(frame.local_variable(1), 0x1122);
+        assert_ok_eq!(frame.local_variable(2), 0x3344);
+        assert_ok_eq!(frame.local_variable(3), 0x5566);
+        assert_ok_eq!(frame.local_variable(4), 0x7788);
         assert!(frame.local_variable(5).is_err());
         assert_eq!(frame.stack().len(), 2);
-        assert!(frame.local_variable(0).is_ok_and(|x| x == 0x2222));
+        assert_ok_eq!(frame.local_variable(0), 0x2222);
         assert_eq!(frame.stack().len(), 1);
-        assert!(frame.local_variable(0).is_ok_and(|x| x == 0x1111));
+        assert_ok_eq!(frame.local_variable(0), 0x1111);
         assert_eq!(frame.stack().len(), 0);
         assert!(frame.local_variable(0).is_err());
     }
@@ -469,15 +467,15 @@ mod tests {
             Some(StoreResult::new(0x4321, 0x80)),
             0x9876,
         );
-        assert!(frame.peek_local_variable(1).is_ok_and(|x| x == 0x1122));
-        assert!(frame.peek_local_variable(2).is_ok_and(|x| x == 0x3344));
-        assert!(frame.peek_local_variable(3).is_ok_and(|x| x == 0x5566));
-        assert!(frame.peek_local_variable(4).is_ok_and(|x| x == 0x7788));
+        assert_ok_eq!(frame.peek_local_variable(1), 0x1122);
+        assert_ok_eq!(frame.peek_local_variable(2), 0x3344);
+        assert_ok_eq!(frame.peek_local_variable(3), 0x5566);
+        assert_ok_eq!(frame.peek_local_variable(4), 0x7788);
         assert!(frame.peek_local_variable(5).is_err());
         assert_eq!(frame.stack().len(), 2);
-        assert!(frame.peek_local_variable(0).is_ok_and(|x| x == 0x2222));
+        assert_ok_eq!(frame.peek_local_variable(0), 0x2222);
         assert_eq!(frame.stack().len(), 2);
-        assert!(frame.peek_local_variable(0).is_ok_and(|x| x == 0x2222));
+        assert_ok_eq!(frame.peek_local_variable(0), 0x2222);
     }
 
     #[test]
@@ -491,20 +489,20 @@ mod tests {
             Some(StoreResult::new(0x4321, 0x80)),
             0x9876,
         );
-        assert!(frame.local_variable(1).is_ok_and(|x| x == 0x1122));
-        assert!(frame.local_variable(2).is_ok_and(|x| x == 0x3344));
-        assert!(frame.local_variable(3).is_ok_and(|x| x == 0x5566));
-        assert!(frame.local_variable(4).is_ok_and(|x| x == 0x7788));
+        assert_ok_eq!(frame.local_variable(1), 0x1122);
+        assert_ok_eq!(frame.local_variable(2), 0x3344);
+        assert_ok_eq!(frame.local_variable(3), 0x5566);
+        assert_ok_eq!(frame.local_variable(4), 0x7788);
         assert!(frame.set_local_variable(2, 0).is_ok());
-        assert!(frame.local_variable(1).is_ok_and(|x| x == 0x1122));
-        assert!(frame.local_variable(2).is_ok_and(|x| x == 0));
-        assert!(frame.local_variable(3).is_ok_and(|x| x == 0x5566));
-        assert!(frame.local_variable(4).is_ok_and(|x| x == 0x7788));
+        assert_ok_eq!(frame.local_variable(1), 0x1122);
+        assert_ok_eq!(frame.local_variable(2), 0);
+        assert_ok_eq!(frame.local_variable(3), 0x5566);
+        assert_ok_eq!(frame.local_variable(4), 0x7788);
         assert!(frame.set_local_variable(5, 0).is_err());
         assert_eq!(frame.stack().len(), 2);
         assert!(frame.set_local_variable(0, 0x3333).is_ok());
         assert_eq!(frame.stack().len(), 3);
-        assert!(frame.local_variable(0).is_ok_and(|x| x == 0x3333));
+        assert_ok_eq!(frame.local_variable(0), 0x3333);
         assert_eq!(frame.stack().len(), 2);
     }
 
@@ -519,36 +517,34 @@ mod tests {
             Some(StoreResult::new(0x4321, 0x80)),
             0x9876,
         );
-        assert!(frame.local_variable(1).is_ok_and(|x| x == 0x1122));
-        assert!(frame.local_variable(2).is_ok_and(|x| x == 0x3344));
-        assert!(frame.local_variable(3).is_ok_and(|x| x == 0x5566));
-        assert!(frame.local_variable(4).is_ok_and(|x| x == 0x7788));
+        assert_ok_eq!(frame.local_variable(1), 0x1122);
+        assert_ok_eq!(frame.local_variable(2), 0x3344);
+        assert_ok_eq!(frame.local_variable(3), 0x5566);
+        assert_ok_eq!(frame.local_variable(4), 0x7788);
         assert!(frame.set_local_variable_indirect(2, 0).is_ok());
-        assert!(frame.local_variable(1).is_ok_and(|x| x == 0x1122));
-        assert!(frame.local_variable(2).is_ok_and(|x| x == 0));
-        assert!(frame.local_variable(3).is_ok_and(|x| x == 0x5566));
-        assert!(frame.local_variable(4).is_ok_and(|x| x == 0x7788));
+        assert_ok_eq!(frame.local_variable(1), 0x1122);
+        assert_ok_eq!(frame.local_variable(2), 0);
+        assert_ok_eq!(frame.local_variable(3), 0x5566);
+        assert_ok_eq!(frame.local_variable(4), 0x7788);
         assert!(frame.set_local_variable_indirect(5, 0).is_err());
         assert_eq!(frame.stack().len(), 2);
         assert!(frame.set_local_variable_indirect(0, 0x3333).is_ok());
         assert_eq!(frame.stack().len(), 2);
-        assert!(frame.local_variable(0).is_ok_and(|x| x == 0x3333));
+        assert_ok_eq!(frame.local_variable(0), 0x3333);
         assert_eq!(frame.stack().len(), 1);
-        assert!(frame.local_variable(0).is_ok_and(|x| x == 0x1111));
+        assert_ok_eq!(frame.local_variable(0), 0x1111);
     }
 
     #[test]
     fn test_call_routine() {
-        let f = Frame::call_routine(
+        let frame = assert_ok!(Frame::call_routine(
             0x1234,
             0x1235,
             &vec![0x1122, 0x3344],
             vec![0x9988, 0x7766, 0x5544, 0x3322],
             None,
             0x4321,
-        );
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        ));
         assert_eq!(frame.address(), 0x1234);
         assert_eq!(frame.pc(), 0x1235);
         assert_eq!(frame.local_variables(), &[0x1122, 0x3344, 0x5544, 0x3322]);
@@ -562,23 +558,19 @@ mod tests {
 
     #[test]
     fn test_call_routine_result() {
-        let f = Frame::call_routine(
+        let frame = assert_ok!(Frame::call_routine(
             0x1234,
             0x1235,
             &vec![0x1122, 0x3344],
             vec![0x9988, 0x7766, 0x5544, 0x3322],
             Some(StoreResult::new(0x1001, 0x80)),
             0x4321,
-        );
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        ));
         assert_eq!(frame.address(), 0x1234);
         assert_eq!(frame.pc(), 0x1235);
         assert_eq!(frame.local_variables(), &[0x1122, 0x3344, 0x5544, 0x3322]);
         assert_eq!(frame.argument_count(), 2);
-        assert!(frame
-            .result()
-            .is_some_and(|x| x == &StoreResult::new(0x1001, 0x80)));
+        assert_some_eq!(frame.result(), &StoreResult::new(0x1001, 0x80));
         assert_eq!(frame.return_address(), 0x4321);
         assert!(frame.stack().is_empty());
         assert!(!frame.input_interrupt());
