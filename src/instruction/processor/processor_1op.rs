@@ -189,7 +189,7 @@ mod tests {
     use crate::{
         instruction::{processor::dispatch, Opcode, OpcodeForm, OperandCount, OperandType},
         object,
-        test_util::*,
+        test_util::*, assert_ok_eq, assert_print,
     };
 
     fn opcode(version: u8, instruction: u8) -> Opcode {
@@ -216,7 +216,7 @@ mod tests {
         );
 
         let a = dispatch(&mut zmachine, &i);
-        assert!(a.is_ok_and(|x| x == 0x40a));
+        assert_ok_eq!(a, 0x40a);
     }
 
     #[test]
@@ -233,7 +233,7 @@ mod tests {
         );
 
         let a = dispatch(&mut zmachine, &i);
-        assert!(a.is_ok_and(|x| x == 0x403));
+        assert_ok_eq!(a, 0x403);
     }
 
     #[test]
@@ -257,8 +257,8 @@ mod tests {
             branch(0x401, true, 0x40a),
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x40a));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x02));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x40a);
+        assert_ok_eq!(zmachine.variable(0x80), 0x02);
     }
 
     #[test]
@@ -276,8 +276,8 @@ mod tests {
             branch(0x401, true, 0x40a),
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x00));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 0x00);
     }
 
     #[test]
@@ -294,8 +294,8 @@ mod tests {
             branch(0x401, true, 0x40a),
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x40a));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x02));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x40a);
+        assert_ok_eq!(zmachine.variable(0x80), 0x02);
     }
 
     #[test]
@@ -313,8 +313,8 @@ mod tests {
             branch(0x401, true, 0x40a),
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x00));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 0x00);
     }
 
     #[test]
@@ -330,8 +330,8 @@ mod tests {
             branch(0x401, true, 0x40a),
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 0);
     }
 
     #[test]
@@ -352,8 +352,8 @@ mod tests {
             branch(0x401, true, 0x40a),
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x40a));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x05));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x40a);
+        assert_ok_eq!(zmachine.variable(0x80), 0x05);
     }
 
     #[test]
@@ -371,8 +371,8 @@ mod tests {
             branch(0x401, true, 0x40a),
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x00));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 0x00);
     }
 
     #[test]
@@ -389,8 +389,8 @@ mod tests {
             branch(0x401, true, 0x40a),
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x40a));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x05));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x40a);
+        assert_ok_eq!(zmachine.variable(0x80), 0x05);
     }
 
     #[test]
@@ -408,8 +408,8 @@ mod tests {
             branch(0x401, true, 0x40a),
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x00));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 0x00);
     }
 
     #[test]
@@ -427,8 +427,8 @@ mod tests {
             branch(0x401, true, 0x40a),
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x00));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 0x00);
     }
 
     #[test]
@@ -452,8 +452,8 @@ mod tests {
             0x403,
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x04));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 0x04);
     }
 
     #[test]
@@ -477,8 +477,8 @@ mod tests {
             0x403,
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x04));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 0x04);
     }
 
     #[test]
@@ -502,8 +502,8 @@ mod tests {
             0x403,
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 0);
     }
 
     #[test]
@@ -526,8 +526,8 @@ mod tests {
             0x403,
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 2));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 2);
     }
 
     #[test]
@@ -543,8 +543,8 @@ mod tests {
             0x403,
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 1));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 1);
     }
 
     #[test]
@@ -560,8 +560,8 @@ mod tests {
             0x403,
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 2));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 2);
     }
 
     #[test]
@@ -578,8 +578,8 @@ mod tests {
             0x403,
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 63));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 63);
     }
 
     #[test]
@@ -596,8 +596,8 @@ mod tests {
             0x403,
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 64));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 64);
     }
 
     #[test]
@@ -613,8 +613,8 @@ mod tests {
             0x403,
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 0);
     }
 
     #[test]
@@ -628,8 +628,8 @@ mod tests {
             opcode(3, 5),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x1235));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(zmachine.variable(0x80), 0x1235);
     }
 
     #[test]
@@ -643,8 +643,8 @@ mod tests {
             opcode(3, 5),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x8000));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(zmachine.variable(0x80), 0x8000);
     }
 
     #[test]
@@ -658,8 +658,8 @@ mod tests {
             opcode(3, 5),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(zmachine.variable(0).is_ok_and(|x| x == 0x1235));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(zmachine.variable(0), 0x1235);
         assert!(zmachine.variable(0).is_err());
     }
 
@@ -674,8 +674,8 @@ mod tests {
             opcode(3, 6),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x1233));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(zmachine.variable(0x80), 0x1233);
     }
 
     #[test]
@@ -689,8 +689,8 @@ mod tests {
             opcode(3, 6),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0xFFFF));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(zmachine.variable(0x80), 0xFFFF);
     }
 
     #[test]
@@ -705,8 +705,8 @@ mod tests {
             opcode(3, 6),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(zmachine.variable(0).is_ok_and(|x| x == 0x1233));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(zmachine.variable(0), 0x1233);
         assert!(zmachine.variable(0).is_err());
     }
 
@@ -726,8 +726,8 @@ mod tests {
             opcode(3, 7),
             0x403,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert_print("Hello");
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_print!("Hello");
     }
 
     #[test]
@@ -743,15 +743,15 @@ mod tests {
             0x404,
             store(0x403, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x609));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x609);
         assert!(zmachine.variable(0).is_err());
-        assert!(zmachine.variable(1).is_ok_and(|x| x == 0x1234));
-        assert!(zmachine.variable(2).is_ok_and(|x| x == 0x5678));
-        assert!(zmachine.variable(3).is_ok_and(|x| x == 0x9abc));
-        assert!(zmachine.variable(4).is_ok_and(|x| x == 0xdef0));
+        assert_ok_eq!(zmachine.variable(1), 0x1234);
+        assert_ok_eq!(zmachine.variable(2), 0x5678);
+        assert_ok_eq!(zmachine.variable(3), 0x9abc);
+        assert_ok_eq!(zmachine.variable(4), 0xdef0);
         assert!(zmachine.variable(5).is_err());
-        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x404));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0xF0AD));
+        assert_ok_eq!(zmachine.return_routine(0xF0AD), 0x404);
+        assert_ok_eq!(zmachine.variable(0x80), 0xF0AD);
     }
 
     #[test]
@@ -767,15 +767,15 @@ mod tests {
             0x404,
             store(0x403, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x601));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x601);
         assert!(zmachine.variable(0).is_err());
-        assert!(zmachine.variable(1).is_ok_and(|x| x == 0));
-        assert!(zmachine.variable(2).is_ok_and(|x| x == 0));
-        assert!(zmachine.variable(3).is_ok_and(|x| x == 0));
-        assert!(zmachine.variable(4).is_ok_and(|x| x == 0));
+        assert_ok_eq!(zmachine.variable(1), 0);
+        assert_ok_eq!(zmachine.variable(2), 0);
+        assert_ok_eq!(zmachine.variable(3), 0);
+        assert_ok_eq!(zmachine.variable(4), 0);
         assert!(zmachine.variable(5).is_err());
-        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x404));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0xF0AD));
+        assert_ok_eq!(zmachine.return_routine(0xF0AD), 0x404);
+        assert_ok_eq!(zmachine.variable(0x80), 0xF0AD);
     }
 
     #[test]
@@ -791,15 +791,15 @@ mod tests {
             0x404,
             store(0x403, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x601));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x601);
         assert!(zmachine.variable(0).is_err());
-        assert!(zmachine.variable(1).is_ok_and(|x| x == 0));
-        assert!(zmachine.variable(2).is_ok_and(|x| x == 0));
-        assert!(zmachine.variable(3).is_ok_and(|x| x == 0));
-        assert!(zmachine.variable(4).is_ok_and(|x| x == 0));
+        assert_ok_eq!(zmachine.variable(1), 0);
+        assert_ok_eq!(zmachine.variable(2), 0);
+        assert_ok_eq!(zmachine.variable(3), 0);
+        assert_ok_eq!(zmachine.variable(4), 0);
         assert!(zmachine.variable(5).is_err());
-        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x404));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0xF0AD));
+        assert_ok_eq!(zmachine.return_routine(0xF0AD), 0x404);
+        assert_ok_eq!(zmachine.variable(0x80), 0xF0AD);
     }
 
     #[test]
@@ -816,14 +816,14 @@ mod tests {
             opcode(3, 9),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 3));
-        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 0));
-        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 0));
-        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
-        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 1));
-        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 6));
-        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(object::child(&zmachine, 1), 3);
+        assert_ok_eq!(object::parent(&zmachine, 2), 0);
+        assert_ok_eq!(object::sibling(&zmachine, 2), 0);
+        assert_ok_eq!(object::child(&zmachine, 2), 5);
+        assert_ok_eq!(object::parent(&zmachine, 3), 1);
+        assert_ok_eq!(object::sibling(&zmachine, 3), 6);
+        assert_ok_eq!(object::child(&zmachine, 3), 7);
     }
 
     #[test]
@@ -841,17 +841,17 @@ mod tests {
             opcode(3, 9),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 2));
-        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 1));
-        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 6));
-        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
-        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 0));
-        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 0));
-        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
-        assert!(object::parent(&zmachine, 6).is_ok_and(|x| x == 1));
-        assert!(object::sibling(&zmachine, 6).is_ok_and(|x| x == 8));
-        assert!(object::child(&zmachine, 6).is_ok_and(|x| x == 9));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(object::child(&zmachine, 1), 2);
+        assert_ok_eq!(object::parent(&zmachine, 2), 1);
+        assert_ok_eq!(object::sibling(&zmachine, 2), 6);
+        assert_ok_eq!(object::child(&zmachine, 2), 5);
+        assert_ok_eq!(object::parent(&zmachine, 3), 0);
+        assert_ok_eq!(object::sibling(&zmachine, 3), 0);
+        assert_ok_eq!(object::child(&zmachine, 3), 7);
+        assert_ok_eq!(object::parent(&zmachine, 6), 1);
+        assert_ok_eq!(object::sibling(&zmachine, 6), 8);
+        assert_ok_eq!(object::child(&zmachine, 6), 9);
     }
 
     #[test]
@@ -868,14 +868,14 @@ mod tests {
             opcode(3, 9),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 2));
-        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 1));
-        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 6));
-        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
-        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 0));
-        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 0));
-        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(object::child(&zmachine, 1), 2);
+        assert_ok_eq!(object::parent(&zmachine, 2), 1);
+        assert_ok_eq!(object::sibling(&zmachine, 2), 6);
+        assert_ok_eq!(object::child(&zmachine, 2), 5);
+        assert_ok_eq!(object::parent(&zmachine, 3), 0);
+        assert_ok_eq!(object::sibling(&zmachine, 3), 0);
+        assert_ok_eq!(object::child(&zmachine, 3), 7);
     }
 
     #[test]
@@ -892,14 +892,14 @@ mod tests {
             opcode(3, 9),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 2));
-        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 1));
-        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 0));
-        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
-        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 0));
-        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 6));
-        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(object::child(&zmachine, 1), 2);
+        assert_ok_eq!(object::parent(&zmachine, 2), 1);
+        assert_ok_eq!(object::sibling(&zmachine, 2), 0);
+        assert_ok_eq!(object::child(&zmachine, 2), 5);
+        assert_ok_eq!(object::parent(&zmachine, 3), 0);
+        assert_ok_eq!(object::sibling(&zmachine, 3), 6);
+        assert_ok_eq!(object::child(&zmachine, 3), 7);
     }
 
     #[test]
@@ -916,14 +916,14 @@ mod tests {
             opcode(3, 9),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 2));
-        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 1));
-        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 3));
-        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
-        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 1));
-        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 6));
-        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(object::child(&zmachine, 1), 2);
+        assert_ok_eq!(object::parent(&zmachine, 2), 1);
+        assert_ok_eq!(object::sibling(&zmachine, 2), 3);
+        assert_ok_eq!(object::child(&zmachine, 2), 5);
+        assert_ok_eq!(object::parent(&zmachine, 3), 1);
+        assert_ok_eq!(object::sibling(&zmachine, 3), 6);
+        assert_ok_eq!(object::child(&zmachine, 3), 7);
     }
 
     #[test]
@@ -940,14 +940,14 @@ mod tests {
             opcode(4, 9),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 3));
-        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 0));
-        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 0));
-        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
-        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 1));
-        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 6));
-        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(object::child(&zmachine, 1), 3);
+        assert_ok_eq!(object::parent(&zmachine, 2), 0);
+        assert_ok_eq!(object::sibling(&zmachine, 2), 0);
+        assert_ok_eq!(object::child(&zmachine, 2), 5);
+        assert_ok_eq!(object::parent(&zmachine, 3), 1);
+        assert_ok_eq!(object::sibling(&zmachine, 3), 6);
+        assert_ok_eq!(object::child(&zmachine, 3), 7);
     }
 
     #[test]
@@ -965,17 +965,17 @@ mod tests {
             opcode(4, 9),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 2));
-        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 1));
-        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 6));
-        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
-        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 0));
-        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 0));
-        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
-        assert!(object::parent(&zmachine, 6).is_ok_and(|x| x == 1));
-        assert!(object::sibling(&zmachine, 6).is_ok_and(|x| x == 8));
-        assert!(object::child(&zmachine, 6).is_ok_and(|x| x == 9));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(object::child(&zmachine, 1), 2);
+        assert_ok_eq!(object::parent(&zmachine, 2), 1);
+        assert_ok_eq!(object::sibling(&zmachine, 2), 6);
+        assert_ok_eq!(object::child(&zmachine, 2), 5);
+        assert_ok_eq!(object::parent(&zmachine, 3), 0);
+        assert_ok_eq!(object::sibling(&zmachine, 3), 0);
+        assert_ok_eq!(object::child(&zmachine, 3), 7);
+        assert_ok_eq!(object::parent(&zmachine, 6), 1);
+        assert_ok_eq!(object::sibling(&zmachine, 6), 8);
+        assert_ok_eq!(object::child(&zmachine, 6), 9);
     }
 
     #[test]
@@ -992,14 +992,14 @@ mod tests {
             opcode(4, 9),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert!(object::child(&zmachine, 1).is_ok_and(|x| x == 2));
-        assert!(object::parent(&zmachine, 2).is_ok_and(|x| x == 1));
-        assert!(object::sibling(&zmachine, 2).is_ok_and(|x| x == 6));
-        assert!(object::child(&zmachine, 2).is_ok_and(|x| x == 5));
-        assert!(object::parent(&zmachine, 3).is_ok_and(|x| x == 0));
-        assert!(object::sibling(&zmachine, 3).is_ok_and(|x| x == 0));
-        assert!(object::child(&zmachine, 3).is_ok_and(|x| x == 7));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_ok_eq!(object::child(&zmachine, 1), 2);
+        assert_ok_eq!(object::parent(&zmachine, 2), 1);
+        assert_ok_eq!(object::sibling(&zmachine, 2), 6);
+        assert_ok_eq!(object::child(&zmachine, 2), 5);
+        assert_ok_eq!(object::parent(&zmachine, 3), 0);
+        assert_ok_eq!(object::sibling(&zmachine, 3), 0);
+        assert_ok_eq!(object::child(&zmachine, 3), 7);
     }
 
     #[test]
@@ -1031,8 +1031,8 @@ mod tests {
             opcode(3, 10),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert_print("Parent");
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_print!("Parent");
     }
 
     #[test]
@@ -1047,8 +1047,8 @@ mod tests {
             opcode(4, 10),
             0x402,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x402));
-        assert_print("Parent");
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x402);
+        assert_print!("Parent");
     }
 
     #[test]
@@ -1064,9 +1064,9 @@ mod tests {
             0x501,
         );
         assert!(zmachine.peek_variable(0).is_err());
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x400));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x5678));
-        assert!(zmachine.peek_variable(0).is_ok_and(|x| x == 0x1234));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x400);
+        assert_ok_eq!(zmachine.variable(0x80), 0x5678);
+        assert_ok_eq!(zmachine.peek_variable(0), 0x1234);
     }
 
     #[test]
@@ -1082,9 +1082,9 @@ mod tests {
             0x501,
         );
         assert!(zmachine.peek_variable(0).is_err());
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x400));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
-        assert!(zmachine.peek_variable(0).is_ok_and(|x| x == 0x1234));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x400);
+        assert_ok_eq!(zmachine.variable(0x80), 0);
+        assert_ok_eq!(zmachine.peek_variable(0), 0x1234);
     }
 
     #[test]
@@ -1097,7 +1097,7 @@ mod tests {
             opcode(3, 12),
             0x404,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x501));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x501);
     }
 
     #[test]
@@ -1110,7 +1110,7 @@ mod tests {
             opcode(3, 12),
             0x404,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x301));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x301);
     }
 
     #[test]
@@ -1129,8 +1129,8 @@ mod tests {
             opcode(3, 13),
             0x403,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert_print("Hello");
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_print!("Hello");
     }
 
     #[test]
@@ -1149,8 +1149,8 @@ mod tests {
             opcode(4, 13),
             0x403,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert_print("Hello");
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_print!("Hello");
     }
 
     #[test]
@@ -1169,8 +1169,8 @@ mod tests {
             opcode(8, 13),
             0x403,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert_print("Hello");
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_print!("Hello");
     }
 
     #[test]
@@ -1186,9 +1186,9 @@ mod tests {
             0x403,
             store(0x402, 0x80),
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x403));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x5678));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0x5678));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
+        assert_ok_eq!(zmachine.variable(0x80), 0x5678);
+        assert_ok_eq!(zmachine.variable(0x81), 0x5678);
     }
 
     #[test]
@@ -1203,8 +1203,8 @@ mod tests {
             store(0x403, 0x080),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x0F5A));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x404);
+        assert_ok_eq!(zmachine.variable(0x80), 0x0F5A);
     }
 
     #[test]
@@ -1219,15 +1219,15 @@ mod tests {
             opcode(5, 15),
             0x404,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x601));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x601);
         assert!(zmachine.variable(0).is_err());
-        assert!(zmachine.variable(1).is_ok_and(|x| x == 0));
-        assert!(zmachine.variable(2).is_ok_and(|x| x == 0));
-        assert!(zmachine.variable(3).is_ok_and(|x| x == 0));
-        assert!(zmachine.variable(4).is_ok_and(|x| x == 0));
+        assert_ok_eq!(zmachine.variable(1), 0);
+        assert_ok_eq!(zmachine.variable(2), 0);
+        assert_ok_eq!(zmachine.variable(3), 0);
+        assert_ok_eq!(zmachine.variable(4), 0);
         assert!(zmachine.variable(5).is_err());
-        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x404));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+        assert_ok_eq!(zmachine.return_routine(0xF0AD), 0x404);
+        assert_ok_eq!(zmachine.variable(0x80), 0);
     }
 
     #[test]
@@ -1242,14 +1242,14 @@ mod tests {
             opcode(8, 15),
             0x404,
         );
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x601));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x601);
         assert!(zmachine.variable(0).is_err());
-        assert!(zmachine.variable(1).is_ok_and(|x| x == 0));
-        assert!(zmachine.variable(2).is_ok_and(|x| x == 0));
-        assert!(zmachine.variable(3).is_ok_and(|x| x == 0));
-        assert!(zmachine.variable(4).is_ok_and(|x| x == 0));
+        assert_ok_eq!(zmachine.variable(1), 0);
+        assert_ok_eq!(zmachine.variable(2), 0);
+        assert_ok_eq!(zmachine.variable(3), 0);
+        assert_ok_eq!(zmachine.variable(4), 0);
         assert!(zmachine.variable(5).is_err());
-        assert!(zmachine.return_routine(0xF0AD).is_ok_and(|x| x == 0x404));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+        assert_ok_eq!(zmachine.return_routine(0xF0AD), 0x404);
+        assert_ok_eq!(zmachine.variable(0x80), 0);
     }
 }

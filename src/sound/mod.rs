@@ -225,6 +225,7 @@ impl Manager {
 #[cfg(test)]
 mod tests {
     use crate::{
+        assert_ok, assert_some, assert_some_eq,
         iff::blorb::{
             ridx::{Index, RIdx},
             sloop::{Entry, Loop},
@@ -249,7 +250,7 @@ mod tests {
         let sound = Sound::from((1, &oggv, Some(&5)));
         assert_eq!(sound.number(), 1);
         assert_eq!(sound.data(), &[1, 2, 3, 4]);
-        assert!(sound.repeats.is_some_and(|x| x == 5));
+        assert_some_eq!(sound.repeats, 5);
     }
 
     #[test]
@@ -286,13 +287,15 @@ mod tests {
         aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
         let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
         let map = HashMap::from(blorb);
-        assert!(map.get(&1).is_some_and(|x| x.number() == 1
-            && x.data().eq(&[1, 1, 1, 1])
-            && x.repeats().is_some_and(|y| y == &10)));
+        let snd = assert_some!(map.get(&1));
+        assert_eq!(snd.number(), 1);
+        assert_eq!(snd.data(), &[1, 1, 1, 1]);
+        assert_some_eq!(snd.repeats(), &10);
         assert!(map.get(&2).is_none());
-        assert!(map.get(&4).is_some_and(|x| x.number() == 4
-            && x.data().eq(&[4, 4, 4, 4])
-            && x.repeats().is_none()));
+        let snd = assert_some!(map.get(&4));
+        assert_eq!(snd.number(), 4);
+        assert_eq!(snd.data(), &[4, 4, 4, 4]);
+        assert!(snd.repeats().is_none());
     }
 
     #[test]
@@ -310,12 +313,10 @@ mod tests {
         oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
         aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
         let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
-        let manager = Manager::new(blorb);
-        assert!(manager.is_ok());
-        let m = manager.unwrap();
-        assert!(m.player.is_some());
-        assert_eq!(m.sounds.len(), 2);
-        assert_eq!(m.current_effect(), 0);
+        let manager = assert_ok!(Manager::new(blorb));
+        assert!(manager.player.is_some());
+        assert_eq!(manager.sounds.len(), 2);
+        assert_eq!(manager.current_effect(), 0);
     }
 
     #[test]
@@ -333,12 +334,10 @@ mod tests {
         oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
         aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
         let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
-        let manager = Manager::new(blorb);
-        assert!(manager.is_ok());
-        let mut m = manager.unwrap();
-        assert!(m.play_sound(1, 8, None).is_ok());
-        assert!(m.is_playing());
-        assert!(m.current_effect() == 1);
+        let mut manager = assert_ok!(Manager::new(blorb));
+        assert!(manager.play_sound(1, 8, None).is_ok());
+        assert!(manager.is_playing());
+        assert!(manager.current_effect() == 1);
         assert_eq!(play_sound(), (4, 8, 10));
     }
 
@@ -357,12 +356,10 @@ mod tests {
         oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
         aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
         let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
-        let manager = Manager::new(blorb);
-        assert!(manager.is_ok());
-        let mut m = manager.unwrap();
-        assert!(m.play_sound(1, 8, Some(1)).is_ok());
-        assert!(m.is_playing());
-        assert!(m.current_effect() == 1);
+        let mut manager = assert_ok!(Manager::new(blorb));
+        assert!(manager.play_sound(1, 8, Some(1)).is_ok());
+        assert!(manager.is_playing());
+        assert!(manager.current_effect() == 1);
         assert_eq!(play_sound(), (4, 8, 1));
     }
 
@@ -381,12 +378,10 @@ mod tests {
         oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
         aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
         let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
-        let manager = Manager::new(blorb);
-        assert!(manager.is_ok());
-        let mut m = manager.unwrap();
-        assert!(m.play_sound(3, 8, Some(1)).is_ok());
-        assert!(!m.is_playing());
-        assert!(m.current_effect() == 0);
+        let mut manager = assert_ok!(Manager::new(blorb));
+        assert!(manager.play_sound(3, 8, Some(1)).is_ok());
+        assert!(!manager.is_playing());
+        assert!(manager.current_effect() == 0);
         assert_eq!(play_sound(), (0, 0, 0));
     }
 
@@ -405,16 +400,14 @@ mod tests {
         oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
         aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
         let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
-        let manager = Manager::new(blorb);
-        assert!(manager.is_ok());
-        let mut m = manager.unwrap();
-        assert!(m.play_sound(4, 4, Some(1)).is_ok());
-        assert!(m.is_playing());
-        assert_eq!(m.current_effect(), 4);
+        let mut manager = assert_ok!(Manager::new(blorb));
+        assert!(manager.play_sound(4, 4, Some(1)).is_ok());
+        assert!(manager.is_playing());
+        assert_eq!(manager.current_effect(), 4);
         assert_eq!(play_sound(), (4, 4, 1));
-        m.stop_sound();
-        assert!(!m.is_playing());
-        assert_eq!(m.current_effect(), 0);
+        manager.stop_sound();
+        assert!(!manager.is_playing());
+        assert_eq!(manager.current_effect(), 0);
         assert_eq!(play_sound(), (0, 0, 0));
     }
 
@@ -433,12 +426,10 @@ mod tests {
         oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
         aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
         let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
-        let manager = Manager::new(blorb);
-        assert!(manager.is_ok());
-        let mut m = manager.unwrap();
-        m.stop_sound();
-        assert!(!m.is_playing());
-        assert_eq!(m.current_effect(), 0);
+        let mut manager = assert_ok!(Manager::new(blorb));
+        manager.stop_sound();
+        assert!(!manager.is_playing());
+        assert_eq!(manager.current_effect(), 0);
         assert_eq!(play_sound(), (0, 0, 0));
     }
 
@@ -457,16 +448,14 @@ mod tests {
         oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
         aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
         let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
-        let manager = Manager::new(blorb);
-        assert!(manager.is_ok());
-        let mut m = manager.unwrap();
-        assert!(m.play_sound(4, 4, Some(1)).is_ok());
-        assert!(m.is_playing());
-        assert_eq!(m.current_effect(), 4);
+        let mut manager = assert_ok!(Manager::new(blorb));
+        assert!(manager.play_sound(4, 4, Some(1)).is_ok());
+        assert!(manager.is_playing());
+        assert_eq!(manager.current_effect(), 4);
         assert_eq!(play_sound(), (4, 4, 1));
-        m.change_volume(8);
-        assert!(m.is_playing());
-        assert_eq!(m.current_effect(), 4);
+        manager.change_volume(8);
+        assert!(manager.is_playing());
+        assert_eq!(manager.current_effect(), 4);
         assert_eq!(play_sound(), (0, 8, 0));
     }
 
@@ -485,12 +474,10 @@ mod tests {
         oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
         aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
         let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
-        let manager = Manager::new(blorb);
-        assert!(manager.is_ok());
-        let mut m = manager.unwrap();
-        m.change_volume(8);
-        assert!(!m.is_playing());
-        assert_eq!(m.current_effect(), 0);
+        let mut manager = assert_ok!(Manager::new(blorb));
+        manager.change_volume(8);
+        assert!(!manager.is_playing());
+        assert_eq!(manager.current_effect(), 0);
         assert_eq!(play_sound(), (0, 0, 0));
     }
 }

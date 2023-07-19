@@ -141,6 +141,8 @@ impl Blorb {
 
 #[cfg(test)]
 mod tests {
+    use crate::{assert_ok, assert_some};
+
     use super::*;
     use ridx::Index;
     use sloop::Entry;
@@ -155,26 +157,26 @@ mod tests {
         aiff.insert(2, AIFF::new(&[5, 6, 7, 8]));
         let sloop = Loop::new(&[Entry::new(10, 11)]);
         let blorb = Blorb::new(Some(ridx), Some(ifhd), oggv, aiff, Some(sloop));
-        assert!(blorb.ridx().is_some());
-        assert_eq!(blorb.ridx().unwrap().entries().len(), 1);
-        assert_eq!(blorb.ridx().unwrap().entries()[0].usage(), "Snd ");
-        assert_eq!(blorb.ridx().unwrap().entries()[0].number(), 1);
-        assert_eq!(blorb.ridx().unwrap().entries()[0].start(), 2);
+        let ridx = assert_some!(blorb.ridx());
+        assert_eq!(ridx.entries().len(), 1);
+        assert_eq!(ridx.entries()[0].usage(), "Snd ");
+        assert_eq!(ridx.entries()[0].number(), 1);
+        assert_eq!(ridx.entries()[0].start(), 2);
         assert_eq!(blorb.oggv().len(), 1);
-        assert!(blorb.oggv().get(&1).is_some());
-        assert_eq!(blorb.oggv().get(&1).unwrap().data(), &[1, 2, 3, 4]);
+        let oggv = assert_some!(blorb.oggv().get(&1));
+        assert_eq!(oggv.data(), &[1, 2, 3, 4]);
         assert_eq!(blorb.aiff().len(), 1);
-        assert!(blorb.aiff().get(&2).is_some());
-        assert_eq!(blorb.aiff().get(&2).unwrap().data(), &[5, 6, 7, 8]);
-        assert!(blorb.ifhd().is_some());
-        assert_eq!(blorb.ifhd().unwrap().release_number(), 1);
-        assert_eq!(blorb.ifhd().unwrap().serial_number(), &[1, 2, 3, 4, 5, 6]);
-        assert_eq!(blorb.ifhd().unwrap().checksum(), 0x1122);
-        assert_eq!(blorb.ifhd().unwrap().pc(), 0x654321);
-        assert!(blorb.sloop().is_some());
-        assert_eq!(blorb.sloop().unwrap().entries().len(), 1);
-        assert_eq!(blorb.sloop().unwrap().entries()[0].number(), 10);
-        assert_eq!(blorb.sloop().unwrap().entries()[0].repeats(), 11);
+        let aiff = assert_some!(blorb.aiff.get(&2));
+        assert_eq!(aiff.data(), &[5, 6, 7, 8]);
+        let ifhd = assert_some!(blorb.ifhd());
+        assert_eq!(ifhd.release_number(), 1);
+        assert_eq!(ifhd.serial_number(), &[1, 2, 3, 4, 5, 6]);
+        assert_eq!(ifhd.checksum(), 0x1122);
+        assert_eq!(ifhd.pc(), 0x654321);
+        let sloop = assert_some!(blorb.sloop());
+        assert_eq!(sloop.entries().len(), 1);
+        assert_eq!(sloop.entries()[0].number(), 10);
+        assert_eq!(sloop.entries()[0].repeats(), 11);
     }
 
     #[test]
@@ -198,43 +200,41 @@ mod tests {
             /* 0x78 */ 0x00, 0x01, 0x00, 0x00, /* 0x7c */ 0x00, 0x10, 0x00, 0x00,
             /* 0x80 */ 0x00, 0x02, 0x00, 0x00, /* 0x84 */ 0x00, 0x20,
         ];
-        let blorb = Blorb::try_from(v);
-        assert!(blorb.is_ok());
-        let b = blorb.unwrap();
-        assert!(b.ridx().is_some());
-        assert_eq!(b.ridx().unwrap().entries().len(), 2);
-        assert_eq!(b.ridx().unwrap().entries()[0].usage(), "Snd ");
-        assert_eq!(b.ridx().unwrap().entries()[0].number(), 0x01000001);
-        assert_eq!(b.ridx().unwrap().entries()[0].start(), 0x46);
-        assert_eq!(b.ridx().unwrap().entries()[1].usage(), "Snd ");
-        assert_eq!(b.ridx().unwrap().entries()[1].number(), 0x01000002);
-        assert_eq!(b.ridx().unwrap().entries()[1].start(), 0x5a);
-        assert_eq!(b.oggv().len(), 1);
-        assert!(b.oggv().get(&0x46).is_some());
+        let blorb = assert_ok!(Blorb::try_from(v));
+        let ridx = assert_some!(blorb.ridx());
+        assert_eq!(ridx.entries().len(), 2);
+        assert_eq!(ridx.entries()[0].usage(), "Snd ");
+        assert_eq!(ridx.entries()[0].number(), 0x01000001);
+        assert_eq!(ridx.entries()[0].start(), 0x46);
+        assert_eq!(ridx.entries()[1].usage(), "Snd ");
+        assert_eq!(ridx.entries()[1].number(), 0x01000002);
+        assert_eq!(ridx.entries()[1].start(), 0x5a);
+        assert_eq!(blorb.oggv().len(), 1);
+        let oggv = assert_some!(blorb.oggv().get(&0x46));
         assert_eq!(
-            b.oggv().get(&0x46).unwrap().data(),
+            oggv.data(),
             &[0x10, 0x20, 0x30, 0x40, b'O', b'g', b'g', b's', 0x11, 0x22, 0x33, 0x44]
         );
-        assert_eq!(b.aiff().len(), 1);
-        assert!(b.aiff().get(&0x5a).is_some());
+        assert_eq!(blorb.aiff().len(), 1);
+        let aiff = assert_some!(blorb.aiff.get(&0x5a));
         assert_eq!(
-            b.aiff().get(&0x5a).unwrap().data(),
+            aiff.data(),
             &[b'A', b'I', b'F', b'F', b'C', b'O', b'M', b'M', 0, 0, 0, 3]
         );
-        assert!(b.ifhd().is_some());
-        assert_eq!(b.ifhd().unwrap().release_number(), 0x1122);
+        let ifhd = assert_some!(blorb.ifhd());
+        assert_eq!(ifhd.release_number(), 0x1122);
         assert_eq!(
-            b.ifhd().unwrap().serial_number(),
+            ifhd.serial_number(),
             &[b'1', b'2', b'3', b'4', b'5', b'6']
         );
-        assert_eq!(b.ifhd().unwrap().checksum(), 0x3344);
-        assert_eq!(b.ifhd().unwrap().pc(), 0x556677);
-        assert!(b.sloop().is_some());
-        assert_eq!(b.sloop().unwrap().entries().len(), 2);
-        assert_eq!(b.sloop().unwrap().entries()[0].number(), 1);
-        assert_eq!(b.sloop().unwrap().entries()[0].repeats(), 0x10);
-        assert_eq!(b.sloop().unwrap().entries()[1].number(), 2);
-        assert_eq!(b.sloop().unwrap().entries()[1].repeats(), 0x20);
+        assert_eq!(ifhd.checksum(), 0x3344);
+        assert_eq!(ifhd.pc(), 0x556677);
+        let sloop = assert_some!(blorb.sloop());
+        assert_eq!(sloop.entries().len(), 2);
+        assert_eq!(sloop.entries()[0].number(), 1);
+        assert_eq!(sloop.entries()[0].repeats(), 0x10);
+        assert_eq!(sloop.entries()[1].number(), 2);
+        assert_eq!(sloop.entries()[1].repeats(), 0x20);
     }
 
     #[test]
@@ -250,8 +250,7 @@ mod tests {
             /* 0000 */ b'F', b'R', b'O', b'B', /* 0004 */ 0x00, 0x00, 0x00, 0x4e,
             /* 0008 */ b'I', b'F', b'R', b'S',
         ];
-        let blorb = Blorb::try_from(v);
-        assert!(blorb.is_err());
+        assert!(Blorb::try_from(v).is_err());
     }
 }
 

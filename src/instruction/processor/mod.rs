@@ -263,7 +263,7 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
 
 #[cfg(test)]
 pub mod tests {
-    use crate::test_util::*;
+    use crate::{test_util::*, assert_ok, assert_ok_eq};
 
     use super::*;
 
@@ -277,9 +277,9 @@ pub mod tests {
         let o_small_constant = Operand::new(OperandType::SmallConstant, 0x12);
         let o_large_constant = Operand::new(OperandType::LargeConstant, 0x3456);
         let o_variable = Operand::new(OperandType::Variable, 0x80);
-        assert_eq_ok(operand_value(&mut zmachine, &o_small_constant), 0x12);
-        assert_eq_ok(operand_value(&mut zmachine, &o_large_constant), 0x3456);
-        assert_eq_ok(operand_value(&mut zmachine, &o_variable), 0x789A);
+        assert_ok_eq!(operand_value(&mut zmachine, &o_small_constant), 0x12);
+        assert_ok_eq!(operand_value(&mut zmachine, &o_large_constant), 0x3456);
+        assert_ok_eq!(operand_value(&mut zmachine, &o_variable), 0x789A);
     }
 
     #[test]
@@ -299,13 +299,11 @@ pub mod tests {
             0,
         );
 
-        let operands = operand_values(&mut zmachine, &i);
-        assert!(operands.is_ok());
-        let o = operands.unwrap();
-        assert_eq!(o[0], 0x789A);
-        assert_eq!(o[1], 0x3456);
-        assert_eq!(o[2], 0x12);
-        assert_eq!(o[3], 0x1357);
+        let operands = assert_ok!(operand_values(&mut zmachine, &i));
+        assert_eq!(operands[0], 0x789A);
+        assert_eq!(operands[1], 0x3456);
+        assert_eq!(operands[2], 0x12);
+        assert_eq!(operands[3], 0x1357);
 
         let i = mock_instruction(
             0x480,
@@ -313,9 +311,7 @@ pub mod tests {
             Opcode::new(5, 0, 0, OpcodeForm::Var, OperandCount::_VAR),
             0,
         );
-        let operands = operand_values(&mut zmachine, &i);
-        assert!(operands.is_ok());
-        assert!(operands.unwrap().is_empty());
+        assert!(operand_values(&mut zmachine, &i).is_ok_and(|x| x.is_empty()));
     }
 
     #[test]
@@ -325,12 +321,8 @@ pub mod tests {
         let mut zmachine = mock_zmachine(v);
         mock_frame(&mut zmachine, 0x500, Some(0x80), 0x480);
         let i = mock_branch(true, 0, 0x502);
-        let a = processor::branch(&mut zmachine, &i, true);
-        assert!(a.is_ok());
-        assert_eq!(a.unwrap(), 0x480);
-        let v = zmachine.variable(0x80);
-        assert!(v.is_ok());
-        assert_eq!(v.unwrap(), 0);
+        assert_ok_eq!(processor::branch(&mut zmachine, &i, true), 0x480);
+        assert_ok_eq!(zmachine.variable(0x80), 0);
     }
 
     #[test]
@@ -340,12 +332,8 @@ pub mod tests {
         let mut zmachine = mock_zmachine(v);
         mock_frame(&mut zmachine, 0x500, Some(0x80), 0x480);
         let i = mock_branch(false, 0, 0x502);
-        let a = processor::branch(&mut zmachine, &i, true);
-        assert!(a.is_ok());
-        assert_eq!(a.unwrap(), 0x502);
-        let v = zmachine.variable(0x80);
-        assert!(v.is_ok());
-        assert_eq!(v.unwrap(), 0xFF);
+        assert_ok_eq!(processor::branch(&mut zmachine, &i, true), 0x502);
+        assert_ok_eq!(zmachine.variable(0x80), 0xFF);
     }
 
     #[test]
@@ -355,12 +343,8 @@ pub mod tests {
         let mut zmachine = mock_zmachine(v);
         mock_frame(&mut zmachine, 0x500, Some(0x80), 0x480);
         let i = mock_branch(true, 1, 0x502);
-        let a = processor::branch(&mut zmachine, &i, true);
-        assert!(a.is_ok());
-        assert_eq!(a.unwrap(), 0x480);
-        let v = zmachine.variable(0x80);
-        assert!(v.is_ok());
-        assert_eq!(v.unwrap(), 1);
+        assert_ok_eq!(processor::branch(&mut zmachine, &i, true), 0x480);
+        assert_ok_eq!(zmachine.variable(0x80), 1);
     }
 
     #[test]
@@ -370,12 +354,8 @@ pub mod tests {
         let mut zmachine = mock_zmachine(v);
         mock_frame(&mut zmachine, 0x500, Some(0x80), 0x480);
         let i = mock_branch(false, 1, 0x502);
-        let a = processor::branch(&mut zmachine, &i, true);
-        assert!(a.is_ok());
-        assert_eq!(a.unwrap(), 0x502);
-        let v = zmachine.variable(0x80);
-        assert!(v.is_ok());
-        assert_eq!(v.unwrap(), 0xFF);
+        assert_ok_eq!(processor::branch(&mut zmachine, &i, true), 0x502);
+        assert_ok_eq!(zmachine.variable(0x80), 0xFF);
     }
 
     #[test]
@@ -383,9 +363,7 @@ pub mod tests {
         let v = test_map(5);
         let mut zmachine = mock_zmachine(v);
         let i = mock_branch(true, 0x500, 0x482);
-        let a = processor::branch(&mut zmachine, &i, true);
-        assert!(a.is_ok());
-        assert_eq!(a.unwrap(), 0x500);
+        assert_ok_eq!(processor::branch(&mut zmachine, &i, true), 0x500);
     }
 
     #[test]
@@ -393,9 +371,7 @@ pub mod tests {
         let v = test_map(5);
         let mut zmachine = mock_zmachine(v);
         let i = mock_branch(true, 0x500, 0x482);
-        let a = processor::branch(&mut zmachine, &i, false);
-        assert!(a.is_ok());
-        assert_eq!(a.unwrap(), 0x482);
+        assert_ok_eq!(processor::branch(&mut zmachine, &i, false), 0x482);
     }
 
     #[test]

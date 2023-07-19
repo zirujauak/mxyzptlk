@@ -382,9 +382,12 @@ impl IO {
 mod tests {
     use std::{fs, path::Path};
 
-    use crate::test_util::{
-        assert_print, backspace, beep, buffer_mode, colors, cursor, input, mock_state, quit, split,
-        style, test_map,
+    use crate::{
+        assert_ok, assert_ok_eq, assert_print,
+        test_util::{
+            backspace, beep, buffer_mode, colors, cursor, input, mock_state, quit, split, style,
+            test_map,
+        },
     };
 
     use super::*;
@@ -408,9 +411,7 @@ mod tests {
 
     #[test]
     fn test_io_constructor_v3() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert_eq!(io.version, 3);
         assert_eq!(io.screen.cursor(), (24, 1));
         // Version 3 top is 2
@@ -427,9 +428,7 @@ mod tests {
 
     #[test]
     fn test_io_constructor_v4() {
-        let i = IO::new(4, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(4, Config::default()));
         assert_eq!(io.version, 4);
         assert_eq!(io.screen.cursor(), (24, 1));
         // Version 4 top is 1
@@ -446,9 +445,7 @@ mod tests {
 
     #[test]
     fn test_io_constructor_v5() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let io = i.unwrap();
+        let io = assert_ok!(IO::new(5, Config::default()));
         assert_eq!(io.version, 5);
         // Version 5 starts the cursor at 1,1
         assert_eq!(io.screen.cursor(), (1, 1));
@@ -463,13 +460,10 @@ mod tests {
 
     #[test]
     fn test_io_stream_2() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(!io.is_stream_2_open());
-        let f = File::create(Path::new("test-io.txt"));
-        assert!(f.is_ok());
-        io.set_stream_2(f.unwrap());
+        let f = assert_ok!(File::create(Path::new("test-io.txt")));
+        io.set_stream_2(f);
         assert!(Path::new("test-io.txt").exists());
         assert!(fs::remove_file(Path::new("test-io.txt")).is_ok());
         assert!(io.is_stream_2_open());
@@ -477,9 +471,7 @@ mod tests {
 
     #[test]
     fn test_is_stream_enabled() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let io = i.unwrap();
+        let io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.is_stream_enabled(1));
         assert!(!io.is_stream_enabled(2));
         assert!(!io.is_stream_enabled(3));
@@ -488,9 +480,7 @@ mod tests {
 
     #[test]
     fn test_enable_output_stream_2() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.is_stream_enabled(1));
         assert!(!io.is_stream_enabled(2));
         assert!(!io.is_stream_enabled(3));
@@ -504,9 +494,7 @@ mod tests {
 
     #[test]
     fn test_enable_output_stream_3() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.is_stream_enabled(1));
         assert!(!io.is_stream_enabled(2));
         assert!(!io.is_stream_enabled(3));
@@ -523,9 +511,7 @@ mod tests {
 
     #[test]
     fn test_enable_output_stream_4() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.is_stream_enabled(1));
         assert!(!io.is_stream_enabled(2));
         assert!(!io.is_stream_enabled(3));
@@ -539,9 +525,7 @@ mod tests {
 
     #[test]
     fn test_enable_output_stream_already_enabled() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.is_stream_enabled(1));
         assert!(!io.is_stream_enabled(2));
         assert!(!io.is_stream_enabled(3));
@@ -556,11 +540,8 @@ mod tests {
     #[test]
     fn test_disable_output_stream_1() {
         let map = test_map(3);
-        // TODO: mock_state?
         let mut state = mock_state(map);
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io.is_stream_enabled(1));
         assert!(!io.is_stream_enabled(2));
         assert!(!io.is_stream_enabled(3));
@@ -575,11 +556,8 @@ mod tests {
     #[test]
     fn test_disable_output_stream_2() {
         let map = test_map(3);
-        // TODO: mock_state?
         let mut state = mock_state(map);
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io.enable_output_stream(2, None).is_ok());
         assert!(io.is_stream_enabled(1));
         assert!(io.is_stream_enabled(2));
@@ -595,11 +573,8 @@ mod tests {
     #[test]
     fn test_disable_output_stream_3() {
         let map = test_map(3);
-        // TODO: mock_state?
         let mut state = mock_state(map);
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io.enable_output_stream(3, Some(0x200)).is_ok());
         assert!(io.is_stream_enabled(1));
         assert!(!io.is_stream_enabled(2));
@@ -619,28 +594,25 @@ mod tests {
         assert!(!io.is_stream_enabled(2));
         assert!(io.is_stream_enabled(3));
         assert!(!io.is_stream_enabled(4));
-        assert!(state.read_word(0x300).is_ok_and(|x| x == 0x02));
-        assert!(state.read_byte(0x302).is_ok_and(|x| x == 0x40));
-        assert!(state.read_byte(0x303).is_ok_and(|x| x == 0x56));
+        assert_ok_eq!(state.read_word(0x300), 0x02);
+        assert_ok_eq!(state.read_byte(0x302), 0x40);
+        assert_ok_eq!(state.read_byte(0x303), 0x56);
         assert!(io.disable_output_stream(&mut state, 3).is_ok());
         assert!(io.is_stream_enabled(1));
         assert!(!io.is_stream_enabled(2));
         assert!(!io.is_stream_enabled(3));
         assert!(!io.is_stream_enabled(4));
-        assert!(state.read_word(0x200).is_ok_and(|x| x == 0x03));
-        assert!(state.read_byte(0x202).is_ok_and(|x| x == 0x20));
-        assert!(state.read_byte(0x203).is_ok_and(|x| x == 0x31));
-        assert!(state.read_byte(0x204).is_ok_and(|x| x == 0x32));
+        assert_ok_eq!(state.read_word(0x200), 0x03);
+        assert_ok_eq!(state.read_byte(0x202), 0x20);
+        assert_ok_eq!(state.read_byte(0x203), 0x31);
+        assert_ok_eq!(state.read_byte(0x204), 0x32);
     }
 
     #[test]
     fn test_disable_output_stream_4() {
         let map = test_map(3);
-        // TODO: mock_state?
         let mut state = mock_state(map);
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io.is_stream_enabled(1));
         assert!(!io.is_stream_enabled(2));
         assert!(!io.is_stream_enabled(3));
@@ -654,13 +626,10 @@ mod tests {
 
     #[test]
     fn test_transcript_stream_2_enabled() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(!io.is_stream_2_open());
-        let f = File::create(Path::new("test-transcript.txt"));
-        assert!(f.is_ok());
-        io.set_stream_2(f.unwrap());
+        let f = assert_ok!(File::create(Path::new("test-transcript.txt")));
+        io.set_stream_2(f);
         assert!(io.enable_output_stream(2, None).is_ok());
         assert!(io.is_stream_2_open());
         assert!(Path::new("test-transcript.txt").exists());
@@ -674,14 +643,12 @@ mod tests {
             .is_ok());
         let s = fs::read_to_string(Path::new("test-transcript.txt"));
         assert!(fs::remove_file(Path::new("test-transcript.txt")).is_ok());
-        assert!(s.is_ok_and(|x| x.eq("This is transcripting")));
+        assert_ok_eq!(s, "This is transcripting");
     }
 
     #[test]
     fn test_transcript_stream_2_disabled() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(!io.is_stream_2_open());
         assert!(io
             .transcript(
@@ -695,54 +662,44 @@ mod tests {
 
     #[test]
     fn test_print_vec_window_0_no_buffering() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         io.buffered = false;
         assert!(io.print_vec(&"This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on".bytes().map(|x| x as u16).collect::<Vec<u16>>()).is_ok());
-        assert_print("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
-        assert!(io.cursor().is_ok_and(|x| x == (2, 44)));
+        assert_print!("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
+        assert_ok_eq!(io.cursor(), (2, 44));
     }
 
     #[test]
     fn test_print_vec_window_0_no_buffering_transcript() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         io.buffered = false;
-        let f = File::create(Path::new("test-nobuffer.txt"));
-        assert!(f.is_ok());
-        io.set_stream_2(f.unwrap());
+        let f = assert_ok!(File::create(Path::new("test-nobuffer.txt")));
+        io.set_stream_2(f);
         assert!(io.enable_output_stream(2, None).is_ok());
         assert!(io.is_stream_2_open());
         assert!(Path::new("test-nobuffer.txt").exists());
         assert!(io.print_vec(&"This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on".bytes().map(|x| x as u16).collect::<Vec<u16>>()).is_ok());
         let s = fs::read_to_string(Path::new("test-nobuffer.txt"));
         assert!(fs::remove_file(Path::new("test-nobuffer.txt")).is_ok());
-        assert!(s.is_ok_and(|x| x.eq("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on")));
-        assert_print("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
-        assert!(io.cursor().is_ok_and(|x| x == (2, 44)));
+        assert_ok_eq!(s, "This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
+        assert_print!("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
+        assert_ok_eq!(io.cursor(), (2, 44));
     }
 
     #[test]
     fn test_print_vec_window_0_buffering_() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         io.buffered = true;
         assert!(io.print_vec(&"This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on".bytes().map(|x| x as u16).collect::<Vec<u16>>()).is_ok());
-        assert_print("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
-        assert!(io.cursor().is_ok_and(|x| x == (2, 46)));
+        assert_print!("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
+        assert_ok_eq!(io.cursor(), (2, 46));
     }
 
     #[test]
     fn test_print_vec_window_0_buffering_transcript() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
-        let f = File::create(Path::new("test-buffer.txt"));
-        assert!(f.is_ok());
-        io.set_stream_2(f.unwrap());
+        let mut io = assert_ok!(IO::new(5, Config::default()));
+        let f = assert_ok!(File::create(Path::new("test-buffer.txt")));
+        io.set_stream_2(f);
         assert!(io.enable_output_stream(2, None).is_ok());
         assert!(io.is_stream_2_open());
         assert!(Path::new("test-buffer.txt").exists());
@@ -750,31 +707,27 @@ mod tests {
         assert!(io.print_vec(&"This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on".bytes().map(|x| x as u16).collect::<Vec<u16>>()).is_ok());
         let s = fs::read_to_string(Path::new("test-buffer.txt"));
         assert!(fs::remove_file(Path::new("test-buffer.txt")).is_ok());
-        assert!(s.is_ok_and(|x| x.eq("This is a very long string greater than 80 characters in length that will not \nbe wrapped because buffering is not turned on")));
-        assert_print("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
-        assert!(io.cursor().is_ok_and(|x| x == (2, 46)));
+        assert_ok_eq!(s, "This is a very long string greater than 80 characters in length that will not \nbe wrapped because buffering is not turned on");
+        assert_print!("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
+        assert_ok_eq!(io.cursor(), (2, 46));
     }
 
     #[test]
     fn test_print_vec_window_1() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         io.screen.split_window(12);
         assert!(io.screen.select_window(1).is_ok());
         io.buffered = true;
         assert!(io.print_vec(&"This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on".bytes().map(|x| x as u16).collect::<Vec<u16>>()).is_ok());
-        assert_print("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
-        assert!(io.cursor().is_ok_and(|x| x == (2, 44)));
+        assert_print!("This is a very long string greater than 80 characters in length that will not be wrapped because buffering is not turned on");
+        assert_ok_eq!(io.cursor(), (2, 44));
     }
 
     #[test]
     fn test_print_vec_stream_3() {
-        let map = test_map(3);
+        let map = test_map(5);
         let mut state = mock_state(map);
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.enable_output_stream(3, Some(0x200)).is_ok());
         io.buffered = false;
         assert!(io
@@ -785,111 +738,98 @@ mod tests {
                     .collect::<Vec<u16>>()
             )
             .is_ok());
-        assert_print("");
-        assert!(io.cursor().is_ok_and(|x| x == (1, 1)));
+        assert_print!("");
+        assert_ok_eq!(io.cursor(), (1, 1));
         assert!(io.disable_output_stream(&mut state, 3).is_ok());
-        assert!(state.read_word(0x200).is_ok_and(|x| x == 31));
-        assert!(state.read_byte(0x202).is_ok_and(|x| x == b'T'));
-        assert!(state.read_byte(0x203).is_ok_and(|x| x == b'h'));
-        assert!(state.read_byte(0x204).is_ok_and(|x| x == b'i'));
-        assert!(state.read_byte(0x205).is_ok_and(|x| x == b's'));
-        assert!(state.read_byte(0x206).is_ok_and(|x| x == b' '));
-        assert!(state.read_byte(0x207).is_ok_and(|x| x == b'w'));
-        assert!(state.read_byte(0x208).is_ok_and(|x| x == b'i'));
-        assert!(state.read_byte(0x209).is_ok_and(|x| x == b'l'));
-        assert!(state.read_byte(0x20A).is_ok_and(|x| x == b'l'));
-        assert!(state.read_byte(0x20B).is_ok_and(|x| x == b' '));
-        assert!(state.read_byte(0x20C).is_ok_and(|x| x == b'n'));
-        assert!(state.read_byte(0x20D).is_ok_and(|x| x == b'o'));
-        assert!(state.read_byte(0x20E).is_ok_and(|x| x == b't'));
-        assert!(state.read_byte(0x20F).is_ok_and(|x| x == b' '));
-        assert!(state.read_byte(0x210).is_ok_and(|x| x == b'p'));
-        assert!(state.read_byte(0x211).is_ok_and(|x| x == b'r'));
-        assert!(state.read_byte(0x212).is_ok_and(|x| x == b'i'));
-        assert!(state.read_byte(0x213).is_ok_and(|x| x == b'n'));
-        assert!(state.read_byte(0x214).is_ok_and(|x| x == b't'));
-        assert!(state.read_byte(0x215).is_ok_and(|x| x == b' '));
-        assert!(state.read_byte(0x216).is_ok_and(|x| x == b't'));
-        assert!(state.read_byte(0x217).is_ok_and(|x| x == b'o'));
-        assert!(state.read_byte(0x218).is_ok_and(|x| x == b' '));
-        assert!(state.read_byte(0x219).is_ok_and(|x| x == b's'));
-        assert!(state.read_byte(0x21A).is_ok_and(|x| x == b't'));
-        assert!(state.read_byte(0x21B).is_ok_and(|x| x == b'r'));
-        assert!(state.read_byte(0x21C).is_ok_and(|x| x == b'e'));
-        assert!(state.read_byte(0x21D).is_ok_and(|x| x == b'a'));
-        assert!(state.read_byte(0x21E).is_ok_and(|x| x == b'm'));
-        assert!(state.read_byte(0x21F).is_ok_and(|x| x == b' '));
-        assert!(state.read_byte(0x220).is_ok_and(|x| x == b'1'));
+        assert_ok_eq!(state.read_word(0x200), 31);
+        assert_ok_eq!(state.read_byte(0x202), b'T');
+        assert_ok_eq!(state.read_byte(0x203), b'h');
+        assert_ok_eq!(state.read_byte(0x204), b'i');
+        assert_ok_eq!(state.read_byte(0x205), b's');
+        assert_ok_eq!(state.read_byte(0x206), b' ');
+        assert_ok_eq!(state.read_byte(0x207), b'w');
+        assert_ok_eq!(state.read_byte(0x208), b'i');
+        assert_ok_eq!(state.read_byte(0x209), b'l');
+        assert_ok_eq!(state.read_byte(0x20A), b'l');
+        assert_ok_eq!(state.read_byte(0x20B), b' ');
+        assert_ok_eq!(state.read_byte(0x20C), b'n');
+        assert_ok_eq!(state.read_byte(0x20D), b'o');
+        assert_ok_eq!(state.read_byte(0x20E), b't');
+        assert_ok_eq!(state.read_byte(0x20F), b' ');
+        assert_ok_eq!(state.read_byte(0x210), b'p');
+        assert_ok_eq!(state.read_byte(0x211), b'r');
+        assert_ok_eq!(state.read_byte(0x212), b'i');
+        assert_ok_eq!(state.read_byte(0x213), b'n');
+        assert_ok_eq!(state.read_byte(0x214), b't');
+        assert_ok_eq!(state.read_byte(0x215), b' ');
+        assert_ok_eq!(state.read_byte(0x216), b't');
+        assert_ok_eq!(state.read_byte(0x217), b'o');
+        assert_ok_eq!(state.read_byte(0x218), b' ');
+        assert_ok_eq!(state.read_byte(0x219), b's');
+        assert_ok_eq!(state.read_byte(0x21A), b't');
+        assert_ok_eq!(state.read_byte(0x21B), b'r');
+        assert_ok_eq!(state.read_byte(0x21C), b'e');
+        assert_ok_eq!(state.read_byte(0x21D), b'a');
+        assert_ok_eq!(state.read_byte(0x21E), b'm');
+        assert_ok_eq!(state.read_byte(0x21F), b' ');
+        assert_ok_eq!(state.read_byte(0x220), b'1');
     }
 
     #[test]
     fn test_new_line_stream_1() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.new_line().is_ok());
-        assert!(io.cursor().is_ok_and(|x| x == (2, 1)));
+        assert_ok_eq!(io.cursor(), (2, 1));
     }
 
     #[test]
     fn test_new_line_stream_2() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
-        let f = File::create(Path::new("test-newline.txt"));
-        assert!(f.is_ok());
-        io.set_stream_2(f.unwrap());
+        let mut io = assert_ok!(IO::new(5, Config::default()));
+        let f = assert_ok!(File::create(Path::new("test-newline.txt")));
+        io.set_stream_2(f);
         assert!(io.enable_output_stream(2, None).is_ok());
         assert!(io.is_stream_2_open());
         assert!(Path::new("test-newline.txt").exists());
         assert!(io.new_line().is_ok());
         let s = fs::read_to_string(Path::new("test-newline.txt"));
         assert!(fs::remove_file(Path::new("test-newline.txt")).is_ok());
-        assert!(s.is_ok_and(|x| x.eq("\n")));
-        assert!(io.cursor().is_ok_and(|x| x == (2, 1)));
+        assert_ok_eq!(s, "\n");
+        assert_ok_eq!(io.cursor(), (2, 1));
     }
 
     #[test]
     fn test_new_line_stream_3() {
-        let map = test_map(5);
+        let map = test_map(3);
         let mut state = mock_state(map);
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.enable_output_stream(3, Some(0x200)).is_ok());
         assert!(io.new_line().is_ok());
-        assert!(io.cursor().is_ok_and(|x| x == (1, 1)));
+        assert_ok_eq!(io.cursor(), (1, 1));
         assert!(io.disable_output_stream(&mut state, 3).is_ok());
-        assert!(state.read_word(0x200).is_ok_and(|x| x == 1));
-        assert!(state.read_byte(0x202).is_ok_and(|x| x == 0xd));
+        assert_ok_eq!(state.read_word(0x200), 1);
+        assert_ok_eq!(state.read_byte(0x202), 0xd);
     }
 
     #[test]
     fn test_new_split_window() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io.split_window(12).is_ok());
         assert_eq!(split(), 12);
         // V3 erases the upper window
-        assert_print(&vec![' '; 960].iter().collect::<String>());
+        assert_print!(&vec![' '; 960].iter().collect::<String>());
     }
 
     #[test]
     fn test_new_split_window_v4() {
-        let i = IO::new(4, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(4, Config::default()));
         assert!(io.split_window(12).is_ok());
         assert_eq!(split(), 12);
-        assert_print("");
+        assert_print!("");
     }
 
     #[test]
     fn test_new_split_window_unsplit() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io.split_window(12).is_ok());
         assert_eq!(split(), 12);
         assert!(io.split_window(0).is_ok());
@@ -898,9 +838,7 @@ mod tests {
 
     #[test]
     fn test_set_window() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io.split_window(12).is_ok());
         assert_eq!(io.screen.selected_window(), 0);
         assert!(io.set_window(1).is_ok());
@@ -911,137 +849,111 @@ mod tests {
 
     #[test]
     fn test_set_window_no_window_1() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io.set_window(1).is_err());
         assert_eq!(io.screen.selected_window(), 0);
     }
 
     #[test]
     fn test_set_window_no_window_invalid() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io.set_window(2).is_err());
         assert_eq!(io.screen.selected_window(), 0);
     }
 
     #[test]
     fn test_erase_window_0() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.split_window(10).is_ok());
         assert!(io.erase_window(0).is_ok());
-        assert_print(&vec![' '; 80 * 14].iter().collect::<String>());
+        assert_print!(&vec![' '; 80 * 14].iter().collect::<String>());
     }
 
     #[test]
     fn test_erase_window_1() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.split_window(10).is_ok());
         assert!(io.erase_window(1).is_ok());
-        assert_print(&vec![' '; 80 * 10].iter().collect::<String>());
+        assert_print!(&vec![' '; 80 * 10].iter().collect::<String>());
     }
 
     #[test]
     fn test_erase_window_minus_1() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.split_window(10).is_ok());
         assert!(io.erase_window(-1).is_ok());
-        assert_print(&vec![' '; 1920].iter().collect::<String>());
+        assert_print!(&vec![' '; 1920].iter().collect::<String>());
         assert_eq!(split(), 0);
     }
 
     #[test]
     fn test_erase_window_minus_2() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.split_window(10).is_ok());
         assert!(io.erase_window(-2).is_ok());
-        assert_print(&vec![' '; 1920].iter().collect::<String>());
+        assert_print!(&vec![' '; 1920].iter().collect::<String>());
         assert_eq!(split(), 10);
     }
 
     #[test]
     fn test_erase_window_invalid() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.split_window(10).is_ok());
         assert!(io.erase_window(-3).is_err());
-        assert_print("");
+        assert_print!("");
         assert_eq!(split(), 10);
     }
 
     #[test]
     fn test_erase_line() {
-        let i = IO::new(5, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.split_window(10).is_ok());
         assert!(io.set_cursor(15, 5).is_ok());
         assert!(io.erase_line().is_ok());
-        assert_print(&vec![' '; 75].iter().collect::<String>());
+        assert_print!(&vec![' '; 75].iter().collect::<String>());
         assert_eq!(split(), 10);
     }
 
     #[test]
     fn test_status_line() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io
             .status_line(
                 &mut "(Darkness)".bytes().map(|x| x as u16).collect::<Vec<u16>>(),
                 &mut "    0/999".bytes().map(|x| x as u16).collect::<Vec<u16>>()
             )
             .is_ok());
-        assert!(io.cursor().is_ok_and(|x| x == (24, 1)));
-        assert_print(
-            " (Darkness)                                                               0/999 ",
+        assert_ok_eq!(io.cursor(), (24, 1));
+        assert_print!(
+            " (Darkness)                                                               0/999 "
         );
     }
 
     #[test]
     fn test_set_font() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
-        assert!(io.set_font(3).is_ok_and(|x| x == 1));
+        let mut io = assert_ok!(IO::new(5, Config::default()));
+        assert_ok_eq!(io.set_font(3), 1);
     }
 
     #[test]
     fn test_set_text_style() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.set_text_style(1).is_ok());
         assert_eq!(style(), 1);
     }
 
     #[test]
     fn test_cursor() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
-        assert!(io.cursor().is_ok_and(|x| x == (24, 1)));
+        let mut io = assert_ok!(IO::new(3, Config::default()));
+        assert_ok_eq!(io.cursor(), (24, 1));
         assert!(io.split_window(10).is_ok());
         assert!(io.set_window(1).is_ok());
-        assert!(io.cursor().is_ok_and(|x| x == (2, 1)));
+        assert_ok_eq!(io.cursor(), (2, 1));
     }
 
     #[test]
     fn test_set_cursor() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io.split_window(10).is_ok());
         assert!(io.set_cursor(13, 14).is_ok());
         assert_eq!(cursor(), (13, 14));
@@ -1052,9 +964,7 @@ mod tests {
 
     #[test]
     fn test_set_buffer_mode_on() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         io.buffered = false;
         assert!(io.buffer_mode(1).is_ok());
         assert!(io.buffered);
@@ -1063,9 +973,7 @@ mod tests {
 
     #[test]
     fn test_set_buffer_mode_off() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         io.buffered = true;
         assert!(io.buffer_mode(0).is_ok());
         assert!(!io.buffered);
@@ -1074,36 +982,28 @@ mod tests {
 
     #[test]
     fn test_beep() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io.beep().is_ok());
         assert!(beep());
     }
 
     #[test]
     fn test_set_colors() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(5, Config::default()));
         assert!(io.set_colors(8, 3).is_ok());
         assert_eq!(colors(), (8, 3));
     }
 
     #[test]
     fn test_read_key() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(4, Config::default()));
         input(&[' ']);
         assert_eq!(io.read_key(true), InputEvent::from_char(0x20));
     }
 
     #[test]
     fn test_backspace() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         assert!(io.set_cursor(10, 12).is_ok());
         assert!(io.backspace().is_ok());
         assert_eq!(backspace(), (10, 11));
@@ -1111,9 +1011,7 @@ mod tests {
 
     #[test]
     fn test_quit() {
-        let i = IO::new(3, Config::default());
-        assert!(i.is_ok());
-        let mut io = i.unwrap();
+        let mut io = assert_ok!(IO::new(3, Config::default()));
         io.quit();
         assert!(quit());
     }

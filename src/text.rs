@@ -500,8 +500,9 @@ pub fn parse_text(
 
 #[cfg(test)]
 mod tests {
-    use crate::test_util::{
-        assert_ok, mock_sorted_dictionary, mock_unsorted_dictionary, mock_zmachine, test_map,
+    use crate::{
+        assert_ok, assert_ok_eq,
+        test_util::{mock_sorted_dictionary, mock_unsorted_dictionary, mock_zmachine, test_map},
     };
 
     use super::*;
@@ -578,9 +579,9 @@ mod tests {
         map[0x41D] = 0x25;
 
         let zmachine = mock_zmachine(map);
-        let abbrev = assert_ok(abbreviation(&zmachine, 1, 0));
+        let abbrev = assert_ok!(abbreviation(&zmachine, 1, 0));
         assert_eq!(abbrev, [b'T' as u16, b'h' as u16, b'e' as u16, b' ' as u16]);
-        let abbrev = assert_ok(abbreviation(&zmachine, 1, 31));
+        let abbrev = assert_ok!(abbreviation(&zmachine, 1, 31));
         assert_eq!(
             abbrev,
             [
@@ -591,7 +592,7 @@ mod tests {
                 b' ' as u16
             ]
         );
-        let abbrev = assert_ok(abbreviation(&zmachine, 2, 0));
+        let abbrev = assert_ok!(abbreviation(&zmachine, 2, 0));
         assert_eq!(
             abbrev,
             [
@@ -602,7 +603,7 @@ mod tests {
                 b'.' as u16
             ]
         );
-        let abbrev = assert_ok(abbreviation(&zmachine, 2, 31));
+        let abbrev = assert_ok!(abbreviation(&zmachine, 2, 31));
         assert_eq!(
             abbrev,
             [
@@ -613,7 +614,7 @@ mod tests {
                 b' ' as u16
             ]
         );
-        let abbrev = assert_ok(abbreviation(&zmachine, 3, 0));
+        let abbrev = assert_ok!(abbreviation(&zmachine, 3, 0));
         assert_eq!(
             abbrev,
             [
@@ -627,7 +628,7 @@ mod tests {
                 b'k' as u16
             ]
         );
-        let abbrev = assert_ok(abbreviation(&zmachine, 3, 31));
+        let abbrev = assert_ok!(abbreviation(&zmachine, 3, 31));
         assert_eq!(
             abbrev,
             [
@@ -673,8 +674,9 @@ mod tests {
         map[0x414] = 0xE6;
         map[0x415] = 0x05;
         let zmachine = mock_zmachine(map);
-        assert!(as_text(&zmachine, 0x410, false).is_ok_and(|x| x
-            == [
+        assert_ok_eq!(
+            as_text(&zmachine, 0x410, false),
+            [
                 b'm' as u16,
                 b'x' as u16,
                 b'y' as u16,
@@ -683,7 +685,8 @@ mod tests {
                 b'l' as u16,
                 b't' as u16,
                 b'k' as u16
-            ]));
+            ]
+        );
     }
 
     #[test]
@@ -711,8 +714,9 @@ mod tests {
         map[0x41A] = 0xE0;
         map[0x41B] = 0xB5;
         let zmachine = mock_zmachine(map);
-        assert!(as_text(&zmachine, 0x410, false).is_ok_and(|x| x
-            == [
+        assert_ok_eq!(
+            as_text(&zmachine, 0x410, false),
+            [
                 b'E' as u16,
                 b't' as u16,
                 b' ' as u16,
@@ -727,7 +731,8 @@ mod tests {
                 b'u' as u16,
                 b's' as u16,
                 b'?' as u16
-            ]));
+            ]
+        );
     }
 
     #[test]
@@ -771,8 +776,9 @@ mod tests {
         map[0x422] = 0x93;
         map[0x423] = 0xC5;
         let zmachine = mock_zmachine(map);
-        assert!(as_text(&zmachine, 0x410, false).is_ok_and(|x| x
-            == [
+        assert_ok_eq!(
+            as_text(&zmachine, 0x410, false),
+            [
                 b'$' as u16,
                 b'1' as u16,
                 b'0' as u16,
@@ -786,7 +792,8 @@ mod tests {
                 b'A' as u16,
                 b'P' as u16,
                 b'Y' as u16,
-            ]));
+            ]
+        );
     }
 
     #[test]
@@ -821,8 +828,9 @@ mod tests {
         map[0x307] = 0xA5;
 
         let zmachine = mock_zmachine(map);
-        assert!(as_text(&zmachine, 0x300, false).is_ok_and(|x| x
-            == [
+        assert_ok_eq!(
+            as_text(&zmachine, 0x300, false),
+            [
                 b'H' as u16,
                 b'i' as u16,
                 b',' as u16,
@@ -836,7 +844,8 @@ mod tests {
                 b't' as u16,
                 b'k' as u16,
                 b'!' as u16,
-            ]));
+            ]
+        );
     }
 
     #[test]
@@ -850,7 +859,7 @@ mod tests {
         map[0x303] = b'!';
         map[0x304] = b'?';
         let zmachine = mock_zmachine(map);
-        assert!(separators(&zmachine, 0x300).is_ok_and(|x| x == [',', '.', '!', '?']));
+        assert_ok_eq!(separators(&zmachine, 0x300), [',', '.', '!', '?']);
     }
 
     #[test]
@@ -876,41 +885,42 @@ mod tests {
         mock_sorted_dictionary(&mut map);
         let zmachine = mock_zmachine(map);
         // Look up each entry
-        assert!(
-            search_entry(&zmachine, 0x307, 8, 9, &[0x1A69, 0x14A5, 0x94A5])
-                .is_ok_and(|x| x == 0x307)
+        assert_ok_eq!(
+            search_entry(&zmachine, 0x307, 8, 9, &[0x1A69, 0x14A5, 0x94A5]),
+            0x307
         );
-        assert!(
-            search_entry(&zmachine, 0x307, 8, 9, &[0x1EFA, 0x6758, 0x94A5])
-                .is_ok_and(|x| x == 0x310)
+        assert_ok_eq!(
+            search_entry(&zmachine, 0x307, 8, 9, &[0x1EFA, 0x6758, 0x94A5]),
+            0x310
         );
-        assert!(
-            search_entry(&zmachine, 0x307, 8, 9, &[0x3551, 0x4685, 0x94A5])
-                .is_ok_and(|x| x == 0x319)
+        assert_ok_eq!(
+            search_entry(&zmachine, 0x307, 8, 9, &[0x3551, 0x4685, 0x94A5]),
+            0x319
         );
-        assert!(
-            search_entry(&zmachine, 0x307, 8, 9, &[0x3A7B, 0x2A79, 0xD2FE])
-                .is_ok_and(|x| x == 0x322)
+        assert_ok_eq!(
+            search_entry(&zmachine, 0x307, 8, 9, &[0x3A7B, 0x2A79, 0xD2FE]),
+            0x322
         );
-        assert!(
-            search_entry(&zmachine, 0x307, 8, 9, &[0x4694, 0x40A5, 0x94A5])
-                .is_ok_and(|x| x == 0x32B)
+        assert_ok_eq!(
+            search_entry(&zmachine, 0x307, 8, 9, &[0x4694, 0x40A5, 0x94A5]),
+            0x32B
         );
-        assert!(
-            search_entry(&zmachine, 0x307, 8, 9, &[0x4BBE, 0x7EB9, 0xC605])
-                .is_ok_and(|x| x == 0x334)
+        assert_ok_eq!(
+            search_entry(&zmachine, 0x307, 8, 9, &[0x4BBE, 0x7EB9, 0xC605]),
+            0x334
         );
-        assert!(
-            search_entry(&zmachine, 0x307, 8, 9, &[0x60CE, 0x4697, 0x94A5])
-                .is_ok_and(|x| x == 0x33D)
+        assert_ok_eq!(
+            search_entry(&zmachine, 0x307, 8, 9, &[0x60CE, 0x4697, 0x94A5]),
+            0x33D
         );
-        assert!(
-            search_entry(&zmachine, 0x307, 8, 9, &[0x77DF, 0x7FC5, 0x94A5])
-                .is_ok_and(|x| x == 0x346)
+        assert_ok_eq!(
+            search_entry(&zmachine, 0x307, 8, 9, &[0x77DF, 0x7FC5, 0x94A5]),
+            0x346
         );
         // Now look for something that isn't there
-        assert!(
-            search_entry(&zmachine, 0x307, 8, 9, &[0x3A7B, 0x2A79, 0xD2FF]).is_ok_and(|x| x == 0)
+        assert_ok_eq!(
+            search_entry(&zmachine, 0x307, 8, 9, &[0x3A7B, 0x2A79, 0xD2FF]),
+            0
         );
     }
 
@@ -920,33 +930,42 @@ mod tests {
         mock_unsorted_dictionary(&mut map);
         let zmachine = mock_zmachine(map);
         // Look up each entry
-        assert!(
-            scan_entry(&zmachine, 0x307, 8, 9, &[0x1A69, 0x14A5, 0x94A5]).is_ok_and(|x| x == 0x310)
+        assert_ok_eq!(
+            scan_entry(&zmachine, 0x307, 8, 9, &[0x1A69, 0x14A5, 0x94A5]),
+            0x310
         );
-        assert!(
-            scan_entry(&zmachine, 0x307, 8, 9, &[0x1EFA, 0x6758, 0x94A5]).is_ok_and(|x| x == 0x322)
+        assert_ok_eq!(
+            scan_entry(&zmachine, 0x307, 8, 9, &[0x1EFA, 0x6758, 0x94A5]),
+            0x322
         );
-        assert!(
-            scan_entry(&zmachine, 0x307, 8, 9, &[0x3551, 0x4685, 0x94A5]).is_ok_and(|x| x == 0x334)
+        assert_ok_eq!(
+            scan_entry(&zmachine, 0x307, 8, 9, &[0x3551, 0x4685, 0x94A5]),
+            0x334
         );
-        assert!(
-            scan_entry(&zmachine, 0x307, 8, 9, &[0x3A7B, 0x2A79, 0xD2FE]).is_ok_and(|x| x == 0x319)
+        assert_ok_eq!(
+            scan_entry(&zmachine, 0x307, 8, 9, &[0x3A7B, 0x2A79, 0xD2FE]),
+            0x319
         );
-        assert!(
-            scan_entry(&zmachine, 0x307, 8, 9, &[0x4694, 0x40A5, 0x94A5]).is_ok_and(|x| x == 0x307)
+        assert_ok_eq!(
+            scan_entry(&zmachine, 0x307, 8, 9, &[0x4694, 0x40A5, 0x94A5]),
+            0x307
         );
-        assert!(
-            scan_entry(&zmachine, 0x307, 8, 9, &[0x4BBE, 0x7EB9, 0xC605]).is_ok_and(|x| x == 0x346)
+        assert_ok_eq!(
+            scan_entry(&zmachine, 0x307, 8, 9, &[0x4BBE, 0x7EB9, 0xC605]),
+            0x346
         );
-        assert!(
-            scan_entry(&zmachine, 0x307, 8, 9, &[0x60CE, 0x4697, 0x94A5]).is_ok_and(|x| x == 0x33D)
+        assert_ok_eq!(
+            scan_entry(&zmachine, 0x307, 8, 9, &[0x60CE, 0x4697, 0x94A5]),
+            0x33D
         );
-        assert!(
-            scan_entry(&zmachine, 0x307, 8, 9, &[0x77DF, 0x7FC5, 0x94A5]).is_ok_and(|x| x == 0x32B)
+        assert_ok_eq!(
+            scan_entry(&zmachine, 0x307, 8, 9, &[0x77DF, 0x7FC5, 0x94A5]),
+            0x32B
         );
         // Now look for something that isn't there
-        assert!(
-            scan_entry(&zmachine, 0x307, 8, 9, &[0x3A7B, 0x2A79, 0xD2FF]).is_ok_and(|x| x == 0)
+        assert_ok_eq!(
+            scan_entry(&zmachine, 0x307, 8, 9, &[0x3A7B, 0x2A79, 0xD2FF]),
+            0
         );
     }
 
@@ -996,34 +1015,41 @@ mod tests {
 
         let zmachine = mock_zmachine(map);
         // Look up each entry
-        assert!(from_dictionary(&zmachine, 0x300, &['a', 'n', 'd']).is_ok_and(|x| x == 0x307));
-        assert!(
-            from_dictionary(&zmachine, 0x300, &['b', 'r', 'u', 't', 'u', 's'])
-                .is_ok_and(|x| x == 0x310)
+        assert_ok_eq!(from_dictionary(&zmachine, 0x300, &['a', 'n', 'd']), 0x307);
+        assert_ok_eq!(
+            from_dictionary(&zmachine, 0x300, &['b', 'r', 'u', 't', 'u', 's']),
+            0x310
         );
-        assert!(
-            from_dictionary(&zmachine, 0x300, &['h', 'e', 'l', 'l', 'o']).is_ok_and(|x| x == 0x319)
+        assert_ok_eq!(
+            from_dictionary(&zmachine, 0x300, &['h', 'e', 'l', 'l', 'o']),
+            0x319
         );
-        assert!(from_dictionary(
-            &zmachine,
-            0x300,
-            &['i', 'n', 'v', 'e', 'n', 't', 'o', 'r', 'y']
-        )
-        .is_ok_and(|x| x == 0x322));
-        assert!(from_dictionary(&zmachine, 0x300, &['l', 'o', 'o', 'k']).is_ok_and(|x| x == 0x32B));
-        assert!(
-            from_dictionary(&zmachine, 0x300, &['m', 'x', 'y', 'z', 'p', 't', 'l', 'k'])
-                .is_ok_and(|x| x == 0x334)
+        assert_ok_eq!(
+            from_dictionary(
+                &zmachine,
+                0x300,
+                &['i', 'n', 'v', 'e', 'n', 't', 'o', 'r', 'y']
+            ),
+            0x322
         );
-        assert!(
-            from_dictionary(&zmachine, 0x300, &['s', 'a', 'i', 'l', 'o', 'r'])
-                .is_ok_and(|x| x == 0x33D)
+        assert_ok_eq!(
+            from_dictionary(&zmachine, 0x300, &['l', 'o', 'o', 'k']),
+            0x32B
         );
-        assert!(
-            from_dictionary(&zmachine, 0x300, &['x', 'y', 'z', 'z', 'y']).is_ok_and(|x| x == 0x346)
+        assert_ok_eq!(
+            from_dictionary(&zmachine, 0x300, &['m', 'x', 'y', 'z', 'p', 't', 'l', 'k']),
+            0x334
+        );
+        assert_ok_eq!(
+            from_dictionary(&zmachine, 0x300, &['s', 'a', 'i', 'l', 'o', 'r']),
+            0x33D
+        );
+        assert_ok_eq!(
+            from_dictionary(&zmachine, 0x300, &['x', 'y', 'z', 'z', 'y']),
+            0x346
         );
         // Now look for something that isn't there
-        assert!(from_dictionary(&zmachine, 0x300, &['n', 'o', 'p', 'e']).is_ok_and(|x| x == 0));
+        assert_ok_eq!(from_dictionary(&zmachine, 0x300, &['n', 'o', 'p', 'e']), 0);
     }
 
     #[test]
@@ -1032,34 +1058,41 @@ mod tests {
         mock_unsorted_dictionary(&mut map);
         let zmachine = mock_zmachine(map);
         // Look up each entry
-        assert!(from_dictionary(&zmachine, 0x300, &['a', 'n', 'd']).is_ok_and(|x| x == 0x310));
-        assert!(
-            from_dictionary(&zmachine, 0x300, &['b', 'r', 'u', 't', 'u', 's'])
-                .is_ok_and(|x| x == 0x322)
+        assert_ok_eq!(from_dictionary(&zmachine, 0x300, &['a', 'n', 'd']), 0x310);
+        assert_ok_eq!(
+            from_dictionary(&zmachine, 0x300, &['b', 'r', 'u', 't', 'u', 's']),
+            0x322
         );
-        assert!(
-            from_dictionary(&zmachine, 0x300, &['h', 'e', 'l', 'l', 'o']).is_ok_and(|x| x == 0x334)
+        assert_ok_eq!(
+            from_dictionary(&zmachine, 0x300, &['h', 'e', 'l', 'l', 'o']),
+            0x334
         );
-        assert!(from_dictionary(
-            &zmachine,
-            0x300,
-            &['i', 'n', 'v', 'e', 'n', 't', 'o', 'r', 'y']
-        )
-        .is_ok_and(|x| x == 0x319));
-        assert!(from_dictionary(&zmachine, 0x300, &['l', 'o', 'o', 'k']).is_ok_and(|x| x == 0x307));
-        assert!(
-            from_dictionary(&zmachine, 0x300, &['m', 'x', 'y', 'z', 'p', 't', 'l', 'k'])
-                .is_ok_and(|x| x == 0x346)
+        assert_ok_eq!(
+            from_dictionary(
+                &zmachine,
+                0x300,
+                &['i', 'n', 'v', 'e', 'n', 't', 'o', 'r', 'y']
+            ),
+            0x319
         );
-        assert!(
-            from_dictionary(&zmachine, 0x300, &['s', 'a', 'i', 'l', 'o', 'r'])
-                .is_ok_and(|x| x == 0x33D)
+        assert_ok_eq!(
+            from_dictionary(&zmachine, 0x300, &['l', 'o', 'o', 'k']),
+            0x307
         );
-        assert!(
-            from_dictionary(&zmachine, 0x300, &['x', 'y', 'z', 'z', 'y']).is_ok_and(|x| x == 0x32B)
+        assert_ok_eq!(
+            from_dictionary(&zmachine, 0x300, &['m', 'x', 'y', 'z', 'p', 't', 'l', 'k']),
+            0x346
+        );
+        assert_ok_eq!(
+            from_dictionary(&zmachine, 0x300, &['s', 'a', 'i', 'l', 'o', 'r']),
+            0x33D
+        );
+        assert_ok_eq!(
+            from_dictionary(&zmachine, 0x300, &['x', 'y', 'z', 'z', 'y']),
+            0x32B
         );
         // Now look for something that isn't there
-        assert!(from_dictionary(&zmachine, 0x300, &['n', 'o', 'p', 'e']).is_ok_and(|x| x == 0));
+        assert_ok_eq!(from_dictionary(&zmachine, 0x300, &['n', 'o', 'p', 'e']), 0);
     }
 
     #[test]
@@ -1092,19 +1125,19 @@ mod tests {
         let mut zmachine = mock_zmachine(map);
         assert!(parse_text(&mut zmachine, 0x200, 0x280, 0x300, false).is_ok());
         // 3 entries
-        assert!(zmachine.read_byte(0x281).is_ok_and(|x| x == 3));
+        assert_ok_eq!(zmachine.read_byte(0x281), 3);
         // hello
-        assert!(zmachine.read_word(0x282).is_ok_and(|x| x == 0x319));
-        assert!(zmachine.read_byte(0x284).is_ok_and(|x| x == 5));
-        assert!(zmachine.read_byte(0x285).is_ok_and(|x| x == 1));
+        assert_ok_eq!(zmachine.read_word(0x282), 0x319);
+        assert_ok_eq!(zmachine.read_byte(0x284), 5);
+        assert_ok_eq!(zmachine.read_byte(0x285), 1);
         // ,
-        assert!(zmachine.read_word(0x286).is_ok_and(|x| x == 0));
-        assert!(zmachine.read_byte(0x288).is_ok_and(|x| x == 1));
-        assert!(zmachine.read_byte(0x289).is_ok_and(|x| x == 6));
+        assert_ok_eq!(zmachine.read_word(0x286), 0);
+        assert_ok_eq!(zmachine.read_byte(0x288), 1);
+        assert_ok_eq!(zmachine.read_byte(0x289), 6);
         // sailor
-        assert!(zmachine.read_word(0x28A).is_ok_and(|x| x == 0x33D));
-        assert!(zmachine.read_byte(0x28C).is_ok_and(|x| x == 6));
-        assert!(zmachine.read_byte(0x28D).is_ok_and(|x| x == 8));
+        assert_ok_eq!(zmachine.read_word(0x28A), 0x33D);
+        assert_ok_eq!(zmachine.read_byte(0x28C), 6);
+        assert_ok_eq!(zmachine.read_byte(0x28D), 8);
     }
 
     #[test]
@@ -1137,19 +1170,19 @@ mod tests {
         let mut zmachine = mock_zmachine(map);
         assert!(parse_text(&mut zmachine, 0x200, 0x280, 0x300, false).is_ok());
         // 3 entries
-        assert!(zmachine.read_byte(0x281).is_ok_and(|x| x == 3));
+        assert_ok_eq!(zmachine.read_byte(0x281), 3);
         // hello
-        assert!(zmachine.read_word(0x282).is_ok_and(|x| x == 0x334));
-        assert!(zmachine.read_byte(0x284).is_ok_and(|x| x == 5));
-        assert!(zmachine.read_byte(0x285).is_ok_and(|x| x == 2));
+        assert_ok_eq!(zmachine.read_word(0x282), 0x334);
+        assert_ok_eq!(zmachine.read_byte(0x284), 5);
+        assert_ok_eq!(zmachine.read_byte(0x285), 2);
         // ,
-        assert!(zmachine.read_word(0x286).is_ok_and(|x| x == 0));
-        assert!(zmachine.read_byte(0x288).is_ok_and(|x| x == 1));
-        assert!(zmachine.read_byte(0x289).is_ok_and(|x| x == 7));
+        assert_ok_eq!(zmachine.read_word(0x286), 0);
+        assert_ok_eq!(zmachine.read_byte(0x288), 1);
+        assert_ok_eq!(zmachine.read_byte(0x289), 7);
         // sailor
-        assert!(zmachine.read_word(0x28A).is_ok_and(|x| x == 0x33D));
-        assert!(zmachine.read_byte(0x28C).is_ok_and(|x| x == 6));
-        assert!(zmachine.read_byte(0x28D).is_ok_and(|x| x == 9));
+        assert_ok_eq!(zmachine.read_word(0x28A), 0x33D);
+        assert_ok_eq!(zmachine.read_byte(0x28C), 6);
+        assert_ok_eq!(zmachine.read_byte(0x28D), 9);
     }
 
     #[test]
@@ -1195,18 +1228,18 @@ mod tests {
         let mut zmachine = mock_zmachine(map);
         assert!(parse_text(&mut zmachine, 0x200, 0x280, 0x300, true).is_ok());
         // 3 entries
-        assert!(zmachine.read_byte(0x281).is_ok_and(|x| x == 3));
+        assert_ok_eq!(zmachine.read_byte(0x281), 3);
         // previously parsed adios
-        assert!(zmachine.read_word(0x282).is_ok_and(|x| x == 0x1122));
-        assert!(zmachine.read_byte(0x284).is_ok_and(|x| x == 5));
-        assert!(zmachine.read_byte(0x285).is_ok_and(|x| x == 2));
+        assert_ok_eq!(zmachine.read_word(0x282), 0x1122);
+        assert_ok_eq!(zmachine.read_byte(0x284), 5);
+        assert_ok_eq!(zmachine.read_byte(0x285), 2);
         // previously parsed ,
-        assert!(zmachine.read_word(0x286).is_ok_and(|x| x == 0x1133));
-        assert!(zmachine.read_byte(0x288).is_ok_and(|x| x == 1));
-        assert!(zmachine.read_byte(0x289).is_ok_and(|x| x == 7));
+        assert_ok_eq!(zmachine.read_word(0x286), 0x1133);
+        assert_ok_eq!(zmachine.read_byte(0x288), 1);
+        assert_ok_eq!(zmachine.read_byte(0x289), 7);
         // sailor
-        assert!(zmachine.read_word(0x28A).is_ok_and(|x| x == 0x33D));
-        assert!(zmachine.read_byte(0x28C).is_ok_and(|x| x == 6));
-        assert!(zmachine.read_byte(0x28D).is_ok_and(|x| x == 9));
+        assert_ok_eq!(zmachine.read_word(0x28A), 0x33D);
+        assert_ok_eq!(zmachine.read_byte(0x28C), 6);
+        assert_ok_eq!(zmachine.read_byte(0x28D), 9);
     }
 }

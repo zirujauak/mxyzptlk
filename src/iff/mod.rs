@@ -338,9 +338,8 @@ mod tests {
             "ID  ".to_string(),
             &vec![0x1, 0x2, 0x3, 0x4],
         );
-        let v = Vec::from(chunk);
         assert_eq!(
-            v,
+            Vec::from(chunk),
             &[
                 b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x08, b'I', b'D', b' ', b' ', 0x01, 0x02,
                 0x03, 0x04
@@ -363,9 +362,8 @@ mod tests {
             "ID  ".to_string(),
             &vec![0x1, 0x2, 0x3, 0x4],
         );
-        let v = Vec::from(chunk);
         assert_eq!(
-            v,
+            Vec::from(chunk),
             &[
                 b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x08, b'I', b'D', b' ', b' ', 0x01, 0x02,
                 0x03, 0x04

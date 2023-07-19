@@ -231,6 +231,3 @@ pub fn set_property(
         }
     }
 }
-
-#[cfg(test)]
-mod tests {}

@@ -678,7 +678,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_util::test_map;
+    use crate::{assert_ok, assert_ok_eq, assert_some, assert_some_eq, test_util::test_map};
 
     use super::*;
 
@@ -700,9 +700,7 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         // See memory.rs tests ... change dynamic memory a little bit
         // so the compressed memory isn't just runs of 0s
         assert!(state.write_byte(0x200, 0xFC).is_ok());
@@ -728,14 +726,12 @@ mod tests {
             0x623,
         ));
 
-        let state = s.unwrap();
-        let q = Quetzal::try_from((&state, 0x494));
-        assert!(q.is_ok());
-        let quetzal = q.unwrap();
-        assert!(quetzal.cmem().is_some_and(|x| x.data()
-            == &vec![
-                0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE
-            ]));
+        let quetzal = assert_ok!(Quetzal::try_from((&state, 0x494)));
+        let cmem = assert_some!(quetzal.cmem());
+        assert_eq!(
+            cmem.data(),
+            &vec![0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE]
+        );
         assert_eq!(quetzal.ifhd().release_number(), 0x1234);
         assert_eq!(
             quetzal.ifhd().serial_number(),
@@ -771,20 +767,16 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         // See memory.rs tests ... change dynamic memory a little bit
         // so the compressed memory isn't just runs of 0s
         assert!(state.write_byte(0x200, 0xFC).is_ok());
         assert!(state.write_byte(0x280, 0x10).is_ok());
         assert!(state.write_byte(0x300, 0xFD).is_ok());
 
-        let state = s.unwrap();
-        let cmem = CMem::try_from(&state);
-        assert!(cmem.is_ok());
+        let cmem = assert_ok!(CMem::try_from(&state));
         assert_eq!(
-            cmem.unwrap().data(),
+            cmem.data(),
             &vec![0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE]
         );
     }
@@ -807,16 +799,12 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        let ifhd = IFhd::try_from((&state, 0x9abc));
-        assert!(ifhd.is_ok());
-        let i = ifhd.unwrap();
-        assert_eq!(i.release_number(), 0x1234);
-        assert_eq!(i.serial_number(), &[b'2', b'3', b'0', b'7', b'1', b'5']);
-        assert_eq!(i.checksum(), 0x5678);
-        assert_eq!(i.pc(), 0x9abc);
+        let state = assert_ok!(State::new(m));
+        let ifhd = assert_ok!(IFhd::try_from((&state, 0x9abc)));
+        assert_eq!(ifhd.release_number(), 0x1234);
+        assert_eq!(ifhd.serial_number(), &[b'2', b'3', b'0', b'7', b'1', b'5']);
+        assert_eq!(ifhd.checksum(), 0x5678);
+        assert_eq!(ifhd.pc(), 0x9abc);
     }
 
     #[test]
@@ -826,9 +814,7 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x500,
             0x501,
@@ -848,32 +834,27 @@ mod tests {
             0x623,
         ));
 
-        let state = s.unwrap();
-        let stks = Stks::try_from(&state);
-        assert!(stks.is_ok());
-        let s = stks.unwrap();
-        assert_eq!(s.stks().len(), 2);
-        assert_eq!(s.stks()[0].return_address(), 0x48E);
-        assert_eq!(s.stks()[0].flags(), 0x3);
-        assert_eq!(s.stks()[0].result_variable(), 0x80);
-        assert_eq!(s.stks()[0].arguments(), 0x3);
-        assert_eq!(s.stks()[0].local_variables(), &[0x1122, 0x3344, 0x5566]);
-        assert_eq!(s.stks()[0].stack(), &[0x1111, 0x2222]);
-        assert_eq!(s.stks()[1].return_address(), 0x623);
-        assert_eq!(s.stks()[1].flags(), 0x12);
-        assert_eq!(s.stks()[1].result_variable(), 0);
-        assert_eq!(s.stks()[1].arguments(), 0);
-        assert_eq!(s.stks()[1].local_variables(), &[0x8899, 0xaabb]);
-        assert!(s.stks()[1].stack().is_empty());
+        let stks = assert_ok!(Stks::try_from(&state));
+        assert_eq!(stks.stks().len(), 2);
+        assert_eq!(stks.stks()[0].return_address(), 0x48E);
+        assert_eq!(stks.stks()[0].flags(), 0x3);
+        assert_eq!(stks.stks()[0].result_variable(), 0x80);
+        assert_eq!(stks.stks()[0].arguments(), 0x3);
+        assert_eq!(stks.stks()[0].local_variables(), &[0x1122, 0x3344, 0x5566]);
+        assert_eq!(stks.stks()[0].stack(), &[0x1111, 0x2222]);
+        assert_eq!(stks.stks()[1].return_address(), 0x623);
+        assert_eq!(stks.stks()[1].flags(), 0x12);
+        assert_eq!(stks.stks()[1].result_variable(), 0);
+        assert_eq!(stks.stks()[1].arguments(), 0);
+        assert_eq!(stks.stks()[1].local_variables(), &[0x8899, 0xaabb]);
+        assert!(stks.stks()[1].stack().is_empty());
     }
 
     #[test]
     fn test_constructor() {
         let map = test_map(3);
         let m = Memory::new(map.clone());
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
+        let state = assert_ok!(State::new(m));
         assert_eq!(state.version(), 3);
         assert_eq!(state.memory().slice(0, 0x800), map);
         assert_eq!(state.static_mark, 0x400);
@@ -889,9 +870,7 @@ mod tests {
     fn test_current_frame() {
         let map = test_map(3);
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x500,
             0x501,
@@ -910,9 +889,7 @@ mod tests {
             None,
             0x623,
         ));
-        let f = state.current_frame();
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        let frame = assert_ok!(state.current_frame());
         assert_eq!(frame.address(), 0x480);
         assert_eq!(frame.pc(), 0x48C);
         assert_eq!(frame.local_variables(), &[0x8899, 0xaabb]);
@@ -927,9 +904,7 @@ mod tests {
     fn test_current_frame_err() {
         let map = test_map(3);
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let state = assert_ok!(State::new(m));
         assert!(state.current_frame().is_err());
     }
 
@@ -937,9 +912,7 @@ mod tests {
     fn test_current_frame_mut() {
         let map = test_map(3);
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x500,
             0x501,
@@ -958,9 +931,7 @@ mod tests {
             None,
             0x623,
         ));
-        let f = state.current_frame_mut();
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        let frame = assert_ok!(state.current_frame_mut());
         assert_eq!(frame.address(), 0x480);
         assert_eq!(frame.pc(), 0x48C);
         assert_eq!(frame.local_variables(), &[0x8899, 0xaabb]);
@@ -978,9 +949,7 @@ mod tests {
     fn test_current_frame_mut_err() {
         let map = test_map(3);
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.current_frame_mut().is_err());
     }
 
@@ -988,20 +957,31 @@ mod tests {
     fn test_initialize_v3() {
         let map = test_map(3);
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(24, 80, (9, 2), true).is_ok());
-        assert!(header::flag1(state, Flags1v3::StatusLineNotAvailable as u8).is_ok_and(|x| x == 0));
-        assert!(header::flag1(state, Flags1v3::ScreenSplitAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::flag1(state, Flags1v3::VariablePitchDefault as u8).is_ok_and(|x| x == 0));
-        assert!(header::field_byte(state, HeaderField::InterpreterNumber).is_ok_and(|x| x == 6));
-        assert!(header::field_byte(state, HeaderField::InterpreterVersion).is_ok_and(|x| x == b'Z'));
-        assert!(state.read_word(0x32).is_ok_and(|x| x == 0x0100));
+        assert_ok_eq!(
+            header::flag1(&state, Flags1v3::StatusLineNotAvailable as u8),
+            0
+        );
+        assert_ok_eq!(
+            header::flag1(&state, Flags1v3::ScreenSplitAvailable as u8),
+            1
+        );
+        assert_ok_eq!(
+            header::flag1(&state, Flags1v3::VariablePitchDefault as u8),
+            0
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::InterpreterNumber),
+            6
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::InterpreterVersion),
+            b'Z'
+        );
+        assert_ok_eq!(state.read_word(0x32), 0x0100);
         assert_eq!(state.frame_count(), 1);
-        let f = state.current_frame();
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        let frame = assert_ok!(state.current_frame());
         assert_eq!(frame.address(), 0x400);
         assert_eq!(frame.pc(), 0x400);
         assert!(frame.local_variables().is_empty());
@@ -1017,22 +997,33 @@ mod tests {
     fn test_initialize_v4() {
         let map = test_map(4);
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(24, 80, (9, 2), true).is_ok());
-        assert!(header::flag1(state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::field_byte(state, HeaderField::DefaultBackground).is_ok_and(|x| x == 2));
-        assert!(header::field_byte(state, HeaderField::DefaultForeground).is_ok_and(|x| x == 9));
-        assert!(header::field_byte(state, HeaderField::ScreenLines).is_ok_and(|x| x == 24));
-        assert!(header::field_byte(state, HeaderField::ScreenColumns).is_ok_and(|x| x == 80));
-        assert!(header::field_byte(state, HeaderField::InterpreterNumber).is_ok_and(|x| x == 6));
-        assert!(header::field_byte(state, HeaderField::InterpreterVersion).is_ok_and(|x| x == b'Z'));
-        assert!(state.read_word(0x32).is_ok_and(|x| x == 0x0100));
+        assert_ok_eq!(
+            header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8),
+            1
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultBackground),
+            2
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultForeground),
+            9
+        );
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenLines), 24);
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenColumns), 80);
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::InterpreterNumber),
+            6
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::InterpreterVersion),
+            b'Z'
+        );
+        assert_ok_eq!(state.read_word(0x32), 0x0100);
         assert_eq!(state.frame_count(), 1);
-        let f = state.current_frame();
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        let frame = assert_ok!(state.current_frame());
         assert_eq!(frame.address(), 0x400);
         assert_eq!(frame.pc(), 0x400);
         assert!(frame.local_variables().is_empty());
@@ -1048,22 +1039,33 @@ mod tests {
     fn test_initialize_v4_no_sounds() {
         let map = test_map(4);
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(24, 80, (9, 2), false).is_ok());
-        assert!(header::flag1(state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
-        assert!(header::field_byte(state, HeaderField::DefaultBackground).is_ok_and(|x| x == 2));
-        assert!(header::field_byte(state, HeaderField::DefaultForeground).is_ok_and(|x| x == 9));
-        assert!(header::field_byte(state, HeaderField::ScreenLines).is_ok_and(|x| x == 24));
-        assert!(header::field_byte(state, HeaderField::ScreenColumns).is_ok_and(|x| x == 80));
-        assert!(header::field_byte(state, HeaderField::InterpreterNumber).is_ok_and(|x| x == 6));
-        assert!(header::field_byte(state, HeaderField::InterpreterVersion).is_ok_and(|x| x == b'Z'));
-        assert!(state.read_word(0x32).is_ok_and(|x| x == 0x0100));
+        assert_ok_eq!(
+            header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8),
+            0
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultBackground),
+            2
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultForeground),
+            9
+        );
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenLines), 24);
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenColumns), 80);
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::InterpreterNumber),
+            6
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::InterpreterVersion),
+            b'Z'
+        );
+        assert_ok_eq!(state.read_word(0x32), 0x0100);
         assert_eq!(state.frame_count(), 1);
-        let f = state.current_frame();
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        let frame = assert_ok!(state.current_frame());
         assert_eq!(frame.address(), 0x400);
         assert_eq!(frame.pc(), 0x400);
         assert!(frame.local_variables().is_empty());
@@ -1080,37 +1082,54 @@ mod tests {
         let mut map = test_map(5);
         map[0x11] = 0xF8;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(24, 80, (9, 2), true).is_ok());
-        assert!(header::flag1(state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 0));
-        assert!(header::flag1(state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::flag1(state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::flag1(state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::flag1(state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::flag1(state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::flag1(state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::flag2(state, Flags2::RequestPictures).is_ok_and(|x| x == 0));
-        assert!(header::flag2(state, Flags2::RequestUndo).is_ok_and(|x| x == 1));
-        assert!(header::flag2(state, Flags2::RequestMouse).is_ok_and(|x| x == 1));
-        assert!(header::flag2(state, Flags2::RequestColours).is_ok_and(|x| x == 1));
-        assert!(header::flag2(state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 1));
-        assert!(header::field_byte(state, HeaderField::DefaultBackground).is_ok_and(|x| x == 2));
-        assert!(header::field_byte(state, HeaderField::DefaultForeground).is_ok_and(|x| x == 9));
-        assert!(header::field_byte(state, HeaderField::ScreenLines).is_ok_and(|x| x == 24));
-        assert!(header::field_byte(state, HeaderField::ScreenColumns).is_ok_and(|x| x == 80));
-        assert!(header::field_word(state, HeaderField::ScreenHeight).is_ok_and(|x| x == 24));
-        assert!(header::field_word(state, HeaderField::ScreenWidth).is_ok_and(|x| x == 80));
-        assert!(header::field_byte(state, HeaderField::FontWidth).is_ok_and(|x| x == 1));
-        assert!(header::field_byte(state, HeaderField::FontHeight).is_ok_and(|x| x == 1));
-        assert!(header::field_byte(state, HeaderField::InterpreterNumber).is_ok_and(|x| x == 6));
-        assert!(header::field_byte(state, HeaderField::InterpreterVersion).is_ok_and(|x| x == b'Z'));
-        assert!(state.read_word(0x32).is_ok_and(|x| x == 0x0100));
+        assert_ok_eq!(header::flag1(&state, Flags1v4::PicturesAvailable as u8), 0);
+        assert_ok_eq!(header::flag1(&state, Flags1v4::ColoursAvailable as u8), 1);
+        assert_ok_eq!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8), 1);
+        assert_ok_eq!(header::flag1(&state, Flags1v4::ItalicAvailable as u8), 1);
+        assert_ok_eq!(
+            header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8),
+            1
+        );
+        assert_ok_eq!(
+            header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8),
+            1
+        );
+        assert_ok_eq!(
+            header::flag1(&state, Flags1v4::TimedInputAvailable as u8),
+            1
+        );
+        assert_ok_eq!(header::flag2(&state, Flags2::RequestPictures), 0);
+        assert_ok_eq!(header::flag2(&state, Flags2::RequestUndo), 1);
+        assert_ok_eq!(header::flag2(&state, Flags2::RequestMouse), 1);
+        assert_ok_eq!(header::flag2(&state, Flags2::RequestColours), 1);
+        assert_ok_eq!(header::flag2(&state, Flags2::RequestSoundEffects), 1);
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultBackground),
+            2
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultForeground),
+            9
+        );
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenLines), 24);
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenColumns), 80);
+        assert_ok_eq!(header::field_word(&state, HeaderField::ScreenHeight), 24);
+        assert_ok_eq!(header::field_word(&state, HeaderField::ScreenWidth), 80);
+        assert_ok_eq!(header::field_byte(&state, HeaderField::FontWidth), 1);
+        assert_ok_eq!(header::field_byte(&state, HeaderField::FontHeight), 1);
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::InterpreterNumber),
+            6
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::InterpreterVersion),
+            b'Z'
+        );
+        assert_ok_eq!(state.read_word(0x32), 0x0100);
         assert_eq!(state.frame_count(), 1);
-        let f = state.current_frame();
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        let frame = assert_ok!(state.current_frame());
         assert_eq!(frame.address(), 0x400);
         assert_eq!(frame.pc(), 0x400);
         assert!(frame.local_variables().is_empty());
@@ -1127,37 +1146,54 @@ mod tests {
         let mut map = test_map(5);
         map[0x11] = 0xF8;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(24, 80, (9, 2), false).is_ok());
-        assert!(header::flag1(state, Flags1v4::PicturesAvailable as u8).is_ok_and(|x| x == 0));
-        assert!(header::flag1(state, Flags1v4::ColoursAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::flag1(state, Flags1v4::BoldfaceAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::flag1(state, Flags1v4::ItalicAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::flag1(state, Flags1v4::FixedSpaceAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::flag1(state, Flags1v4::SoundEffectsAvailable as u8).is_ok_and(|x| x == 0));
-        assert!(header::flag1(state, Flags1v4::TimedInputAvailable as u8).is_ok_and(|x| x == 1));
-        assert!(header::flag2(state, Flags2::RequestPictures).is_ok_and(|x| x == 0));
-        assert!(header::flag2(state, Flags2::RequestUndo).is_ok_and(|x| x == 1));
-        assert!(header::flag2(state, Flags2::RequestMouse).is_ok_and(|x| x == 1));
-        assert!(header::flag2(state, Flags2::RequestColours).is_ok_and(|x| x == 1));
-        assert!(header::flag2(state, Flags2::RequestSoundEffects).is_ok_and(|x| x == 0));
-        assert!(header::field_byte(state, HeaderField::DefaultBackground).is_ok_and(|x| x == 2));
-        assert!(header::field_byte(state, HeaderField::DefaultForeground).is_ok_and(|x| x == 9));
-        assert!(header::field_byte(state, HeaderField::ScreenLines).is_ok_and(|x| x == 24));
-        assert!(header::field_byte(state, HeaderField::ScreenColumns).is_ok_and(|x| x == 80));
-        assert!(header::field_word(state, HeaderField::ScreenHeight).is_ok_and(|x| x == 24));
-        assert!(header::field_word(state, HeaderField::ScreenWidth).is_ok_and(|x| x == 80));
-        assert!(header::field_byte(state, HeaderField::FontWidth).is_ok_and(|x| x == 1));
-        assert!(header::field_byte(state, HeaderField::FontHeight).is_ok_and(|x| x == 1));
-        assert!(header::field_byte(state, HeaderField::InterpreterNumber).is_ok_and(|x| x == 6));
-        assert!(header::field_byte(state, HeaderField::InterpreterVersion).is_ok_and(|x| x == b'Z'));
-        assert!(state.read_word(0x32).is_ok_and(|x| x == 0x0100));
+        assert_ok_eq!(header::flag1(&state, Flags1v4::PicturesAvailable as u8), 0);
+        assert_ok_eq!(header::flag1(&state, Flags1v4::ColoursAvailable as u8), 1);
+        assert_ok_eq!(header::flag1(&state, Flags1v4::BoldfaceAvailable as u8), 1);
+        assert_ok_eq!(header::flag1(&state, Flags1v4::ItalicAvailable as u8), 1);
+        assert_ok_eq!(
+            header::flag1(&state, Flags1v4::FixedSpaceAvailable as u8),
+            1
+        );
+        assert_ok_eq!(
+            header::flag1(&state, Flags1v4::SoundEffectsAvailable as u8),
+            0
+        );
+        assert_ok_eq!(
+            header::flag1(&state, Flags1v4::TimedInputAvailable as u8),
+            1
+        );
+        assert_ok_eq!(header::flag2(&state, Flags2::RequestPictures), 0);
+        assert_ok_eq!(header::flag2(&state, Flags2::RequestUndo), 1);
+        assert_ok_eq!(header::flag2(&state, Flags2::RequestMouse), 1);
+        assert_ok_eq!(header::flag2(&state, Flags2::RequestColours), 1);
+        assert_ok_eq!(header::flag2(&state, Flags2::RequestSoundEffects), 0);
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultBackground),
+            2
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultForeground),
+            9
+        );
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenLines), 24);
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenColumns), 80);
+        assert_ok_eq!(header::field_word(&state, HeaderField::ScreenHeight), 24);
+        assert_ok_eq!(header::field_word(&state, HeaderField::ScreenWidth), 80);
+        assert_ok_eq!(header::field_byte(&state, HeaderField::FontWidth), 1);
+        assert_ok_eq!(header::field_byte(&state, HeaderField::FontHeight), 1);
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::InterpreterNumber),
+            6
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::InterpreterVersion),
+            b'Z'
+        );
+        assert_ok_eq!(state.read_word(0x32), 0x0100);
         assert_eq!(state.frame_count(), 1);
-        let f = state.current_frame();
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        let frame = assert_ok!(state.current_frame());
         assert_eq!(frame.address(), 0x400);
         assert_eq!(frame.pc(), 0x400);
         assert!(frame.local_variables().is_empty());
@@ -1179,13 +1215,11 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
+        let state = assert_ok!(State::new(m));
         // Read dynamic memory
-        assert!(state.read_byte(0x00).is_ok_and(|x| x == 0x03));
+        assert_ok_eq!(state.read_byte(0x00), 0x03);
         // Read static memory
-        assert!(state.read_byte(0x400).is_ok_and(|x| x == 0x00));
+        assert_ok_eq!(state.read_byte(0x400), 0x00);
         // Read high memory
         assert!(state.read_byte(0x10000).is_err());
     }
@@ -1199,13 +1233,11 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
+        let state = assert_ok!(State::new(m));
         // Read dynamic memory
-        assert!(state.read_word(0x00).is_ok_and(|x| x == 0x300));
+        assert_ok_eq!(state.read_word(0x00), 0x300);
         // Read static memory
-        assert!(state.read_word(0x400).is_ok_and(|x| x == 0x1));
+        assert_ok_eq!(state.read_word(0x400), 0x1);
         // Read high memory
         assert!(state.read_word(0xFFFF).is_err());
     }
@@ -1220,13 +1252,11 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         // Write dynamic memory
-        assert!(state.read_byte(0x300).is_ok_and(|x| x == 0));
+        assert_ok_eq!(state.read_byte(0x300), 0);
         assert!(state.write_byte(0x300, 0x99).is_ok());
-        assert!(state.read_byte(0x300).is_ok_and(|x| x == 0x99));
+        assert_ok_eq!(state.read_byte(0x300), 0x99);
         // Read static memory
         assert!(state.write_byte(0x400, 0x99).is_err());
         // Read high memory
@@ -1243,13 +1273,11 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         // Write dynamic memory
-        assert!(state.read_word(0x300).is_ok_and(|x| x == 1));
+        assert_ok_eq!(state.read_word(0x300), 1);
         assert!(state.write_word(0x300, 0x99aa).is_ok());
-        assert!(state.read_word(0x300).is_ok_and(|x| x == 0x99aa));
+        assert_ok_eq!(state.read_word(0x300), 0x99aa);
         // Read static memory
         assert!(state.write_word(0x3FF, 0x99).is_err());
         // Read high memory
@@ -1264,10 +1292,8 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        assert!(state.checksum().is_ok_and(|x| x == 0xf420));
+        let state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.checksum(), 0xf420);
     }
 
     #[test]
@@ -1283,12 +1309,10 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
-        assert!(state.variable(0x10).is_ok_and(|x| x == 0x1122));
-        assert!(state.variable(0x80).is_ok_and(|x| x == 0x3344));
-        assert!(state.variable(0xFF).is_ok_and(|x| x == 0x5566));
+        let mut state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.variable(0x10), 0x1122);
+        assert_ok_eq!(state.variable(0x80), 0x3344);
+        assert_ok_eq!(state.variable(0xFF), 0x5566);
     }
 
     #[test]
@@ -1304,9 +1328,7 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x401,
@@ -1316,10 +1338,10 @@ mod tests {
             None,
             0x500,
         ));
-        assert!(state.variable(0x1).is_ok_and(|x| x == 0x1234));
-        assert!(state.variable(0x2).is_ok_and(|x| x == 0x5678));
-        assert!(state.variable(0x3).is_ok_and(|x| x == 0x9ABC));
-        assert!(state.variable(0x4).is_ok_and(|x| x == 0xDEF0));
+        assert_ok_eq!(state.variable(0x1), 0x1234);
+        assert_ok_eq!(state.variable(0x2), 0x5678);
+        assert_ok_eq!(state.variable(0x3), 0x9ABC);
+        assert_ok_eq!(state.variable(0x4), 0xDEF0);
         // Unset locals
         for i in 0x5..0x10 {
             assert!(state.variable(i).is_err());
@@ -1339,9 +1361,7 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x401,
@@ -1351,8 +1371,8 @@ mod tests {
             None,
             0x500,
         ));
-        assert!(state.variable(0).is_ok_and(|x| x == 0x5432));
-        assert!(state.variable(0).is_ok_and(|x| x == 0x9876));
+        assert_ok_eq!(state.variable(0), 0x5432);
+        assert_ok_eq!(state.variable(0), 0x9876);
         assert!(state.variable(0).is_err());
     }
 
@@ -1369,12 +1389,10 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
-        assert!(state.peek_variable(0x10).is_ok_and(|x| x == 0x1122));
-        assert!(state.peek_variable(0x80).is_ok_and(|x| x == 0x3344));
-        assert!(state.peek_variable(0xFF).is_ok_and(|x| x == 0x5566));
+        let mut state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.peek_variable(0x10), 0x1122);
+        assert_ok_eq!(state.peek_variable(0x80), 0x3344);
+        assert_ok_eq!(state.peek_variable(0xFF), 0x5566);
     }
 
     #[test]
@@ -1390,9 +1408,7 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x401,
@@ -1402,10 +1418,10 @@ mod tests {
             None,
             0x500,
         ));
-        assert!(state.peek_variable(0x1).is_ok_and(|x| x == 0x1234));
-        assert!(state.peek_variable(0x2).is_ok_and(|x| x == 0x5678));
-        assert!(state.peek_variable(0x3).is_ok_and(|x| x == 0x9ABC));
-        assert!(state.peek_variable(0x4).is_ok_and(|x| x == 0xDEF0));
+        assert_ok_eq!(state.peek_variable(0x1), 0x1234);
+        assert_ok_eq!(state.peek_variable(0x2), 0x5678);
+        assert_ok_eq!(state.peek_variable(0x3), 0x9ABC);
+        assert_ok_eq!(state.peek_variable(0x4), 0xDEF0);
         // Unset locals
         for i in 0x5..0x10 {
             assert!(state.peek_variable(i).is_err());
@@ -1425,9 +1441,7 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x401,
@@ -1438,8 +1452,8 @@ mod tests {
             0x500,
         ));
         assert!(state.current_frame().is_ok_and(|x| x.stack().len() == 2));
-        assert!(state.peek_variable(0).is_ok_and(|x| x == 0x5432));
-        assert!(state.peek_variable(0).is_ok_and(|x| x == 0x5432));
+        assert_ok_eq!(state.peek_variable(0), 0x5432);
+        assert_ok_eq!(state.peek_variable(0), 0x5432);
         assert!(state.current_frame().is_ok_and(|x| x.stack().len() == 2));
     }
 
@@ -1456,15 +1470,13 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.set_variable(0x10, 0x2211).is_ok());
         assert!(state.set_variable(0x80, 0x4433).is_ok());
         assert!(state.set_variable(0xFF, 0x6655).is_ok());
-        assert!(state.variable(0x10).is_ok_and(|x| x == 0x2211));
-        assert!(state.variable(0x80).is_ok_and(|x| x == 0x4433));
-        assert!(state.variable(0xFF).is_ok_and(|x| x == 0x6655));
+        assert_ok_eq!(state.variable(0x10), 0x2211);
+        assert_ok_eq!(state.variable(0x80), 0x4433);
+        assert_ok_eq!(state.variable(0xFF), 0x6655);
     }
 
     #[test]
@@ -1480,9 +1492,7 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x401,
@@ -1496,10 +1506,10 @@ mod tests {
         assert!(state.set_variable(0x2, 0x8765).is_ok());
         assert!(state.set_variable(0x3, 0xCBA9).is_ok());
         assert!(state.set_variable(0x4, 0x0FED).is_ok());
-        assert!(state.variable(0x1).is_ok_and(|x| x == 0x4321));
-        assert!(state.variable(0x2).is_ok_and(|x| x == 0x8765));
-        assert!(state.variable(0x3).is_ok_and(|x| x == 0xCBA9));
-        assert!(state.variable(0x4).is_ok_and(|x| x == 0x0FED));
+        assert_ok_eq!(state.variable(0x1), 0x4321);
+        assert_ok_eq!(state.variable(0x2), 0x8765);
+        assert_ok_eq!(state.variable(0x3), 0xCBA9);
+        assert_ok_eq!(state.variable(0x4), 0x0FED);
         // Unset locals
         for i in 0x5..0x10 {
             assert!(state.set_variable(i, 0x9999).is_err());
@@ -1519,9 +1529,7 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x401,
@@ -1536,10 +1544,10 @@ mod tests {
         assert!(state.current_frame().is_ok_and(|x| x.stack().len() == 3));
         assert!(state.set_variable(0, 0x5678).is_ok());
         assert!(state.current_frame().is_ok_and(|x| x.stack().len() == 4));
-        assert!(state.variable(0).is_ok_and(|x| x == 0x5678));
-        assert!(state.variable(0).is_ok_and(|x| x == 0x1234));
-        assert!(state.variable(0).is_ok_and(|x| x == 0x5432));
-        assert!(state.variable(0).is_ok_and(|x| x == 0x9876));
+        assert_ok_eq!(state.variable(0), 0x5678);
+        assert_ok_eq!(state.variable(0), 0x1234);
+        assert_ok_eq!(state.variable(0), 0x5432);
+        assert_ok_eq!(state.variable(0), 0x9876);
         assert!(state.variable(0).is_err());
     }
 
@@ -1556,15 +1564,13 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.set_variable_indirect(0x10, 0x2211).is_ok());
         assert!(state.set_variable_indirect(0x80, 0x4433).is_ok());
         assert!(state.set_variable_indirect(0xFF, 0x6655).is_ok());
-        assert!(state.variable(0x10).is_ok_and(|x| x == 0x2211));
-        assert!(state.variable(0x80).is_ok_and(|x| x == 0x4433));
-        assert!(state.variable(0xFF).is_ok_and(|x| x == 0x6655));
+        assert_ok_eq!(state.variable(0x10), 0x2211);
+        assert_ok_eq!(state.variable(0x80), 0x4433);
+        assert_ok_eq!(state.variable(0xFF), 0x6655);
     }
 
     #[test]
@@ -1580,9 +1586,7 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x401,
@@ -1596,10 +1600,10 @@ mod tests {
         assert!(state.set_variable_indirect(0x2, 0x8765).is_ok());
         assert!(state.set_variable_indirect(0x3, 0xCBA9).is_ok());
         assert!(state.set_variable_indirect(0x4, 0x0FED).is_ok());
-        assert!(state.variable(0x1).is_ok_and(|x| x == 0x4321));
-        assert!(state.variable(0x2).is_ok_and(|x| x == 0x8765));
-        assert!(state.variable(0x3).is_ok_and(|x| x == 0xCBA9));
-        assert!(state.variable(0x4).is_ok_and(|x| x == 0x0FED));
+        assert_ok_eq!(state.variable(0x1), 0x4321);
+        assert_ok_eq!(state.variable(0x2), 0x8765);
+        assert_ok_eq!(state.variable(0x3), 0xCBA9);
+        assert_ok_eq!(state.variable(0x4), 0x0FED);
         // Unset locals
         for i in 0x5..0x10 {
             assert!(state.set_variable_indirect(i, 0x9999).is_err());
@@ -1619,9 +1623,7 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x401,
@@ -1638,7 +1640,7 @@ mod tests {
         assert!(state.current_frame().is_ok_and(|x| x.stack().len() == 1));
         assert!(state.set_variable_indirect(0, 0x5678).is_ok());
         assert!(state.current_frame().is_ok_and(|x| x.stack().len() == 1));
-        assert!(state.variable(0).is_ok_and(|x| x == 0x5678));
+        assert_ok_eq!(state.variable(0), 0x5678);
         assert!(state.variable(0).is_err());
     }
 
@@ -1655,9 +1657,7 @@ mod tests {
         map[0x2DE] = 0x55;
         map[0x2DF] = 0x66;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x401,
@@ -1672,10 +1672,10 @@ mod tests {
         assert!(state.current_frame().is_ok_and(|x| x.stack().len() == 3));
         assert!(state.push(0x5678).is_ok());
         assert!(state.current_frame().is_ok_and(|x| x.stack().len() == 4));
-        assert!(state.variable(0).is_ok_and(|x| x == 0x5678));
-        assert!(state.variable(0).is_ok_and(|x| x == 0x1234));
-        assert!(state.variable(0).is_ok_and(|x| x == 0x5432));
-        assert!(state.variable(0).is_ok_and(|x| x == 0x9876));
+        assert_ok_eq!(state.variable(0), 0x5678);
+        assert_ok_eq!(state.variable(0), 0x1234);
+        assert_ok_eq!(state.variable(0), 0x5432);
+        assert_ok_eq!(state.variable(0), 0x9876);
         assert!(state.variable(0).is_err());
     }
 
@@ -1685,10 +1685,8 @@ mod tests {
         for (i, b) in (0x40..0x800).enumerate() {
             map[i + 0x40] = b as u8;
         }
-        let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
+        let m: Memory = Memory::new(map);
+        let state = assert_ok!(State::new(m));
         assert_eq!(
             state.instruction(0x400),
             &[
@@ -1708,12 +1706,8 @@ mod tests {
             map[0x10002 + (i * 2)] = b * 0x11;
         }
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        let h = state.routine_header(0x10000);
-        assert!(h.is_ok());
-        let (address, vars) = h.unwrap();
+        let state = assert_ok!(State::new(m));
+        let (address, vars) = assert_ok!(state.routine_header(0x10000));
         assert_eq!(address, 0x1001F);
         assert_eq!(
             vars,
@@ -1734,12 +1728,8 @@ mod tests {
             map[0x10002 + (i * 2)] = b * 0x11;
         }
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        let h = state.routine_header(0x10000);
-        assert!(h.is_ok());
-        let (address, vars) = h.unwrap();
+        let state = assert_ok!(State::new(m));
+        let (address, vars) = assert_ok!(state.routine_header(0x10000));
         assert_eq!(address, 0x1001F);
         assert_eq!(
             vars,
@@ -1756,12 +1746,8 @@ mod tests {
         map[0] = 5;
         map[0x10000] = 0xF;
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        let h = state.routine_header(0x10000);
-        assert!(h.is_ok());
-        let (address, vars) = h.unwrap();
+        let state = assert_ok!(State::new(m));
+        let (address, vars) = assert_ok!(state.routine_header(0x10000));
         assert_eq!(address, 0x10001);
         assert_eq!(vars, vec![0; 15],);
     }
@@ -1772,12 +1758,8 @@ mod tests {
         map[0] = 8;
         map[0x10000] = 0xF;
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        let h = state.routine_header(0x10000);
-        assert!(h.is_ok());
-        let (address, vars) = h.unwrap();
+        let state = assert_ok!(State::new(m));
+        let (address, vars) = assert_ok!(state.routine_header(0x10000));
         assert_eq!(address, 0x10001);
         assert_eq!(vars, vec![0; 15],);
     }
@@ -1790,48 +1772,35 @@ mod tests {
             map[0x10001 + (i * 2)] = (b + 1) * 0x11;
         }
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        assert!(state.string_literal(0x10000).is_ok_and(
-            |x| x == vec![0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888]
-        ));
+        let state = assert_ok!(State::new(m));
+        assert_ok_eq!(
+            state.string_literal(0x10000),
+            vec![0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888]
+        );
     }
 
     #[test]
     fn test_packed_routine_address_v3() {
         let map = test_map(3);
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        assert!(state
-            .packed_routine_address(0x400)
-            .is_ok_and(|x| x == 0x800));
+        let state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.packed_routine_address(0x400), 0x800);
     }
 
     #[test]
     fn test_packed_routine_address_v4() {
         let map = test_map(4);
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        assert!(state
-            .packed_routine_address(0x400)
-            .is_ok_and(|x| x == 0x1000));
+        let state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.packed_routine_address(0x400), 0x1000);
     }
 
     #[test]
     fn test_packed_routine_address_v5() {
         let map = test_map(4);
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        assert!(state
-            .packed_routine_address(0x400)
-            .is_ok_and(|x| x == 0x1000));
+        let state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.packed_routine_address(0x400), 0x1000);
     }
 
     #[test]
@@ -1840,33 +1809,23 @@ mod tests {
         // Routine offset is 0x100;
         map[0x28] = 0x1;
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        assert!(state
-            .packed_routine_address(0x400)
-            .is_ok_and(|x| x == 0x1800));
+        let state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.packed_routine_address(0x400), 0x1800);
     }
 
     #[test]
     fn test_packed_routine_address_v8() {
         let map = test_map(8);
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        assert!(state
-            .packed_routine_address(0x400)
-            .is_ok_and(|x| x == 0x2000));
+        let state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.packed_routine_address(0x400), 0x2000);
     }
 
     #[test]
     fn test_packed_routine_address_invalid() {
         let map = test_map(6);
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
+        let state = assert_ok!(State::new(m));
         assert!(state.packed_routine_address(0x400).is_err());
     }
 
@@ -1874,34 +1833,24 @@ mod tests {
     fn test_packed_string_address_v3() {
         let map = test_map(3);
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        assert!(state.packed_string_address(0x400).is_ok_and(|x| x == 0x800));
+        let state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.packed_string_address(0x400), 0x800);
     }
 
     #[test]
     fn test_packed_string_address_v4() {
         let map = test_map(4);
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        assert!(state
-            .packed_string_address(0x400)
-            .is_ok_and(|x| x == 0x1000));
+        let state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.packed_string_address(0x400), 0x1000);
     }
 
     #[test]
     fn test_packed_string_address_v5() {
         let map = test_map(4);
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        assert!(state
-            .packed_string_address(0x400)
-            .is_ok_and(|x| x == 0x1000));
+        let state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.packed_string_address(0x400), 0x1000);
     }
 
     #[test]
@@ -1910,33 +1859,23 @@ mod tests {
         // String offset is 0x100;
         map[0x2A] = 0x1;
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        assert!(state
-            .packed_string_address(0x400)
-            .is_ok_and(|x| x == 0x1800));
+        let state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.packed_string_address(0x400), 0x1800);
     }
 
     #[test]
     fn test_packed_string_address_v8() {
         let map = test_map(8);
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
-        assert!(state
-            .packed_string_address(0x400)
-            .is_ok_and(|x| x == 0x2000));
+        let state = assert_ok!(State::new(m));
+        assert_ok_eq!(state.packed_string_address(0x400), 0x2000);
     }
 
     #[test]
     fn test_packed_string_address_invalid() {
         let map = test_map(6);
         let m = Memory::new(map);
-        let s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.unwrap();
+        let state = assert_ok!(State::new(m));
         assert!(state.packed_string_address(0x400).is_err());
     }
 
@@ -1944,9 +1883,7 @@ mod tests {
     fn test_is_input_interrupt() {
         let map = test_map(4);
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(!state.is_input_interrupt());
         state.read_interrupt_result = Some(0x10);
         assert!(state.is_input_interrupt());
@@ -1958,22 +1895,19 @@ mod tests {
         map[0] = 5;
         map[0x10000] = 0xF;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert_eq!(state.frame_count(), 0);
-        assert!(state
-            .call_routine(
+        assert_ok_eq!(
+            state.call_routine(
                 0x10000,
                 &vec![0x1111, 0x2222, 0x3333],
                 Some(StoreResult::new(0x401, 0x80)),
                 0x402
-            )
-            .is_ok_and(|x| x == 0x10001));
+            ),
+            0x10001
+        );
         assert_eq!(state.frame_count(), 1);
-        let f = state.current_frame();
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        let frame = assert_ok!(state.current_frame());
         assert_eq!(frame.address(), 0x10000);
         assert_eq!(frame.pc(), 0x10001);
         assert_eq!(frame.argument_count(), 3);
@@ -1981,9 +1915,7 @@ mod tests {
             frame.local_variables(),
             &[0x1111, 0x2222, 0x3333, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         );
-        assert!(frame
-            .result()
-            .is_some_and(|x| x == &StoreResult::new(0x401, 0x80)));
+        assert_some_eq!(frame.result(), &StoreResult::new(0x401, 0x80));
         assert_eq!(frame.return_address(), 0x402);
         assert!(!frame.input_interrupt());
         assert!(!frame.sound_interrupt());
@@ -1995,17 +1927,14 @@ mod tests {
         map[0] = 5;
         map[0x10000] = 0xF;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert_eq!(state.frame_count(), 0);
-        assert!(state
-            .call_routine(0x10000, &vec![0x1111, 0x2222, 0x3333], None, 0x402)
-            .is_ok_and(|x| x == 0x10001));
+        assert_ok_eq!(
+            state.call_routine(0x10000, &vec![0x1111, 0x2222, 0x3333], None, 0x402),
+            0x10001
+        );
         assert_eq!(state.frame_count(), 1);
-        let f = state.current_frame();
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        let frame = assert_ok!(state.current_frame());
         assert_eq!(frame.address(), 0x10000);
         assert_eq!(frame.pc(), 0x10001);
         assert_eq!(frame.argument_count(), 3);
@@ -2030,20 +1959,19 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert_eq!(state.frame_count(), 0);
-        assert!(state
-            .call_routine(
+        assert_ok_eq!(
+            state.call_routine(
                 0,
                 &vec![0x1111, 0x2222, 0x3333],
                 Some(StoreResult::new(0x401, 0x80)),
                 0x402
-            )
-            .is_ok_and(|x| x == 0x402));
+            ),
+            0x402
+        );
         assert_eq!(state.frame_count(), 0);
-        assert!(state.variable(0x80).is_ok_and(|x| x == 0));
+        assert_ok_eq!(state.variable(0x80), 0);
     }
 
     #[test]
@@ -2057,15 +1985,14 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert_eq!(state.frame_count(), 0);
-        assert!(state
-            .call_routine(0, &vec![0x1111, 0x2222, 0x3333], None, 0x402)
-            .is_ok_and(|x| x == 0x402));
+        assert_ok_eq!(
+            state.call_routine(0, &vec![0x1111, 0x2222, 0x3333], None, 0x402),
+            0x402
+        );
         assert_eq!(state.frame_count(), 0);
-        assert!(state.variable(0x80).is_ok_and(|x| x == 0xE0E1));
+        assert_ok_eq!(state.variable(0x80), 0xE0E1);
     }
 
     #[test]
@@ -2074,20 +2001,14 @@ mod tests {
         map[0] = 5;
         map[0x10000] = 0xF;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert_eq!(state.frame_count(), 0);
         state.set_read_interrupt();
         assert!(state.read_interrupt_pending());
-        assert!(state
-            .call_read_interrupt(0x10000, 0x402)
-            .is_ok_and(|x| x == 0x10001));
+        assert_ok_eq!(state.call_read_interrupt(0x10000, 0x402), 0x10001);
         assert_eq!(state.frame_count(), 1);
-        assert!(state.read_interrupt_result().is_some_and(|x| x == 0));
-        let f = state.current_frame();
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        assert_some_eq!(state.read_interrupt_result(), 0);
+        let frame = assert_ok!(state.current_frame());
         assert_eq!(frame.address(), 0x10000);
         assert_eq!(frame.pc(), 0x10001);
         assert_eq!(frame.argument_count(), 0);
@@ -2104,9 +2025,7 @@ mod tests {
         map[0] = 5;
         map[0x10000] = 0xF;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert_eq!(state.frame_count(), 0);
         assert!(state.call_read_interrupt(0x10000, 0x402).is_err());
         assert_eq!(state.frame_count(), 0);
@@ -2116,13 +2035,11 @@ mod tests {
     fn test_read_interrupt() {
         let map = test_map(5);
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.set_read_interrupt();
         state.read_interrupt_result = Some(0);
         assert!(state.read_interrupt_pending());
-        assert!(state.read_interrupt_result().is_some_and(|x| x == 0));
+        assert_some_eq!(state.read_interrupt_result(), 0);
         state.clear_read_interrupt();
         assert!(!state.read_interrupt_pending());
         assert!(state.read_interrupt_result().is_none());
@@ -2132,12 +2049,10 @@ mod tests {
     fn test_sound_interrupt() {
         let map = test_map(5);
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.sound_interrupt().is_none());
         state.set_sound_interrupt(0x1234);
-        assert!(state.sound_interrupt().is_some_and(|x| x == 0x1234));
+        assert_some_eq!(state.sound_interrupt(), 0x1234);
         state.clear_sound_interrupt();
         assert!(state.sound_interrupt().is_none());
     }
@@ -2148,18 +2063,12 @@ mod tests {
         map[0] = 5;
         map[0x10000] = 0xF;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert_eq!(state.frame_count(), 0);
         state.set_sound_interrupt(0x10000);
-        assert!(state
-            .call_sound_interrupt(0x402)
-            .is_ok_and(|x| x == 0x10001));
+        assert_ok_eq!(state.call_sound_interrupt(0x402), 0x10001);
         assert_eq!(state.frame_count(), 1);
-        let f = state.current_frame();
-        assert!(f.is_ok());
-        let frame = f.unwrap();
+        let frame = assert_ok!(state.current_frame());
         assert_eq!(frame.address(), 0x10000);
         assert_eq!(frame.pc(), 0x10001);
         assert_eq!(frame.argument_count(), 0);
@@ -2176,9 +2085,7 @@ mod tests {
         map[0] = 5;
         map[0x10000] = 0xF;
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert_eq!(state.frame_count(), 0);
         assert!(state.call_sound_interrupt(0x402).is_err());
         assert_eq!(state.frame_count(), 0);
@@ -2195,9 +2102,7 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x40A,
@@ -2217,11 +2122,11 @@ mod tests {
             0x40E,
         ));
         assert_eq!(state.frame_count(), 2);
-        assert!(state.return_routine(0x9876).is_ok_and(|x| x == 0x40E));
+        assert_ok_eq!(state.return_routine(0x9876), 0x40E);
         assert_eq!(state.frame_count(), 1);
-        assert!(state.variable(1).is_ok_and(|x| x == 0x1111));
-        assert!(state.variable(2).is_ok_and(|x| x == 0x9876));
-        assert!(state.variable(3).is_ok_and(|x| x == 0x3333));
+        assert_ok_eq!(state.variable(1), 0x1111);
+        assert_ok_eq!(state.variable(2), 0x9876);
+        assert_ok_eq!(state.variable(3), 0x3333);
     }
 
     #[test]
@@ -2235,9 +2140,7 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x40A,
@@ -2257,11 +2160,11 @@ mod tests {
             0x40E,
         ));
         assert_eq!(state.frame_count(), 2);
-        assert!(state.return_routine(0x9876).is_ok_and(|x| x == 0x40E));
+        assert_ok_eq!(state.return_routine(0x9876), 0x40E);
         assert_eq!(state.frame_count(), 1);
-        assert!(state.variable(1).is_ok_and(|x| x == 0x1111));
-        assert!(state.variable(2).is_ok_and(|x| x == 0x2222));
-        assert!(state.variable(3).is_ok_and(|x| x == 0x3333));
+        assert_ok_eq!(state.variable(1), 0x1111);
+        assert_ok_eq!(state.variable(2), 0x2222);
+        assert_ok_eq!(state.variable(3), 0x3333);
     }
 
     #[test]
@@ -2275,9 +2178,7 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert_eq!(state.frame_count(), 0);
         assert!(state.return_routine(0x9876).is_err());
         assert_eq!(state.frame_count(), 0);
@@ -2294,9 +2195,7 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x40A,
@@ -2315,17 +2214,16 @@ mod tests {
             None,
             0x40E,
         ));
-        let mut cf = state.current_frame_mut();
-        assert!(cf.is_ok());
-        cf.as_mut().unwrap().set_input_interrupt(true);
+        let cf = assert_ok!(state.current_frame_mut());
+        cf.set_input_interrupt(true);
         state.set_read_interrupt();
         assert_eq!(state.frame_count(), 2);
-        assert!(state.return_routine(0x9876).is_ok_and(|x| x == 0x40E));
+        assert_ok_eq!(state.return_routine(0x9876), 0x40E);
         assert_eq!(state.frame_count(), 1);
-        assert!(state.variable(1).is_ok_and(|x| x == 0x1111));
-        assert!(state.variable(2).is_ok_and(|x| x == 0x2222));
-        assert!(state.variable(3).is_ok_and(|x| x == 0x3333));
-        assert!(state.read_interrupt_result().is_some_and(|x| x == 0x9876));
+        assert_ok_eq!(state.variable(1), 0x1111);
+        assert_ok_eq!(state.variable(2), 0x2222);
+        assert_ok_eq!(state.variable(3), 0x3333);
+        assert_some_eq!(state.read_interrupt_result(), 0x9876);
     }
 
     #[test]
@@ -2339,9 +2237,7 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x40A,
@@ -2364,12 +2260,12 @@ mod tests {
             .frames
             .push(Frame::new(0x4A0, 0x4AA, &[], 0, &[], None, 0x999));
         assert_eq!(state.frame_count(), 3);
-        assert!(state.throw(2, 0x9876).is_ok_and(|x| x == 0x40E));
+        assert_ok_eq!(state.throw(2, 0x9876), 0x40E);
         assert_eq!(state.frame_count(), 1);
-        assert!(state.variable(1).is_ok_and(|x| x == 0x1111));
-        assert!(state.variable(2).is_ok_and(|x| x == 0x2222));
-        assert!(state.variable(3).is_ok_and(|x| x == 0x3333));
-        assert!(state.peek_variable(0).is_ok_and(|x| x == 0x9876));
+        assert_ok_eq!(state.variable(1), 0x1111);
+        assert_ok_eq!(state.variable(2), 0x2222);
+        assert_ok_eq!(state.variable(3), 0x3333);
+        assert_ok_eq!(state.peek_variable(0), 0x9876);
         assert_eq!(state.current_frame().unwrap().stack().len(), 3);
     }
 
@@ -2384,9 +2280,7 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x40A,
@@ -2396,9 +2290,9 @@ mod tests {
             None,
             0x5A5,
         ));
-        assert!(state.pc().is_ok_and(|x| x == 0x40A));
+        assert_ok_eq!(state.pc(), 0x40A);
         assert!(state.set_pc(0x500).is_ok());
-        assert!(state.pc().is_ok_and(|x| x == 0x500));
+        assert_ok_eq!(state.pc(), 0x500);
         assert_eq!(state.current_frame().unwrap().pc(), 0x500);
     }
 
@@ -2413,9 +2307,7 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         state.frames.push(Frame::new(
             0x400,
             0x40A,
@@ -2425,7 +2317,7 @@ mod tests {
             None,
             0x5A5,
         ));
-        assert!(state.argument_count().is_ok_and(|x| x == 1));
+        assert_ok_eq!(state.argument_count(), 1);
         assert_eq!(state.current_frame().unwrap().argument_count(), 1);
     }
 
@@ -2447,9 +2339,7 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         // See memory.rs tests ... change dynamic memory a little bit
         // so the compressed memory isn't just runs of 0s
         assert!(state.write_byte(0x200, 0xFC).is_ok());
@@ -2475,10 +2365,10 @@ mod tests {
             0x623,
         ));
 
-        let state = s.unwrap();
-        let v = state.save(0x9abc);
-        assert!(v.is_ok_and(|x| x
-            == [
+        let v = assert_ok!(state.save(0x9abc));
+        assert_eq!(
+            v,
+            [
                 b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x56, b'I', b'F', b'Z', b'S', b'I', b'F',
                 b'h', b'd', 0x00, 0x00, 0x00, 0x0D, 0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x31, 0x35,
                 0x56, 0x78, 0x00, 0x9a, 0xbc, 0x00, b'C', b'M', b'e', b'm', 0x00, 0x00, 0x00, 0x0D,
@@ -2486,7 +2376,8 @@ mod tests {
                 b'S', b't', b'k', b's', 0x00, 0x00, 0x00, 0x1E, 0x00, 0x04, 0x8E, 0x03, 0x80, 0x03,
                 0x00, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x11, 0x11, 0x22, 0x22, 0x00, 0x06,
                 0x23, 0x12, 0x00, 0x00, 0x00, 0x00, 0x88, 0x99, 0xaa, 0xbb
-            ]));
+            ]
+        );
     }
 
     #[test]
@@ -2507,16 +2398,14 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(40, 132, (3, 6), true).is_ok());
         // Turn on transcripting ... it should survive the restore
-        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+        assert!(header::set_flag2(&mut state, Flags2::Transcripting).is_ok());
 
         assert_eq!(state.frame_count(), 1);
 
-        let quetzal = Quetzal::try_from(vec![
+        let quetzal = assert_ok!(Quetzal::try_from(vec![
             b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x56, b'I', b'F', b'Z', b'S', b'I', b'F',
             b'h', b'd', 0x00, 0x00, 0x00, 0x0D, 0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x31, 0x35,
             0x56, 0x78, 0x00, 0x9a, 0xbc, 0x00, b'C', b'M', b'e', b'm', 0x00, 0x00, 0x00, 0x0D,
@@ -2524,19 +2413,23 @@ mod tests {
             b'S', b't', b'k', b's', 0x00, 0x00, 0x00, 0x1E, 0x00, 0x04, 0x8E, 0x03, 0x80, 0x03,
             0x00, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x11, 0x11, 0x22, 0x22, 0x00, 0x06,
             0x23, 0x12, 0x00, 0x00, 0x00, 0x00, 0x88, 0x99, 0xaa, 0xbb,
-        ]);
-        assert!(quetzal.is_ok());
-        assert!(state
-            .restore_state(quetzal.unwrap())
-            .is_ok_and(|x| x.is_some_and(|y| y == 0x9abc)));
-        assert!(header::flag2(state, Flags2::Transcripting).is_ok_and(|x| x == 1));
-        assert!(header::field_byte(state, HeaderField::DefaultForeground).is_ok_and(|x| x == 3));
-        assert!(header::field_byte(state, HeaderField::DefaultBackground).is_ok_and(|x| x == 6));
-        assert!(header::field_byte(state, HeaderField::ScreenLines).is_ok_and(|x| x == 40));
-        assert!(header::field_byte(state, HeaderField::ScreenColumns).is_ok_and(|x| x == 132));
-        assert!(state.read_byte(0x200).is_ok_and(|x| x == 0xFC));
-        assert!(state.read_byte(0x280).is_ok_and(|x| x == 0x10));
-        assert!(state.read_byte(0x300).is_ok_and(|x| x == 0xFD));
+        ]));
+        let pc = assert_ok!(state.restore_state(quetzal));
+        assert_some_eq!(pc, 0x9abc);
+        assert_ok_eq!(header::flag2(&state, Flags2::Transcripting), 1);
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultForeground),
+            3
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultBackground),
+            6
+        );
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenLines), 40);
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenColumns), 132);
+        assert_ok_eq!(state.read_byte(0x200), 0xFC);
+        assert_ok_eq!(state.read_byte(0x280), 0x10);
+        assert_ok_eq!(state.read_byte(0x300), 0xFD);
         assert_eq!(state.frame_count(), 2);
     }
 
@@ -2558,12 +2451,10 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(40, 132, (3, 6), true).is_ok());
         // Turn on transcripting ... it should survive the restore
-        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+        assert!(header::set_flag2(&mut state, Flags2::Transcripting).is_ok());
 
         assert_eq!(state.frame_count(), 1);
 
@@ -2586,19 +2477,23 @@ mod tests {
             ]
             .to_vec(),
         );
-        let quetzal = Quetzal::try_from(qvec);
-        assert!(quetzal.is_ok());
-        assert!(state
-            .restore_state(quetzal.unwrap())
-            .is_ok_and(|x| x.is_some_and(|y| y == 0x9abc)));
-        assert!(header::flag2(state, Flags2::Transcripting).is_ok_and(|x| x == 1));
-        assert!(header::field_byte(state, HeaderField::DefaultForeground).is_ok_and(|x| x == 3));
-        assert!(header::field_byte(state, HeaderField::DefaultBackground).is_ok_and(|x| x == 6));
-        assert!(header::field_byte(state, HeaderField::ScreenLines).is_ok_and(|x| x == 40));
-        assert!(header::field_byte(state, HeaderField::ScreenColumns).is_ok_and(|x| x == 132));
-        assert!(state.read_byte(0x200).is_ok_and(|x| x == 0xFC));
-        assert!(state.read_byte(0x280).is_ok_and(|x| x == 0x10));
-        assert!(state.read_byte(0x300).is_ok_and(|x| x == 0xFD));
+        let quetzal = assert_ok!(Quetzal::try_from(qvec));
+        let pc = assert_ok!(state.restore_state(quetzal));
+        assert_some_eq!(pc, 0x9abc);
+        assert_ok_eq!(header::flag2(&state, Flags2::Transcripting), 1);
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultForeground),
+            3
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultBackground),
+            6
+        );
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenLines), 40);
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenColumns), 132);
+        assert_ok_eq!(state.read_byte(0x200), 0xFC);
+        assert_ok_eq!(state.read_byte(0x280), 0x10);
+        assert_ok_eq!(state.read_byte(0x300), 0xFD);
         assert_eq!(state.frame_count(), 2);
     }
 
@@ -2620,12 +2515,10 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(40, 132, (3, 6), true).is_ok());
         // Turn on transcripting ... it should survive the restore
-        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+        assert!(header::set_flag2(&mut state, Flags2::Transcripting).is_ok());
 
         assert_eq!(state.frame_count(), 1);
         let quetzal = Quetzal::new(
@@ -2661,12 +2554,10 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(40, 132, (3, 6), true).is_ok());
         // Turn on transcripting ... it should survive the restore
-        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+        assert!(header::set_flag2(&mut state, Flags2::Transcripting).is_ok());
 
         assert_eq!(state.frame_count(), 1);
 
@@ -2679,17 +2570,22 @@ mod tests {
             0x00, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x11, 0x11, 0x22, 0x22, 0x00, 0x06,
             0x23, 0x12, 0x00, 0x00, 0x00, 0x00, 0x88, 0x99, 0xaa, 0xbb,
         ];
-        assert!(state
-            .restore(restore_data)
-            .is_ok_and(|x| x.is_some_and(|y| y == 0x9abc)));
-        assert!(header::flag2(state, Flags2::Transcripting).is_ok_and(|x| x == 1));
-        assert!(header::field_byte(state, HeaderField::DefaultForeground).is_ok_and(|x| x == 3));
-        assert!(header::field_byte(state, HeaderField::DefaultBackground).is_ok_and(|x| x == 6));
-        assert!(header::field_byte(state, HeaderField::ScreenLines).is_ok_and(|x| x == 40));
-        assert!(header::field_byte(state, HeaderField::ScreenColumns).is_ok_and(|x| x == 132));
-        assert!(state.read_byte(0x200).is_ok_and(|x| x == 0xFC));
-        assert!(state.read_byte(0x280).is_ok_and(|x| x == 0x10));
-        assert!(state.read_byte(0x300).is_ok_and(|x| x == 0xFD));
+        let pc = assert_ok!(state.restore(restore_data));
+        assert_some_eq!(pc, 0x9abc);
+        assert_ok_eq!(header::flag2(&state, Flags2::Transcripting), 1);
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultForeground),
+            3
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultBackground),
+            6
+        );
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenLines), 40);
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenColumns), 132);
+        assert_ok_eq!(state.read_byte(0x200), 0xFC);
+        assert_ok_eq!(state.read_byte(0x280), 0x10);
+        assert_ok_eq!(state.read_byte(0x300), 0xFD);
         assert_eq!(state.frame_count(), 2);
     }
 
@@ -2711,12 +2607,10 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(40, 132, (3, 6), true).is_ok());
         // Turn on transcripting ... it should survive the restore
-        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+        assert!(header::set_flag2(&mut state, Flags2::Transcripting).is_ok());
 
         assert_eq!(state.frame_count(), 1);
 
@@ -2751,12 +2645,10 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(40, 132, (3, 6), true).is_ok());
         // Turn on transcripting ... it should survive the restore
-        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+        assert!(header::set_flag2(&mut state, Flags2::Transcripting).is_ok());
 
         assert_eq!(state.frame_count(), 1);
 
@@ -2791,12 +2683,10 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(40, 132, (3, 6), true).is_ok());
         // Turn on transcripting ... it should survive the restore
-        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+        assert!(header::set_flag2(&mut state, Flags2::Transcripting).is_ok());
 
         assert_eq!(state.frame_count(), 1);
 
@@ -2831,9 +2721,7 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         // See memory.rs tests ... change dynamic memory a little bit
         // so the compressed memory isn't just runs of 0s
         assert!(state.write_byte(0x200, 0xFC).is_ok());
@@ -2859,19 +2747,17 @@ mod tests {
             0x623,
         ));
 
-        let mut state = s.unwrap();
         assert_eq!(state.undo_stack.len(), 0);
         assert!(state.save_undo(0x9abc).is_ok());
         assert!(state.undo_stack.back().is_some());
-        let quetzal = state.undo_stack.back().unwrap();
+        let quetzal = assert_some!(state.undo_stack.back());
         let ifhd = quetzal.ifhd();
         assert_eq!(ifhd.release_number(), 0x1234);
         assert_eq!(ifhd.serial_number(), "230715".as_bytes());
         assert_eq!(ifhd.checksum(), 0x5678);
         assert_eq!(ifhd.pc(), 0x9abc);
         assert!(quetzal.umem().is_none());
-        assert!(quetzal.cmem().is_some());
-        let cmem = quetzal.cmem().unwrap();
+        let cmem = assert_some!(quetzal.cmem());
         assert_eq!(
             cmem.data(),
             &[0x00, 0xFF, 0x00, 0xFF, 0xFC, 0x00, 0x7E, 0x90, 0x00, 0x7E, 0xFD, 0x00, 0xFE]
@@ -2910,9 +2796,7 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         // See memory.rs tests ... change dynamic memory a little bit
         // so the compressed memory isn't just runs of 0s
         assert!(state.write_byte(0x200, 0xFC).is_ok());
@@ -2938,7 +2822,6 @@ mod tests {
             0x623,
         ));
 
-        let mut state = s.unwrap();
         for i in 0..10 {
             assert_eq!(state.undo_stack.len(), i);
             assert!(state.save_undo(0x1111 * (i + 1)).is_ok());
@@ -2971,9 +2854,7 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         // See memory.rs tests ... change dynamic memory a little bit
         // so the compressed memory isn't just runs of 0s
         assert!(state.write_byte(0x200, 0xFC).is_ok());
@@ -2999,7 +2880,6 @@ mod tests {
             0x623,
         ));
 
-        let mut state = s.unwrap();
         assert!(state.save_undo(0x9876).is_ok());
         // Change dynamic memory
         assert!(state.write_byte(0x200, 0x0C).is_ok());
@@ -3010,14 +2890,13 @@ mod tests {
 
         assert_eq!(state.frame_count(), 1);
         assert_eq!(state.undo_stack.len(), 1);
-        assert!(state
-            .restore_undo()
-            .is_ok_and(|x| x.is_some_and(|y| y == 0x9876)));
+        let pc = assert_ok!(state.restore_undo());
+        assert_some_eq!(pc, 0x9876);
         assert_eq!(state.undo_stack.len(), 0);
         assert_eq!(state.frame_count(), 2);
-        assert!(state.read_byte(0x200).is_ok_and(|x| x == 0xFC));
-        assert!(state.read_byte(0x280).is_ok_and(|x| x == 0x10));
-        assert!(state.read_byte(0x300).is_ok_and(|x| x == 0xFD));
+        assert_ok_eq!(state.read_byte(0x200), 0xFC);
+        assert_ok_eq!(state.read_byte(0x280), 0x10);
+        assert_ok_eq!(state.read_byte(0x300), 0xFD);
     }
 
     #[test]
@@ -3038,9 +2917,7 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         // See memory.rs tests ... change dynamic memory a little bit
         // so the compressed memory isn't just runs of 0s
         assert!(state.write_byte(0x200, 0xFC).is_ok());
@@ -3057,14 +2934,13 @@ mod tests {
             0x48E,
         ));
 
-        let mut state = s.unwrap();
         assert_eq!(state.undo_stack.len(), 0);
         assert!(state.restore_undo().is_err());
         assert_eq!(state.undo_stack.len(), 0);
         assert_eq!(state.frame_count(), 1);
-        assert!(state.read_byte(0x200).is_ok_and(|x| x == 0xFC));
-        assert!(state.read_byte(0x280).is_ok_and(|x| x == 0x10));
-        assert!(state.read_byte(0x300).is_ok_and(|x| x == 0xFD));
+        assert_ok_eq!(state.read_byte(0x200), 0xFC);
+        assert_ok_eq!(state.read_byte(0x280), 0x10);
+        assert_ok_eq!(state.read_byte(0x300), 0xFD);
     }
 
     #[test]
@@ -3085,21 +2961,25 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut s = State::new(m);
-        assert!(s.is_ok());
-        let state = s.as_mut().unwrap();
+        let mut state = assert_ok!(State::new(m));
         assert!(state.initialize(24, 80, (9, 2), true).is_ok());
-        assert!(header::set_flag2(state, Flags2::Transcripting).is_ok());
+        assert!(header::set_flag2(&mut state, Flags2::Transcripting).is_ok());
         assert!(state.write_byte(0x200, 0xFC).is_ok());
         assert!(state.write_byte(0x280, 0x10).is_ok());
         assert!(state.write_byte(0x300, 0xFD).is_ok());
         assert!(state.set_variable(0x80, 0x8899).is_ok());
 
-        assert!(state.restart().is_ok_and(|x| x == 0x400));
-        assert!(header::flag2(state, Flags2::Transcripting).is_ok_and(|x| x == 1));
-        assert!(header::field_byte(state, HeaderField::DefaultForeground).is_ok_and(|x| x == 9));
-        assert!(header::field_byte(state, HeaderField::DefaultBackground).is_ok_and(|x| x == 2));
-        assert!(header::field_byte(state, HeaderField::ScreenLines).is_ok_and(|x| x == 24));
-        assert!(header::field_byte(state, HeaderField::ScreenColumns).is_ok_and(|x| x == 80));
+        assert_ok_eq!(state.restart(), 0x400);
+        assert_ok_eq!(header::flag2(&state, Flags2::Transcripting), 1);
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultForeground),
+            9
+        );
+        assert_ok_eq!(
+            header::field_byte(&state, HeaderField::DefaultBackground),
+            2
+        );
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenLines), 24);
+        assert_ok_eq!(header::field_byte(&state, HeaderField::ScreenColumns), 80);
     }
 }

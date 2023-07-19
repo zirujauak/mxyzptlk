@@ -293,7 +293,10 @@ pub fn decode_instruction(
 
 #[cfg(test)]
 mod tests {
-    use crate::test_util::{mock_zmachine, test_map};
+    use crate::{
+        assert_ok, assert_some, assert_some_eq,
+        test_util::{mock_zmachine, test_map},
+    };
 
     use super::*;
 
@@ -318,9 +321,9 @@ mod tests {
     #[test]
     fn test_operand_type() {
         let types = 0x1B;
-        assert!(operand_type(types, 0).is_some_and(|x| x == OperandType::LargeConstant));
-        assert!(operand_type(types, 1).is_some_and(|x| x == OperandType::SmallConstant));
-        assert!(operand_type(types, 2).is_some_and(|x| x == OperandType::Variable));
+        assert_some_eq!(operand_type(types, 0), OperandType::LargeConstant);
+        assert_some_eq!(operand_type(types, 1), OperandType::SmallConstant);
+        assert_some_eq!(operand_type(types, 2), OperandType::Variable);
         assert!(operand_type(types, 3).is_none());
     }
 
@@ -553,26 +556,18 @@ mod tests {
         ];
 
         for o in 0..=0xFF {
-            let r = result_variable(
+            let r = assert_ok!(result_variable(
                 0x1234,
                 &[0xFF, 0x56, 0xFF],
                 &mock_opcode(3, o, o, OpcodeForm::Var, OperandCount::_VAR),
                 1,
-            );
+            ));
             if opcodes.contains(&o) {
-                assert!(
-                    r.is_ok_and(|x| x.0 == 2
-                        && x.1
-                            .is_some_and(|y| y.address() == 0x1234 && y.variable == 0x56)),
-                    "{:02x} should be a store instruction",
-                    o
-                );
+                assert_eq!(r.0, 2);
+                assert_some_eq!(r.1, StoreResult::new(0x1234, 0x56));
             } else {
-                assert!(
-                    r.is_ok_and(|x| x.0 == 1 && x.1.is_none()),
-                    "{:02x} should not be a store instruction",
-                    o
-                );
+                assert_eq!(r.0, 1);
+                assert!(r.1.is_none());
             }
         }
     }
@@ -590,26 +585,18 @@ mod tests {
         ];
 
         for o in 0..=0xFF {
-            let r = result_variable(
+            let r = assert_ok!(result_variable(
                 0x1234,
                 &[0xFF, 0x56, 0xFF],
                 &mock_opcode(4, o, o, OpcodeForm::Var, OperandCount::_VAR),
                 1,
-            );
+            ));
             if opcodes.contains(&o) {
-                assert!(
-                    r.is_ok_and(|x| x.0 == 2
-                        && x.1
-                            .is_some_and(|y| y.address() == 0x1234 && y.variable == 0x56)),
-                    "{:02x} should be a store instruction",
-                    o
-                );
+                assert_eq!(r.0, 2);
+                assert_some_eq!(r.1, StoreResult::new(0x1234, 0x56));
             } else {
-                assert!(
-                    r.is_ok_and(|x| x.0 == 1 && x.1.is_none()),
-                    "{:02x} should not be a store instruction",
-                    o
-                );
+                assert_eq!(r.0, 1);
+                assert!(r.1.is_none());
             }
         }
     }
@@ -627,26 +614,18 @@ mod tests {
         ];
 
         for o in 0..=0xFF {
-            let r = result_variable(
+            let r = assert_ok!(result_variable(
                 0x1234,
                 &[0xFF, 0x56, 0xFF],
                 &mock_opcode(5, o, o, OpcodeForm::Var, OperandCount::_VAR),
                 1,
-            );
+            ));
             if opcodes.contains(&o) {
-                assert!(
-                    r.is_ok_and(|x| x.0 == 2
-                        && x.1
-                            .is_some_and(|y| y.address() == 0x1234 && y.variable == 0x56)),
-                    "{:02x} should be a store instruction",
-                    o
-                );
+                assert_eq!(r.0, 2);
+                assert_some_eq!(r.1, StoreResult::new(0x1234, 0x56));
             } else {
-                assert!(
-                    r.is_ok_and(|x| x.0 == 1 && x.1.is_none()),
-                    "{:02x} should not be a store instruction",
-                    o
-                );
+                assert_eq!(r.0, 1);
+                assert!(r.1.is_none());
             }
         }
     }
@@ -656,26 +635,18 @@ mod tests {
         let opcodes = [0x00, 0x01, 0x02, 0x03, 0x04, 0x09, 0x0a];
 
         for o in 0..=0xFF {
-            let r = result_variable(
+            let r = assert_ok!(result_variable(
                 0x1234,
                 &[0xFF, 0x56, 0xFF],
                 &mock_opcode(5, o, o, OpcodeForm::Ext, OperandCount::_VAR),
                 1,
-            );
+            ));
             if opcodes.contains(&o) {
-                assert!(
-                    r.is_ok_and(|x| x.0 == 2
-                        && x.1
-                            .is_some_and(|y| y.address() == 0x1234 && y.variable == 0x56)),
-                    "{:02x} should be a store instruction",
-                    o
-                );
+                assert_eq!(r.0, 2);
+                assert_some_eq!(r.1, StoreResult::new(0x1234, 0x56));
             } else {
-                assert!(
-                    r.is_ok_and(|x| x.0 == 1 && x.1.is_none()),
-                    "{:02x} should not be a store instruction",
-                    o
-                );
+                assert_eq!(r.0, 1);
+                assert!(r.1.is_none());
             }
         }
     }
@@ -690,57 +661,48 @@ mod tests {
 
     #[test]
     fn test_branch_condition_one_byte_true() {
-        assert!(
-            branch_condition(0x1234, &[0xFF, 0xFE, 0xFF], 1).is_ok_and(
-                |x| x.0 == 2 && x.1.is_some_and(|y| y == mock_branch(0x1235, true, 0x1272))
-            )
-        );
+        let b = assert_ok!(branch_condition(0x1234, &[0xFF, 0xFE, 0xFF], 1));
+        assert_eq!(b.0, 2);
+        assert_some_eq!(b.1, mock_branch(0x1235, true, 0x1272));
     }
 
     #[test]
     fn test_branch_condition_one_byte_false() {
-        assert!(branch_condition(0x1234, &[0xFF, 0x7E, 0xFF], 1).is_ok_and(
-            |x| x.0 == 2 && x.1.is_some_and(|y| y == mock_branch(0x1235, false, 0x1272))
-        ));
+        let b = assert_ok!(branch_condition(0x1234, &[0xFF, 0x7E, 0xFF], 1));
+        assert_eq!(b.0, 2);
+        assert_some_eq!(b.1, mock_branch(0x1235, false, 0x1272));
     }
 
     #[test]
     fn test_branch_condition_two_byte_true() {
-        assert!(branch_condition(0x1234, &[0xFF, 0xB2, 0x00, 0xFF], 1)
-            .is_ok_and(|x| x.0 == 3 && x.1.is_some_and(|y| y == mock_branch(0x1235, true, 0x435))));
+        let b = assert_ok!(branch_condition(0x1234, &[0xFF, 0xB2, 0x00, 0xFF], 1));
+        assert_eq!(b.0, 3);
+        assert_some_eq!(b.1, mock_branch(0x1235, true, 0x435));
     }
 
     #[test]
     fn test_branch_condition_two_byte_false() {
-        assert!(
-            branch_condition(0x1234, &[0xFF, 0x1F, 0xFF, 0xFF], 1).is_ok_and(
-                |x| x.0 == 3 && x.1.is_some_and(|y| y == mock_branch(0x1235, false, 0x3234))
-            )
-        );
+        let b = assert_ok!(branch_condition(0x1234, &[0xFF, 0x1F, 0xFF, 0xFF], 1));
+        assert_eq!(b.0, 3);
+        assert_some_eq!(b.1, mock_branch(0x1235, false, 0x3234));
     }
 
     #[test]
     fn test_branch_v3_zero_op() {
         let instructions = [0x05, 0x06, 0x0D, 0x0F];
         for i in 0..=0xFF {
-            let b = branch(
+            let b = assert_ok!(branch(
                 0x1234,
                 &[0xFF, 0xFE, 0xFF],
                 &mock_opcode(3, i as u8, i as u8, OpcodeForm::Short, OperandCount::_0OP),
                 1,
-            );
+            ));
             if instructions.contains(&i) {
-                assert!(
-                    b.is_ok_and(|x| x == (2, Some(mock_branch(0x1235, true, 0x1272)))),
-                    "{:02x} should be a branch instruction",
-                    i
-                );
+                assert_eq!(b.0, 2);
+                assert_some_eq!(b.1, mock_branch(0x1235, true, 0x1272));
             } else {
-                assert!(
-                    b.is_ok_and(|x| x == (1, None)),
-                    "{:02x} should not be a branch instruction",
-                    i
-                );
+                assert_eq!(b.0, 1);
+                assert!(b.1.is_none());
             }
         }
     }
@@ -749,24 +711,18 @@ mod tests {
     fn test_branch_v4_zero_op() {
         let instructions = [0x0D, 0x0F];
         for i in 0..=0xFF {
-            let b = branch(
+            let b = assert_ok!(branch(
                 0x1234,
                 &[0xFF, 0xFE, 0xFF],
                 &mock_opcode(4, i as u8, i as u8, OpcodeForm::Short, OperandCount::_0OP),
                 1,
-            );
+            ));
             if instructions.contains(&i) {
-                assert!(
-                    b.is_ok_and(|x| x == (2, Some(mock_branch(0x1235, true, 0x1272)))),
-                    "{:02x} should be a branch instruction",
-                    i
-                );
+                assert_eq!(b.0, 2);
+                assert_some_eq!(b.1, mock_branch(0x1235, true, 0x1272));
             } else {
-                assert!(
-                    b.is_ok_and(|x| x == (1, None)),
-                    "{:02x} should not be a branch instruction",
-                    i
-                );
+                assert_eq!(b.0, 1);
+                assert!(b.1.is_none());
             }
         }
     }
@@ -775,24 +731,18 @@ mod tests {
     fn test_branch_one_op() {
         let instructions = [0x00, 0x01, 0x02];
         for i in 0..=0xFF {
-            let b = branch(
+            let b = assert_ok!(branch(
                 0x1234,
                 &[0xFF, 0xFE, 0xFF],
                 &mock_opcode(3, i as u8, i as u8, OpcodeForm::Short, OperandCount::_1OP),
                 1,
-            );
+            ));
             if instructions.contains(&i) {
-                assert!(
-                    b.is_ok_and(|x| x == (2, Some(mock_branch(0x1235, true, 0x1272)))),
-                    "{:02x} should be a branch instruction",
-                    i
-                );
+                assert_eq!(b.0, 2);
+                assert_some_eq!(b.1, mock_branch(0x1235, true, 0x1272));
             } else {
-                assert!(
-                    b.is_ok_and(|x| x == (1, None)),
-                    "{:02x} should not be a branch instruction",
-                    i
-                );
+                assert_eq!(b.0, 1);
+                assert!(b.1.is_none());
             }
         }
     }
@@ -801,24 +751,18 @@ mod tests {
     fn test_branch_two_op() {
         let instructions = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x0a];
         for i in 0..=0xFF {
-            let b = branch(
+            let b = assert_ok!(branch(
                 0x1234,
                 &[0xFF, 0xFE, 0xFF],
                 &mock_opcode(3, i as u8, i as u8, OpcodeForm::Long, OperandCount::_2OP),
                 1,
-            );
+            ));
             if instructions.contains(&i) {
-                assert!(
-                    b.is_ok_and(|x| x == (2, Some(mock_branch(0x1235, true, 0x1272)))),
-                    "{:02x} should be a branch instruction",
-                    i
-                );
+                assert_eq!(b.0, 2);
+                assert_some_eq!(b.1, mock_branch(0x1235, true, 0x1272));
             } else {
-                assert!(
-                    b.is_ok_and(|x| x == (1, None)),
-                    "{:02x} should not be a branch instruction",
-                    i
-                );
+                assert_eq!(b.0, 1);
+                assert!(b.1.is_none());
             }
         }
     }
@@ -827,24 +771,18 @@ mod tests {
     fn test_branch_var() {
         let instructions = [0x17, 0x1F];
         for i in 0..=0xFF {
-            let b = branch(
+            let b = assert_ok!(branch(
                 0x1234,
                 &[0xFF, 0xFE, 0xFF],
                 &mock_opcode(3, i as u8, i as u8, OpcodeForm::Var, OperandCount::_VAR),
                 1,
-            );
+            ));
             if instructions.contains(&i) {
-                assert!(
-                    b.is_ok_and(|x| x == (2, Some(mock_branch(0x1235, true, 0x1272)))),
-                    "{:02x} should be a branch instruction",
-                    i
-                );
+                assert_eq!(b.0, 2);
+                assert_some_eq!(b.1, mock_branch(0x1235, true, 0x1272));
             } else {
-                assert!(
-                    b.is_ok_and(|x| x == (1, None)),
-                    "{:02x} should not be a branch instruction",
-                    i
-                );
+                assert_eq!(b.0, 1);
+                assert!(b.1.is_none());
             }
         }
     }
@@ -853,24 +791,18 @@ mod tests {
     fn test_branch_ext() {
         let instructions = [0x06, 0x18, 0x1B];
         for i in 0..=0xFF {
-            let b = branch(
+            let b = assert_ok!(branch(
                 0x1234,
                 &[0xFF, 0xFE, 0xFF],
                 &mock_opcode(5, i as u8, i as u8, OpcodeForm::Ext, OperandCount::_VAR),
                 1,
-            );
+            ));
             if instructions.contains(&i) {
-                assert!(
-                    b.is_ok_and(|x| x == (2, Some(mock_branch(0x1235, true, 0x1272)))),
-                    "{:02x} should be a branch instruction",
-                    i
-                );
+                assert_eq!(b.0, 2);
+                assert_some_eq!(b.1, mock_branch(0x1235, true, 0x1272));
             } else {
-                assert!(
-                    b.is_ok_and(|x| x == (1, None)),
-                    "{:02x} should not be a branch instruction",
-                    i
-                );
+                assert_eq!(b.0, 1);
+                assert!(b.1.is_none());
             }
         }
     }
@@ -879,8 +811,7 @@ mod tests {
     fn test_opcode_short_zero_op() {
         // 1011 = Short form, no operand
         let o = opcode(&[0xFF, 0xBF, 0xFF], 3, 1);
-        assert!(o.is_ok());
-        let (offset, opcode) = o.unwrap();
+        let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
         assert_eq!(opcode.version(), 3);
         assert_eq!(opcode.opcode(), 0xBF);
@@ -893,8 +824,7 @@ mod tests {
     fn test_opcode_short_one_op_large_constant() {
         // 1000 = Short form, large const operand
         let o = opcode(&[0xFF, 0x8F, 0xFF], 3, 1);
-        assert!(o.is_ok());
-        let (offset, opcode) = o.unwrap();
+        let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
         assert_eq!(opcode.version(), 3);
         assert_eq!(opcode.opcode(), 0x8F);
@@ -907,8 +837,7 @@ mod tests {
     fn test_opcode_short_one_op_small_constant() {
         // 1001 = Short form, small const operand
         let o = opcode(&[0xFF, 0x9F, 0xFF], 3, 1);
-        assert!(o.is_ok());
-        let (offset, opcode) = o.unwrap();
+        let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
         assert_eq!(opcode.version(), 3);
         assert_eq!(opcode.opcode(), 0x9F);
@@ -921,8 +850,7 @@ mod tests {
     fn test_opcode_short_one_op_var() {
         // 1010 = Short form, variable operand
         let o = opcode(&[0xFF, 0xAF, 0xFF], 3, 1);
-        assert!(o.is_ok());
-        let (offset, opcode) = o.unwrap();
+        let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
         assert_eq!(opcode.version(), 3);
         assert_eq!(opcode.opcode(), 0xAF);
@@ -935,8 +863,7 @@ mod tests {
     fn test_opcode_long_two_op_small_small() {
         // 0000 = Long form, small constant, small constant
         let o = opcode(&[0xFF, 0x1F, 0xFF], 3, 1);
-        assert!(o.is_ok());
-        let (offset, opcode) = o.unwrap();
+        let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
         assert_eq!(opcode.version(), 3);
         assert_eq!(opcode.opcode(), 0x1F);
@@ -949,8 +876,7 @@ mod tests {
     fn test_opcode_long_two_op_small_var() {
         // 0010 = Long form, small constant, variable
         let o = opcode(&[0xFF, 0x3F, 0xFF], 3, 1);
-        assert!(o.is_ok());
-        let (offset, opcode) = o.unwrap();
+        let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
         assert_eq!(opcode.version(), 3);
         assert_eq!(opcode.opcode(), 0x3F);
@@ -963,8 +889,7 @@ mod tests {
     fn test_opcode_long_two_op_var_small() {
         // 0100 = Long form, variable, small constant
         let o = opcode(&[0xFF, 0x5F, 0xFF], 3, 1);
-        assert!(o.is_ok());
-        let (offset, opcode) = o.unwrap();
+        let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
         assert_eq!(opcode.version(), 3);
         assert_eq!(opcode.opcode(), 0x5F);
@@ -977,8 +902,7 @@ mod tests {
     fn test_opcode_long_two_op_var_var() {
         // 0110 = Long form, variable, variable
         let o = opcode(&[0xFF, 0x7F, 0xFF], 3, 1);
-        assert!(o.is_ok());
-        let (offset, opcode) = o.unwrap();
+        let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
         assert_eq!(opcode.version(), 3);
         assert_eq!(opcode.opcode(), 0x7F);
@@ -991,8 +915,7 @@ mod tests {
     fn test_opcode_long_var_two_op() {
         // 0x1100 = Variable form, 2OP
         let o = opcode(&[0xFF, 0xDF, 0xFF], 3, 1);
-        assert!(o.is_ok());
-        let (offset, opcode) = o.unwrap();
+        let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
         assert_eq!(opcode.version(), 3);
         assert_eq!(opcode.opcode(), 0xDF);
@@ -1005,8 +928,7 @@ mod tests {
     fn test_opcode_var_var() {
         // 0x1110 = Variable form, VAR
         let o = opcode(&[0xFF, 0xFF, 0xFF], 3, 1);
-        assert!(o.is_ok());
-        let (offset, opcode) = o.unwrap();
+        let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
         assert_eq!(opcode.version(), 3);
         assert_eq!(opcode.opcode(), 0xFF);
@@ -1018,8 +940,7 @@ mod tests {
     #[test]
     fn test_opcode_ext() {
         let o = opcode(&[0xFF, 0xBE, 0xFF, 0xFF], 5, 1);
-        assert!(o.is_ok());
-        let (offset, opcode) = o.unwrap();
+        let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 3);
         assert_eq!(opcode.version(), 5);
         assert_eq!(opcode.opcode(), 0xFF);
@@ -1038,9 +959,7 @@ mod tests {
         map[0x601] = 0xFE;
         let zmachine = mock_zmachine(map);
 
-        let i = decode_instruction(&zmachine, 0x600);
-        assert!(i.is_ok());
-        let instruction = i.unwrap();
+        let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
         assert_eq!(instruction.address(), 0x600);
         assert_eq!(instruction.opcode().version(), 3);
         assert_eq!(instruction.opcode().opcode(), 0xBF);
@@ -1070,9 +989,7 @@ mod tests {
 
         let zmachine = mock_zmachine(map);
 
-        let i = decode_instruction(&zmachine, 0x600);
-        assert!(i.is_ok());
-        let instruction = i.unwrap();
+        let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
         assert_eq!(instruction.address(), 0x600);
         assert_eq!(instruction.opcode().version(), 3);
         assert_eq!(instruction.opcode().opcode(), 0x83);
@@ -1083,9 +1000,9 @@ mod tests {
             &[operand(OperandType::LargeConstant, 0x1234)]
         );
         assert!(instruction.branch().is_none());
-        assert!(instruction.store().is_some());
-        assert_eq!(instruction.store().unwrap().address(), 0x603);
-        assert_eq!(instruction.store().unwrap().variable(), 0x80);
+        let store = assert_some!(instruction.store());
+        assert_eq!(store.address(), 0x603);
+        assert_eq!(store.variable(), 0x80);
         assert_eq!(instruction.next_address(), 0x604);
     }
 
@@ -1106,9 +1023,7 @@ mod tests {
 
         let zmachine = mock_zmachine(map);
 
-        let i = decode_instruction(&zmachine, 0x600);
-        assert!(i.is_ok());
-        let instruction = i.unwrap();
+        let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
         assert_eq!(instruction.address(), 0x600);
         assert_eq!(instruction.opcode().version(), 3);
         assert_eq!(instruction.opcode().opcode(), 0x91);
@@ -1139,9 +1054,7 @@ mod tests {
 
         let zmachine = mock_zmachine(map);
 
-        let i = decode_instruction(&zmachine, 0x600);
-        assert!(i.is_ok());
-        let instruction = i.unwrap();
+        let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
         assert_eq!(instruction.address(), 0x600);
         assert_eq!(instruction.opcode().version(), 3);
         assert_eq!(instruction.opcode().opcode(), 0xA9);
@@ -1170,9 +1083,7 @@ mod tests {
 
         let zmachine = mock_zmachine(map);
 
-        let i = decode_instruction(&zmachine, 0x600);
-        assert!(i.is_ok());
-        let instruction = i.unwrap();
+        let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
         assert_eq!(instruction.address(), 0x600);
         assert_eq!(instruction.opcode().version(), 3);
         assert_eq!(instruction.opcode().opcode(), 0x01);
@@ -1207,9 +1118,7 @@ mod tests {
 
         let zmachine = mock_zmachine(map);
 
-        let i = decode_instruction(&zmachine, 0x600);
-        assert!(i.is_ok());
-        let instruction = i.unwrap();
+        let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
         assert_eq!(instruction.address(), 0x600);
         assert_eq!(instruction.opcode().version(), 3);
         assert_eq!(instruction.opcode().opcode(), 0x28);
@@ -1241,9 +1150,7 @@ mod tests {
 
         let zmachine = mock_zmachine(map);
 
-        let i = decode_instruction(&zmachine, 0x600);
-        assert!(i.is_ok());
-        let instruction = i.unwrap();
+        let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
         assert_eq!(instruction.address(), 0x600);
         assert_eq!(instruction.opcode().version(), 3);
         assert_eq!(instruction.opcode().opcode(), 0x4B);
@@ -1275,9 +1182,7 @@ mod tests {
 
         let zmachine = mock_zmachine(map);
 
-        let i = decode_instruction(&zmachine, 0x600);
-        assert!(i.is_ok());
-        let instruction = i.unwrap();
+        let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
         assert_eq!(instruction.address(), 0x600);
         assert_eq!(instruction.opcode().version(), 3);
         assert_eq!(instruction.opcode().opcode(), 0x6F);
@@ -1315,9 +1220,7 @@ mod tests {
 
         let zmachine = mock_zmachine(map);
 
-        let i = decode_instruction(&zmachine, 0x600);
-        assert!(i.is_ok());
-        let instruction = i.unwrap();
+        let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
         assert_eq!(instruction.address(), 0x600);
         assert_eq!(instruction.opcode().version(), 3);
         assert_eq!(instruction.opcode().opcode(), 0xD8);
@@ -1351,9 +1254,7 @@ mod tests {
 
         let zmachine = mock_zmachine(map);
 
-        let i = decode_instruction(&zmachine, 0x600);
-        assert!(i.is_ok());
-        let instruction = i.unwrap();
+        let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
         assert_eq!(instruction.address(), 0x600);
         assert_eq!(instruction.opcode().version(), 3);
         assert_eq!(instruction.opcode().opcode(), 0xE6);
@@ -1385,9 +1286,7 @@ mod tests {
 
         let zmachine = mock_zmachine(map);
 
-        let i = decode_instruction(&zmachine, 0x600);
-        assert!(i.is_ok());
-        let instruction = i.unwrap();
+        let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
         assert_eq!(instruction.address(), 0x600);
         assert_eq!(instruction.opcode().version(), 5);
         assert_eq!(instruction.opcode().opcode(), 0x02);

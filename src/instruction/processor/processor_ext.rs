@@ -152,7 +152,7 @@ mod tests {
 
     use crate::{
         instruction::{processor::dispatch, Opcode, OpcodeForm, OperandCount, OperandType},
-        test_util::*,
+        test_util::*, assert_ok_eq,
     };
 
     fn opcode(instruction: u8) -> Opcode {
@@ -172,8 +172,8 @@ mod tests {
         let a = dispatch(&mut zmachine, &i);
         assert!(Path::new("test-v5.ifzs").exists());
         assert!(fs::remove_file(Path::new("test-v5.ifzs")).is_ok());
-        assert!(a.is_ok_and(|x| x == 0x483));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 1));
+        assert_ok_eq!(a, 0x483);
+        assert_ok_eq!(zmachine.variable(0x80), 1);
     }
 
     #[test]
@@ -186,8 +186,8 @@ mod tests {
         let map = test_map(5);
         let i = mock_store_instruction(0x480, vec![], opcode(0), 0x483, store(0x482, 0x80));
         let mut zmachine = mock_zmachine(map);
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x483));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x483);
+        assert_ok_eq!(zmachine.variable(0x80), 0);
     }
 
     #[test]
@@ -214,8 +214,8 @@ mod tests {
 
         let a = dispatch(&mut zmachine, &i);
         assert!(Path::new("test-v5r.ifzs").exists());
-        assert!(a.is_ok_and(|x| x == 0x484));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x01));
+        assert_ok_eq!(a, 0x484);
+        assert_ok_eq!(zmachine.variable(0x80), 0x01);
 
         let i2 = mock_store_instruction(0x484, vec![], opcode(1), 0x486, store(0x485, 0x81));
         input(&[
@@ -226,8 +226,8 @@ mod tests {
 
         let a = dispatch(&mut zmachine, &i2);
         assert!(fs::remove_file(Path::new("test-v5r.ifzs")).is_ok());
-        assert!(a.is_ok_and(|x| x == 0x484));
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 0x02));
+        assert_ok_eq!(a, 0x484);
+        assert_ok_eq!(zmachine.variable(0x80), 0x02);
     }
 
     #[test]
@@ -241,8 +241,8 @@ mod tests {
         let i = mock_store_instruction(0x484, vec![], opcode(1), 0x486, store(0x485, 0x81));
 
         let a = dispatch(&mut zmachine, &i);
-        assert!(a.is_ok_and(|x| x == 0x486));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+        assert_ok_eq!(a, 0x486);
+        assert_ok_eq!(zmachine.variable(0x81), 0);
     }
 
     #[test]
@@ -261,8 +261,8 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 1));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert_ok_eq!(zmachine.variable(0x81), 1);
     }
 
     #[test]
@@ -281,8 +281,8 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0x8000));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert_ok_eq!(zmachine.variable(0x81), 0x8000);
     }
 
     #[test]
@@ -301,8 +301,8 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0x1));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert_ok_eq!(zmachine.variable(0x81), 0x1);
     }
 
     #[test]
@@ -321,8 +321,8 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert_ok_eq!(zmachine.variable(0x81), 0);
     }
 
     #[test]
@@ -341,8 +341,8 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert_ok_eq!(zmachine.variable(0x81), 0);
     }
 
     #[test]
@@ -361,8 +361,8 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 1));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert_ok_eq!(zmachine.variable(0x81), 1);
     }
 
     #[test]
@@ -381,8 +381,8 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0x8000));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert_ok_eq!(zmachine.variable(0x81), 0x8000);
     }
 
     #[test]
@@ -401,8 +401,8 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0xFFFF));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert_ok_eq!(zmachine.variable(0x81), 0xFFFF);
     }
 
     #[test]
@@ -421,8 +421,8 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert_ok_eq!(zmachine.variable(0x81), 0);
     }
 
     #[test]
@@ -441,8 +441,8 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x487));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert_ok_eq!(zmachine.variable(0x81), 0);
     }
 
     #[test]
@@ -458,8 +458,8 @@ mod tests {
             store(0x483, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x484));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 1));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x484);
+        assert_ok_eq!(zmachine.variable(0x81), 1);
     }
 
     #[test]
@@ -475,8 +475,8 @@ mod tests {
             store(0x483, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x484));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 1));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x484);
+        assert_ok_eq!(zmachine.variable(0x81), 1);
     }
 
     #[test]
@@ -492,8 +492,8 @@ mod tests {
             store(0x483, 0x81),
         );
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x484));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x484);
+        assert_ok_eq!(zmachine.variable(0x81), 0);
     }
 
     #[test]
@@ -503,8 +503,8 @@ mod tests {
         let mut zmachine = mock_zmachine(map);
         let i = mock_store_instruction(0x400, vec![], opcode(9), 0x483, store(0x482, 0x81));
 
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x483));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 1));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x483);
+        assert_ok_eq!(zmachine.variable(0x81), 1);
     }
 
     #[test]
@@ -520,17 +520,17 @@ mod tests {
 
         // Save current state
         let i = mock_store_instruction(0x400, vec![], opcode(9), 0x404, store(0x403, 0x81));
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 1));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x404);
+        assert_ok_eq!(zmachine.variable(0x81), 1);
 
         // Simulate a function call to change state
         mock_frame(&mut zmachine, 0x600, None, 0x500);
         assert_eq!(zmachine.frame_count(), 2);
 
         let i = mock_store_instruction(0x600, vec![], opcode(10), 0x604, store(0x603, 0x81));
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x404));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x404);
         assert_eq!(zmachine.frame_count(), 1);
-        assert!(zmachine.variable(0x80).is_ok_and(|x| x == 2));
+        assert_ok_eq!(zmachine.variable(0x80), 2);
     }
 
     #[test]
@@ -540,8 +540,8 @@ mod tests {
 
         // No undo save
         let i = mock_store_instruction(0x600, vec![], opcode(10), 0x604, store(0x603, 0x81));
-        assert!(dispatch(&mut zmachine, &i).is_ok_and(|x| x == 0x604));
+        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x604);
         assert_eq!(zmachine.frame_count(), 1);
-        assert!(zmachine.variable(0x81).is_ok_and(|x| x == 0));
+        assert_ok_eq!(zmachine.variable(0x81), 0);
     }
 }

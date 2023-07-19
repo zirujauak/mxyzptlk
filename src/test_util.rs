@@ -2,7 +2,6 @@ use std::{cell::RefCell, collections::VecDeque};
 
 use crate::{
     config::Config,
-    error::RuntimeError,
     instruction::{
         Branch, Instruction, Opcode, OpcodeForm, Operand, OperandCount, OperandType, StoreResult,
     },
@@ -39,7 +38,7 @@ pub fn print_char(c: char) {
     PRINT.with(|x| x.borrow_mut().push(c));
 }
 
-fn print() -> String {
+pub fn print() -> String {
     PRINT.with(|x| x.borrow().to_string())
 }
 
@@ -705,22 +704,59 @@ pub fn mock_unsorted_dictionary(map: &mut [u8]) {
     map[0x34A] = 0xC6;
     map[0x34B] = 0x05;
 }
-pub fn assert_ok<T>(result: Result<T, RuntimeError>) -> T {
-    assert!(result.is_ok());
-    result.unwrap()
+
+#[macro_export]
+macro_rules! assert_ok {
+    ($result:expr) => {{
+        let x = $result;
+        assert!(x.is_ok());
+        x.unwrap()
+    }};
 }
 
-pub fn assert_eq_ok<T: std::fmt::Debug + std::cmp::PartialEq>(
-    s: Result<T, RuntimeError>,
-    value: T,
-) {
-    assert!(s.is_ok());
-    assert_eq!(s.unwrap(), value);
+#[macro_export]
+macro_rules! assert_some {
+    ($result:expr) => {{
+        let x = $result;
+        assert!(x.is_some());
+        x.unwrap()
+    }};
 }
 
-pub fn assert_print(str: &str) {
-    assert_eq!(print(), str);
+#[macro_export]
+macro_rules! assert_ok_eq {
+    ($result:expr, $value:expr) => {{
+        let x = $result;
+        assert!(x.as_ref().is_ok_and(|y| *y == $value), "{:?} not ok or != {:?}", x, $value);
+    }};
+    ($result:expr, $value:expr, $($arg:tt)+) => {
+        let x = $result;
+        assert!(x.as_ref().is_ok_and(|y| *y == $value), $($arg)*);
+    }
 }
+
+#[macro_export]
+macro_rules! assert_some_eq {
+    ($result:expr, $value:expr) => {{
+        let x = $result;
+        assert!(x.as_ref().is_some_and(|y| *y == $value), "{:?} not some or != {:?}", x, $value);
+    }};
+    ($result:expr, $value:expr, $($arg:tt)+) => {
+        let x = $result;
+        assert!(x.as_ref().is_some_and(|y| *y == $value), $($arg)*);
+    }
+}
+
+#[macro_export]
+macro_rules! assert_print {
+    ($value:expr) => {{
+        assert_eq!(&$crate::test_util::print(), $value)
+    }}
+}
+
+// pub fn assert_print(str: &str) {
+//     assert_eq!(print(), str);
+// }
 
 pub fn mock_object(
     map: &mut [u8],

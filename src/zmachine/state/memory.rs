@@ -232,6 +232,8 @@ impl Memory {
 mod tests {
     use std::{fs, io::Write, path::Path};
 
+    use crate::{assert_ok, assert_ok_eq};
+
     use super::*;
 
     #[test]
@@ -258,36 +260,32 @@ mod tests {
         for (i, b) in (0x40..0x800).enumerate() {
             map[i + 0x40] = b as u8;
         }
-        let file = fs::OpenOptions::new()
+        let mut file = assert_ok!(fs::OpenOptions::new()
             .create(true)
             .truncate(true)
             .write(true)
-            .open("test-code.z5");
-        assert!(file.is_ok());
-        let mut f = file.unwrap();
-        assert!(f.write_all(&map).is_ok());
-        assert!(f.flush().is_ok());
+            .open("test-code.z5"));
+        assert!(file.write_all(&map).is_ok());
+        assert!(file.flush().is_ok());
         assert!(Path::new("test-code.z5").exists());
-        let mut read_file = fs::OpenOptions::new().read(true).open("test-code.z5");
-        assert!(read_file.is_ok());
-        let memory = Memory::try_from(read_file.as_mut().unwrap());
+        let read_file = fs::OpenOptions::new().read(true).open("test-code.z5");
+        let mut rf = assert_ok!(read_file);
+        let m = assert_ok!(Memory::try_from(&mut rf));
         assert!(fs::remove_file("test-code.z5").is_ok());
-        assert!(memory.is_ok());
-        let m = memory.unwrap();
-        assert!(m.read_byte(0).is_ok_and(|x| x == 5));
-        assert!(m.read_word(0xE).is_ok_and(|x| x == 0x400));
+        assert_ok_eq!(m.read_byte(0), 5);
+        assert_ok_eq!(m.read_word(0xE), 0x400);
         for i in 1..0x40 {
             if i != 0x0E && i != 0x0F {
-                assert!(m.read_byte(i).is_ok_and(|x| x == 0));
+                assert_ok_eq!(m.read_byte(i), 0);
             }
         }
         for i in 0x40..0x800 {
-            assert!(m.read_byte(i).is_ok_and(|x| x == i as u8));
+            assert_ok_eq!(m.read_byte(i), i as u8);
         }
 
         assert_eq!(m.dynamic.len(), 0x400);
         for i in 0..0x400 {
-            assert!(m.read_byte(i).is_ok_and(|x| x == m.dynamic[i]));
+            assert_ok_eq!(m.read_byte(i), m.dynamic[i]);
         }
     }
 
@@ -300,20 +298,20 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        assert!(m.read_byte(0).is_ok_and(|x| x == 5));
-        assert!(m.read_word(0xE).is_ok_and(|x| x == 0x400));
+        assert_ok_eq!(m.read_byte(0), 5);
+        assert_ok_eq!(m.read_word(0xE), 0x400);
         for i in 1..0x40 {
             if i != 0x0E && i != 0x0F {
-                assert!(m.read_byte(i).is_ok_and(|x| x == 0));
+                assert_ok_eq!(m.read_byte(i), 0);
             }
         }
         for i in 0x40..0x800 {
-            assert!(m.read_byte(i).is_ok_and(|x| x == i as u8));
+            assert_ok_eq!(m.read_byte(i), i as u8);
         }
 
         assert_eq!(m.dynamic.len(), 0x400);
         for i in 0..0x400 {
-            assert!(m.read_byte(i).is_ok_and(|x| x == m.dynamic[i]));
+            assert_ok_eq!(m.read_byte(i), m.dynamic[i]);
         }
     }
 
@@ -356,7 +354,7 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        assert!(m.checksum().is_ok_and(|x| x == 0xf420));
+        assert_ok_eq!(m.checksum(), 0xf420);
     }
 
     #[test]
@@ -370,7 +368,7 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        assert!(m.checksum().is_ok_and(|x| x == 0xf420));
+        assert_ok_eq!(m.checksum(), 0xf420);
     }
 
     #[test]
@@ -384,7 +382,7 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        assert!(m.checksum().is_ok_and(|x| x == 0xf420));
+        assert_ok_eq!(m.checksum(), 0xf420);
     }
 
     #[test]
@@ -398,7 +396,7 @@ mod tests {
             map[i + 0x40] = b as u8;
         }
         let m = Memory::new(map);
-        assert!(m.checksum().is_ok_and(|x| x == 0xf420));
+        assert_ok_eq!(m.checksum(), 0xf420);
     }
 
     #[test]
@@ -413,7 +411,7 @@ mod tests {
         }
         let m = Memory::new(map);
         for i in 0x40..0x800 {
-            assert!(m.read_byte(i).is_ok_and(|x| x == i as u8));
+            assert_ok_eq!(m.read_byte(i), i as u8);
         }
 
         assert!(m.read_byte(0x800).is_err());
@@ -432,7 +430,7 @@ mod tests {
         let m = Memory::new(map);
         for i in 0x40..0x7FF {
             let w = word_value(i as u8, u8::overflowing_add(i as u8, 1).0);
-            assert!(m.read_word(i).is_ok_and(|x| x == w));
+            assert_ok_eq!(m.read_word(i), w);
         }
 
         assert!(m.read_word(0x7FF).is_err());
@@ -452,11 +450,11 @@ mod tests {
         for i in 0x40..0x80 {
             assert!(m.write_byte(i, i as u8 + 1).is_ok());
         }
-        assert!(m.read_byte(0x39).is_ok_and(|x| x == 0));
+        assert_ok_eq!(m.read_byte(0x39), 0);
         for i in 0x40..0x80 {
-            assert!(m.read_byte(i).is_ok_and(|x| x == i as u8 + 1));
+            assert_ok_eq!(m.read_byte(i), i as u8 + 1);
         }
-        assert!(m.read_byte(0x81).is_ok_and(|x| x == 0x81));
+        assert_ok_eq!(m.read_byte(0x81), 0x81);
 
         assert!(m.write_byte(0x800, 0).is_err());
     }
@@ -475,11 +473,11 @@ mod tests {
         for i in 0x20..0x40 {
             assert!(m.write_word(i * 2, i as u16 * 0x10).is_ok());
         }
-        assert!(m.read_word(0x38).is_ok_and(|x| x == 0));
+        assert_ok_eq!(m.read_word(0x38), 0);
         for i in 0x20..0x40 {
-            assert!(m.read_word(i * 2).is_ok_and(|x| x == i as u16 * 0x10));
+            assert_ok_eq!(m.read_word(i * 2), i as u16 * 0x10);
         }
-        assert!(m.read_word(0x81).is_ok_and(|x| x == 0x8182));
+        assert_ok_eq!(m.read_word(0x81), 0x8182);
 
         assert!(m.write_word(0x7FF, 0).is_err());
     }
@@ -528,11 +526,11 @@ mod tests {
             assert!(m.write_byte(i, 0).is_ok());
         }
         for i in 0x40..0x400 {
-            assert!(m.read_byte(i).is_ok_and(|x| x == 0))
+            assert_ok_eq!(m.read_byte(i), 0)
         }
         m.reset();
         for i in 0x40..0x400 {
-            assert!(m.read_byte(i).is_ok_and(|x| x == i as u8))
+            assert_ok_eq!(m.read_byte(i), i as u8)
         }
     }
 
@@ -555,14 +553,14 @@ mod tests {
         }
         let mut m = Memory::new(map.clone());
         for i in 0x40..0x400 {
-            assert!(m.read_byte(i).is_ok_and(|x| x == i as u8))
+            assert_ok_eq!(m.read_byte(i), i as u8)
         }
         assert!(m.restore(&restore).is_ok());
         for (i, _) in (0..0x40).enumerate() {
-            assert!(m.read_byte(i).is_ok_and(|x| x == map[i]));
+            assert_ok_eq!(m.read_byte(i), map[i]);
         }
         for i in 0x40..0x400 {
-            assert!(m.read_byte(i).is_ok_and(|x| x == !(i as u8)));
+            assert_ok_eq!(m.read_byte(i), !(i as u8));
         }
     }
 
@@ -606,46 +604,50 @@ mod tests {
             ])
             .is_ok());
         for (i, _) in (0..0x200).enumerate() {
-            assert!(
-                m.read_byte(i).is_ok_and(|x| x == map[i]),
-                "{:04x}: {:02x}/{:02x}",
+            assert_ok_eq!(
+                m.read_byte(i),
+                map[i],
+                "{:04x}: {:?}/{}",
                 i,
-                m.read_byte(i).unwrap(),
+                m.read_byte(i),
                 map[i]
             );
         }
         for (i, _) in (0x201..0x280).enumerate() {
             let offset = i + 0x201;
-            assert!(
-                m.read_byte(offset).is_ok_and(|x| x == map[offset]),
-                "{:04x}: {:02x}/{:02x}",
+            assert_ok_eq!(
+                m.read_byte(offset),
+                map[offset],
+                "{:04x}: {:?}/{}",
                 offset,
-                m.read_byte(offset).unwrap(),
+                m.read_byte(offset),
                 map[offset]
             );
         }
         for (i, _) in (0x281..0x300).enumerate() {
             let offset = i + 0x281;
-            assert!(
-                m.read_byte(offset).is_ok_and(|x| x == map[offset]),
-                "{:04x}: {:02x}/{:02x}",
+            assert_ok_eq!(
+                m.read_byte(offset),
+                map[offset],
+                "{:04x}: {:?}/{}",
                 offset,
-                m.read_byte(offset).unwrap(),
+                m.read_byte(offset),
                 map[offset]
             );
         }
         for (i, _) in (0x301..0x800).enumerate() {
             let offset = i + 0x301;
-            assert!(
-                m.read_byte(offset).is_ok_and(|x| x == map[offset]),
-                "{:04x}: {:02x}/{:02x}",
+            assert_ok_eq!(
+                m.read_byte(offset),
+                map[offset],
+                "{:04x}: {:?}/{}",
                 offset,
-                m.read_byte(offset).unwrap(),
+                m.read_byte(offset),
                 map[offset]
             );
         }
-        assert!(m.read_byte(0x200).is_ok_and(|x| x == 0xFC));
-        assert!(m.read_byte(0x280).is_ok_and(|x| x == 0x10));
-        assert!(m.read_byte(0x300).is_ok_and(|x| x == 0xFD));
+        assert_ok_eq!(m.read_byte(0x200), 0xFC);
+        assert_ok_eq!(m.read_byte(0x280), 0x10);
+        assert_ok_eq!(m.read_byte(0x300), 0xFD);
     }
 }
