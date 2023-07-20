@@ -7,7 +7,7 @@ mod rodio_player;
 #[cfg(test)]
 mod test_player;
 
-#[cfg(any(feature = "sndfile", test))]
+#[cfg(feature = "sndfile")]
 mod loader;
 
 #[cfg(not(test))]
