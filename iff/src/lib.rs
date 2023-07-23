@@ -5,6 +5,17 @@ use std::{
     io::{self, Read},
 };
 
+/// An IFF "Chunk"
+///
+/// "Group" Chunks (`id` = "FORM", "LIST", "CAT ") include a `sub_id` value and
+/// child `chunks`.  For these chunks, the `data` value should be an empty
+/// vector.
+///
+/// Other chunks will have an empty `sub_id` and `chunks` vector and the
+/// `data` vector will contain the chunk data.
+///
+/// The `length` field is the size of the chunk data.  For group chunks,
+/// this length includes the 4-bytes `sub_id` value.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Chunk {
     id: Vec<u8>,
@@ -25,10 +36,26 @@ fn id_to_vec(id: &str) -> Vec<u8> {
 }
 
 impl Chunk {
+    /// Create a new chunk
+    ///
+    /// Arguments:
+    /// * `id`: IFF Id of the chunk
+    /// * `data`: The chunk data.  Data will be padded with a 0 if needed to ensure
+    /// the vector is an even number of bytes
     pub fn new_chunk(id: &str, data: Vec<u8>) -> Chunk {
+        let length = data.len() as u32;
+        // Pad data, if needed
+        let data = if length % 2 == 1 {
+            let mut data = data;
+            data.push(0);
+            data
+        } else {
+            data
+        };
+
         Chunk {
             id: id_to_vec(id),
-            length: data.len() as u32,
+            length,
             sub_id: Vec::new(),
             chunks: Vec::new(),
             data,
@@ -86,6 +113,23 @@ impl Chunk {
         }
     }
 
+    /// Searches for a child chunk matching an id and sub id from a list.
+    ///
+    /// The search ends when the first match is found.
+    ///
+    /// Arguments:
+    /// * `ids`: A list of id+sub_id values to search for.
+    ///
+    /// Returns an Option containing the first matched chunk, or None.
+    pub fn find_first_chunk(&self, ids: Vec<(&str, &str)>) -> Option<&Chunk> {
+        for (id, sub_id) in ids {
+            if let Some(c) = self.find_chunk(id, sub_id) {
+                return Some(c);
+            }
+        }
+
+        None
+    }
     /// Finds all direct child chunk with the matching id and sub id.
     ///
     /// Arguments:
@@ -246,14 +290,14 @@ mod tests {
 
     #[test]
     fn test_new_chunk() {
-        let chunk = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let chunk = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7]);
         assert_eq!(chunk.id, vec![b'T', b'e', b's', b't']);
         assert_eq!(chunk.id(), "Test");
-        assert_eq!(chunk.length(), 8);
+        assert_eq!(chunk.length(), 7);
         assert!(chunk.sub_id.is_empty());
         assert_eq!(chunk.sub_id(), "");
         assert!(chunk.chunks().is_empty());
-        assert_eq!(chunk.data(), &vec![1, 2, 3, 4, 5, 6, 7, 8])
+        assert_eq!(chunk.data(), &vec![1, 2, 3, 4, 5, 6, 7, 0])
     }
 
     #[test]
@@ -277,34 +321,20 @@ mod tests {
     fn test_find_chunk() {
         let c1 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
         let c2 = Chunk::new_chunk("Foo", vec![4, 3, 2, 1]);
-        let chunk = Chunk::new_form("FTst", vec![c1, c2]);
+        let chunk = Chunk::new_form("FTst", vec![c1.clone(), c2]);
         let found = chunk.find_chunk("Test", "");
         assert!(found.is_some());
-        let found = found.unwrap();
-        assert_eq!(found.id, vec![b'T', b'e', b's', b't']);
-        assert_eq!(found.id(), "Test");
-        assert_eq!(found.length(), 8);
-        assert_eq!(found.sub_id, vec![]);
-        assert_eq!(found.sub_id(), "");
-        assert!(found.chunks().is_empty());
-        assert_eq!(found.data(), &vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(found.unwrap(), &c1);
     }
 
     #[test]
     fn test_find_chunk_multiple() {
         let c1 = Chunk::new_chunk("Test", vec![4, 3, 2, 1]);
         let c2 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let chunk = Chunk::new_form("FTst", vec![c1, c2]);
+        let chunk = Chunk::new_form("FTst", vec![c1.clone(), c2]);
         let found = chunk.find_chunk("Test", "");
         assert!(found.is_some());
-        let found = found.unwrap();
-        assert_eq!(found.id, vec![b'T', b'e', b's', b't']);
-        assert_eq!(found.id(), "Test");
-        assert_eq!(found.length(), 4);
-        assert_eq!(found.sub_id, vec![]);
-        assert_eq!(found.sub_id(), "");
-        assert!(found.chunks().is_empty());
-        assert_eq!(found.data(), &vec![4, 3, 2, 1]);
+        assert_eq!(found.unwrap(), &c1);
     }
 
     #[test]
@@ -334,6 +364,26 @@ mod tests {
         assert_eq!(found.chunks().len(), 1);
         assert_eq!(found.chunks()[0], c2);
         assert!(found.data().is_empty())
+    }
+
+    #[test]
+    fn test_find_first_chunk() {
+        let c1 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let c2 = Chunk::new_chunk("Foo", vec![4, 3, 2, 1]);
+        let chunk = Chunk::new_form("FTst", vec![c1, c2.clone()]);
+        let found = chunk.find_first_chunk(vec![("Nope", ""), ("Foo ", ""), ("Test", "")]);
+        assert!(found.is_some());
+        let found = found.unwrap();
+        assert_eq!(found, &c2);
+    }
+
+    #[test]
+    fn test_find_first_chunk_none() {
+        let c1 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let c2 = Chunk::new_chunk("Foo", vec![4, 3, 2, 1]);
+        let chunk = Chunk::new_form("FTst", vec![c1, c2]);
+        let found = chunk.find_first_chunk(vec![("Nope", ""), ("Foop", ""), ("Tast", "")]);
+        assert!(found.is_none());
     }
 
     #[test]

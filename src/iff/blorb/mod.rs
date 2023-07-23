@@ -7,11 +7,12 @@ use crate::{
     iff::blorb::aiff::AIFF,
 };
 
-use self::{oggv::OGGV, sloop::Loop};
+use self::{ifhd::IFhd, oggv::OGGV, sloop::Loop};
 
-use super::{quetzal::ifhd::IFhd, IFF};
+use super::IFF;
 
 pub mod aiff;
+pub mod ifhd;
 pub mod oggv;
 pub mod ridx;
 pub mod sloop;

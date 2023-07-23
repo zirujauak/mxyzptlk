@@ -1,6 +1,6 @@
 use crate::error::*;
-use crate::iff::quetzal::stks::{StackFrame, Stks};
 use crate::instruction::StoreResult;
+use crate::quetzal::{Stk, Stks};
 
 #[derive(Debug)]
 pub struct Frame {
@@ -15,8 +15,8 @@ pub struct Frame {
     sound_interrupt: bool,
 }
 
-impl From<&StackFrame> for Frame {
-    fn from(value: &StackFrame) -> Self {
+impl From<&Stk> for Frame {
+    fn from(value: &Stk) -> Self {
         let result = if value.flags() & 0x10 == 0x00 {
             Some(StoreResult::new(0, value.result_variable()))
         } else {
@@ -25,7 +25,7 @@ impl From<&StackFrame> for Frame {
         Frame::new(
             0,
             0,
-            value.local_variables(),
+            value.variables(),
             value.arguments(),
             value.stack(),
             result,
@@ -259,7 +259,7 @@ mod tests {
 
     #[test]
     fn test_from_stackframe() {
-        let sf = StackFrame::new(
+        let sf = Stk::new(
             0x1234,
             0x0F,
             0x80,
@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn test_from_stackframe_no_result() {
-        let sf = StackFrame::new(
+        let sf = Stk::new(
             0x1234,
             0x1F,
             0x80,
@@ -302,7 +302,7 @@ mod tests {
     #[test]
     fn test_vec_from_stks() {
         let stks = Stks::new(vec![
-            StackFrame::new(
+            Stk::new(
                 0x1234,
                 0x13,
                 0x80,
@@ -310,7 +310,7 @@ mod tests {
                 &[0x5678, 0x9abc, 0xdef0],
                 &[0x1111, 0x2222],
             ),
-            StackFrame::new(0x4321, 0x02, 0x80, 2, &[0x8765, 0xcba9], &[]),
+            Stk::new(0x4321, 0x02, 0x80, 2, &[0x8765, 0xcba9], &[]),
         ]);
         let frames: Vec<Frame> = Vec::from(&stks);
         assert_eq!(frames.len(), 2);

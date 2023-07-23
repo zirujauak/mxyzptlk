@@ -1,7 +1,7 @@
 use std::fmt;
 
 pub mod blorb;
-pub mod quetzal;
+// pub mod quetzal;
 
 fn usize_as_vec(d: usize, bytes: usize) -> Vec<u8> {
     let mut data = Vec::new();
