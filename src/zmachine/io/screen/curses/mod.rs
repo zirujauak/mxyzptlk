@@ -1,8 +1,6 @@
 use super::InputEvent;
 
-#[cfg(feature = "easycurses")]
-pub mod easy_curses;
-#[cfg(all(feature = "pancurses", not(feature = "easycurses"), not(test)))]
+#[cfg(not(test))]
 pub mod pancurses;
 #[cfg(test)]
 pub mod test_terminal;

@@ -3,10 +3,7 @@ mod curses;
 use crate::config::Config;
 use crate::error::*;
 
-#[cfg(feature = "easycurses")]
-use curses::easy_curses::new_terminal;
-
-#[cfg(all(feature = "pancurses", not(feature = "easycurses"), not(test)))]
+#[cfg(not(test))]
 use curses::pancurses::new_terminal;
 
 #[cfg(test)]
