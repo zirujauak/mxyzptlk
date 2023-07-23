@@ -112,8 +112,7 @@ impl Chunk {
 ///
 /// # Examples
 /// ```
-/// use iff::vec_as_unsigned;
-///
+/// use ifflib::vec_as_unsigned;
 /// assert_eq!(vec_as_unsigned(&[0x12, 0x34, 0x56]), 0x123456)
 /// ```
 pub fn vec_as_unsigned(v: &[u8]) -> usize {
@@ -133,7 +132,7 @@ pub fn vec_as_unsigned(v: &[u8]) -> usize {
 ///
 /// # Examples
 /// ```
-/// use iff::unsigned_as_vec;
+/// use ifflib::unsigned_as_vec;
 /// assert_eq!(unsigned_as_vec(0x123456, 3), vec![0x12, 0x34, 0x56]);
 /// ```
 pub fn unsigned_as_vec(value: usize, length: usize) -> Vec<u8> {
