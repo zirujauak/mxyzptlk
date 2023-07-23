@@ -27,13 +27,9 @@ The current release is `1.0.0-beta.2`
 3. Pick a terminal and sound configuration binary and copy it to a local `bin/` directory (`/usr/local/bin` on most Linux and Mac installations) for ease of use.  
 
     The available binaries are named according to supported features:
-    * `-pancurses` - uses the `pancurses` crate for terminal I/O
-    * `-easycurses` - uses the `easycurses` crate for terminal I/O
-    * `-{terminal}-libsndfile` - uses the `libsndfile` to support AIFF sound resources.
+    * `-libsndfile` - uses the `libsndfile` to support AIFF sound resources.
 
-    For example, `mxyzptlk-pancurses-libsndfile[.exe]` requires `libsndfile`, while `mxyzptlk-easycurses[.exe]` does not and is, therefore, unable to utilize AIFF sound resources.
-
-    **NOTE**: The `easycurses` builds are an artifact of early development efforts and will be removed before the final `1.0.0` release.
+    For example, `mxyzptlk-libsndfile[.exe]` requires `libsndfile`, while `mxyzptlk[.exe]` does not (and is, therefore, unable to utilize AIFF sound resources).
 
 4. Optionally, copy the `log4rs.yml` and `config.yml` files to a `.mxyzptlk/` directory in your "home" directory (varies by platform, `/home/{username}` on Linux/MacOS, generally `C:\Users\{username}` on Windows).  The default configuration does not enable logging, so unless you want to change the default color scheme (white on black) or enable logging, these files are not required.
 
@@ -129,17 +125,11 @@ cargo build --release
 ```
 
 #### Features
-The `pancurses` feature is enabled by default.  This will yield a binary that uses the pancurses terminal library and can play FLAC or Ogg/Vorbis sound resources, but not AIFF sounds.
-
-* `easycurses` - this will replace the pancurses dependency with the easycures-rs wrapper around pancurses.  Enabling `easycurses` will disable the `pancurses` terminal code.
-
-    **NOTE**: The `easycurses` feature is deprecated and will be removed in the final 1.0.0 release.
-    
 * `sndfile` - include `libsndfile` for automatic AIFF sound resource conversion.
 
-For example, for a build using the `easycurses` terminal library without a dependency on `libsndfile`:
+For example, for a build including `libsndfile`:
 ```
-cargo build --release --no-default-features --features easycurses
+cargo build --release --features sndfile
 ```
 
 ### Testing
