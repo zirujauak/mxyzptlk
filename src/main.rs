@@ -21,8 +21,8 @@ pub mod zmachine;
 pub mod test_util;
 
 use crate::config::Config;
+use crate::iff::blorb::Blorb;
 use crate::log::*;
-use iff::blorb::Blorb;
 use sound::Manager;
 use zmachine::state::memory::Memory;
 use zmachine::ZMachine;
