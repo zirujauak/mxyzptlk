@@ -891,7 +891,7 @@ pub fn mock_blorb() -> Blorb {
     sounds.insert(0x200, Chunk::new_form(0x200, "AIFF", vec![]));
     Blorb::new(
         ridx,
-        IFhd::new(0x1234, &[], 0x5678, 0x98abcd),
+        Some(IFhd::new(0x1234, &[], 0x5678, 0x98abcd)),
         sounds,
         Some(sloop),
         None,
