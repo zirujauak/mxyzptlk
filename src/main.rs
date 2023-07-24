@@ -31,31 +31,19 @@ fn initialize_sound_engine(name: &str) -> Option<Manager> {
     if let Some(filename) = files::find_existing(name, &["blorb", "blb"]) {
         info!(target: "app::sound", "Resource file: {}", filename);
         match File::open(&filename) {
-            Ok(mut f) => {
-                match Blorb::try_from(&mut f) {
-                    Ok(blorb) => match Manager::new(blorb) {
-                        Ok(m) => Some(m),
-                        Err(e) => {
-                            info!(target: "app::sound", "Error initializing sound manager: {}", e);
-                            None
-                        }
-                    },
+            Ok(mut f) => match Blorb::try_from(&mut f) {
+                Ok(blorb) => match Manager::new(blorb) {
+                    Ok(m) => Some(m),
                     Err(e) => {
-                        info!(target: "app::sound", "Error parsing resource file: {}", e);
+                        info!(target: "app::sound", "Error initializing sound manager: {}", e);
                         None
                     }
+                },
+                Err(e) => {
+                    info!(target: "app::sound", "Error parsing resource file: {}", e);
+                    None
                 }
-                // if let Ok(blorb) = Blorb::try_from(&mut f) {
-                //     // info!(target: "app::sound", "{}", blorb);
-                //     if let Ok(manager) = Manager::new(blorb) {
-                //         Some(manager)
-                //     } else {
-                //         None
-                //     }
-                // } else {
-                //     None
-                // }
-            }
+            },
             Err(e) => {
                 error!(target: "app::blorb", "Error reading {}: {}", &filename, e);
                 None

@@ -592,18 +592,8 @@ impl State {
         } else {
             self.memory.restore(quetzal.mem().memory())?
         }
-        // if let Some(umem) = quetzal.umem() {
-        // } else if let Some(cmem) = quetzal.cmem() {
-        // } else {
-        //     error!(target: "app::quetzal", "No CMem/Umem chunk found in save state");
-        //     return Err(RuntimeError::new(
-        //         ErrorCode::Restore,
-        //         "No CMem/UMem chunk in save file".to_string(),
-        //     ));
-        // }
 
-        // Reset the frame stack after memory, so missing CMem + UMem case
-        // can return error without leaving the stack frame empty
+        // Reset the frame stack
         self.frames = Vec::from(quetzal.stks());
 
         // Re-initialize the state, which will set the default colors, rows, and columns
