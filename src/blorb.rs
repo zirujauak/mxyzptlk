@@ -264,7 +264,7 @@ impl TryFrom<&Chunk> for Loop {
 #[derive(Debug)]
 pub struct Blorb {
     ridx: RIdx,
-    ifhd: IFhd,
+    ifhd: Option<IFhd>,
     sounds: HashMap<u32, Chunk>,
     loops: Option<Loop>,
     exec: Option<Vec<u8>>,
@@ -273,7 +273,7 @@ pub struct Blorb {
 impl Blorb {
     pub fn new(
         ridx: RIdx,
-        ifhd: IFhd,
+        ifhd: Option<IFhd>,
         sounds: HashMap<u32, Chunk>,
         loops: Option<Loop>,
         exec: Option<Vec<u8>>,
@@ -291,8 +291,8 @@ impl Blorb {
         &self.ridx
     }
 
-    pub fn ifhd(&self) -> &IFhd {
-        &self.ifhd
+    pub fn ifhd(&self) -> Option<&IFhd> {
+        self.ifhd.as_ref()
     }
 
     pub fn sounds(&self) -> &HashMap<u32, Chunk> {
@@ -323,12 +323,21 @@ impl TryFrom<&Chunk> for Blorb {
             ))
         } else {
             let ifhd_chunk = value.find_chunk("IFhd", "");
-            if ifhd_chunk.is_none() {
-                return Err(RuntimeError::new(
-                    ErrorCode::System,
-                    "No IFhd chunk".to_string(),
-                ));
-            }
+            let ifhd = match ifhd_chunk {
+                Some(i) => match IFhd::try_from(i) {
+                    Ok(i) => Some(i),
+                    Err(e) => {
+                        error!(target: "app::sound", "Error reading IFhd chunk: {}", e);
+                        warn!(target: "app::sound", "Unable to extract IFhd chunk, unabled to verify relation to game");
+                        None
+                    }
+                },
+                None => {
+                    warn!(target: "app::sound", "No IFhd chunk found, unable to verify relation to game");
+                    None
+                }
+            };
+
             let ridx_chunk = value.find_chunk("RIdx", "");
             if ridx_chunk.is_none() {
                 return Err(RuntimeError::new(
@@ -357,7 +366,7 @@ impl TryFrom<&Chunk> for Blorb {
             }
 
             Ok(Blorb {
-                ifhd: IFhd::try_from(ifhd_chunk.unwrap())?,
+                ifhd,
                 ridx: RIdx::try_from(ridx_chunk.unwrap())?,
                 sounds,
                 loops,
@@ -638,13 +647,13 @@ mod tests {
         let exec = vec![0x11, 0x22, 0x33, 0x44];
         let blorb = Blorb::new(
             ridx.clone(),
-            ifhd.clone(),
+            Some(ifhd.clone()),
             sounds.clone(),
             Some(l.clone()),
             Some(exec.clone()),
         );
         assert_eq!(blorb.ridx(), &ridx);
-        assert_eq!(blorb.ifhd(), &ifhd);
+        assert_some_eq!(blorb.ifhd(), &ifhd);
         assert_eq!(blorb.sounds(), &sounds);
         assert_some_eq!(blorb.loops(), &l);
         assert_some_eq!(blorb.exec(), &exec);
@@ -684,7 +693,7 @@ mod tests {
             vec![ifhd, ridx, l, oggv.clone(), aiff.clone(), exec],
         );
         let blorb = assert_ok!(Blorb::try_from(&iff));
-        assert_eq!(
+        assert_some_eq!(
             blorb.ifhd(),
             &IFhd::new(
                 0x1234,
@@ -693,6 +702,47 @@ mod tests {
                 0x9abcde
             )
         );
+        assert_eq!(
+            blorb.ridx(),
+            &RIdx::new(vec![
+                Index::new("Snd ".to_string(), 0x12345678, 0x9abcdef0),
+                Index::new("Snd ".to_string(), 0x21436587, 0xa9cbed0f)
+            ])
+        );
+        assert_some_eq!(
+            blorb.loops(),
+            &Loop::new(vec![Entry::new(1, 2), Entry::new(2, 0)])
+        );
+        assert_eq!(blorb.sounds().len(), 2);
+        assert_some_eq!(blorb.sounds().get(&0x64), &oggv);
+        assert_some_eq!(blorb.sounds().get(&0x70), &aiff);
+        assert_some_eq!(blorb.exec(), &vec![0x11, 0x22, 0x33, 0x44]);
+    }
+
+    #[test]
+    fn test_blorb_try_from_chunk_no_ifhd() {
+        let ridx = Chunk::new_chunk(
+            0x22,
+            "RIdx",
+            vec![
+                0x00, 0x00, 0x00, 0x02, b'S', b'n', b'd', b' ', 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc,
+                0xde, 0xf0, b'S', b'n', b'd', b' ', 0x21, 0x43, 0x65, 0x87, 0xa9, 0xcb, 0xed, 0x0f,
+            ],
+        );
+        let l = Chunk::new_chunk(
+            0x46,
+            "Loop",
+            vec![
+                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+                0x00, 0x00,
+            ],
+        );
+        let exec = Chunk::new_chunk(0x58, "Exec", vec![0x11, 0x22, 0x33, 0x44]);
+        let oggv = Chunk::new_chunk(0x64, "OGGV", vec![1, 2, 3, 4]);
+        let aiff = Chunk::new_form(0x70, "AIFF", vec![]);
+        let iff = Chunk::new_form(0, "IFRS", vec![ridx, l, oggv.clone(), aiff.clone(), exec]);
+        let blorb = assert_ok!(Blorb::try_from(&iff));
+        assert!(blorb.ifhd().is_none());
         assert_eq!(
             blorb.ridx(),
             &RIdx::new(vec![
@@ -749,7 +799,7 @@ mod tests {
         let b = Blorb::try_from(&mut file);
         assert!(fs::remove_file("test.blb").is_ok());
         let blorb = assert_ok!(b);
-        assert_eq!(
+        assert_some_eq!(
             blorb.ifhd(),
             &IFhd::new(
                 0x1234,

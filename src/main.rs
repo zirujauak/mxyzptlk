@@ -27,18 +27,41 @@ use sound::Manager;
 use zmachine::state::memory::Memory;
 use zmachine::ZMachine;
 
-fn initialize_sound_engine(name: &str) -> Option<Manager> {
+fn initialize_sound_engine(name: &str, memory: &Memory) -> Option<Manager> {
     if let Some(filename) = files::find_existing(name, &["blorb", "blb"]) {
         info!(target: "app::sound", "Resource file: {}", filename);
         match File::open(&filename) {
             Ok(mut f) => match Blorb::try_from(&mut f) {
-                Ok(blorb) => match Manager::new(blorb) {
-                    Ok(m) => Some(m),
-                    Err(e) => {
-                        info!(target: "app::sound", "Error initializing sound manager: {}", e);
-                        None
+                Ok(blorb) => {
+                    if let Some(ifhd) = blorb.ifhd() {
+                        // TODO: Refactor this when adding Exec chunk support
+                        let release = memory.read_word(0x02).unwrap();
+                        let checksum = memory.read_word(0x1C).unwrap();
+                        let serial = [
+                            memory.read_byte(0x12).unwrap(),
+                            memory.read_byte(0x13).unwrap(),
+                            memory.read_byte(0x14).unwrap(),
+                            memory.read_byte(0x15).unwrap(),
+                            memory.read_byte(0x16).unwrap(),
+                            memory.read_byte(0x17).unwrap(),
+                        ]
+                        .to_vec();
+                        if release != ifhd.release_number()
+                            || checksum != ifhd.checksum()
+                            || &serial != ifhd.serial_number()
+                        {
+                            error!(target: "app::sound", "Resource file does not match the game");
+                            return None;
+                        }
                     }
-                },
+                    match Manager::new(blorb) {
+                        Ok(m) => Some(m),
+                        Err(e) => {
+                            info!(target: "app::sound", "Error initializing sound manager: {}", e);
+                            None
+                        }
+                    }
+                }
                 Err(e) => {
                     info!(target: "app::sound", "Error parsing resource file: {}", e);
                     None
@@ -120,7 +143,7 @@ fn main() {
     match File::open(filename) {
         Ok(mut f) => match Memory::try_from(&mut f) {
             Ok(memory) => {
-                let sound_manager = initialize_sound_engine(&full_name);
+                let sound_manager = initialize_sound_engine(&full_name, &memory);
                 let mut zmachine = ZMachine::new(memory, config, sound_manager, &name)
                     .expect("Error creating state");
 

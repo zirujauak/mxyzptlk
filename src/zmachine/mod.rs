@@ -2818,13 +2818,7 @@ mod tests {
         sounds.insert(0x100, Chunk::new_chunk(0x100, "OGGV", vec![1, 1, 1, 1]));
         sounds.insert(0x400, Chunk::new_chunk(0x400, "OGGV", vec![4, 4, 4, 4]));
         sounds.insert(0x200, Chunk::new_form(0x200, "AIFF", vec![]));
-        let blorb = Blorb::new(
-            ridx,
-            IFhd::new(0x1234, &[], 0x5678, 0x98abcd),
-            sounds,
-            Some(sloop),
-            None,
-        );
+        let blorb = Blorb::new(ridx, None, sounds, Some(sloop), None);
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(1, 8, 0, None).is_ok());
@@ -2887,13 +2881,7 @@ mod tests {
         sounds.insert(0x100, Chunk::new_chunk(0x100, "OGGV", vec![1, 1, 1, 1]));
         sounds.insert(0x400, Chunk::new_chunk(0x400, "OGGV", vec![4, 4, 4, 4]));
         sounds.insert(0x200, Chunk::new_form(0x200, "AIFF", vec![]));
-        let blorb = Blorb::new(
-            ridx,
-            IFhd::new(0x1234, &[], 0x5678, 0x98abcd),
-            sounds,
-            Some(sloop),
-            None,
-        );
+        let blorb = Blorb::new(ridx, None, sounds, Some(sloop), None);
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(2, 8, 5, None).is_ok());
