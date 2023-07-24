@@ -4,15 +4,15 @@ extern crate log;
 
 use std::env;
 use std::fs::File;
-use std::io::prelude::*;
 use std::panic;
 
+pub mod blorb;
 pub mod config;
 pub mod error;
 pub mod files;
-pub mod iff;
 pub mod instruction;
 pub mod object;
+pub mod quetzal;
 pub mod sound;
 pub mod text;
 pub mod zmachine;
@@ -22,37 +22,30 @@ pub mod test_util;
 
 use crate::config::Config;
 use crate::log::*;
-use iff::blorb::Blorb;
+use blorb::Blorb;
 use sound::Manager;
 use zmachine::state::memory::Memory;
 use zmachine::ZMachine;
 
 fn initialize_sound_engine(name: &str) -> Option<Manager> {
     if let Some(filename) = files::find_existing(name, &["blorb", "blb"]) {
+        info!(target: "app::sound", "Resource file: {}", filename);
         match File::open(&filename) {
-            Ok(mut f) => {
-                let mut data = Vec::new();
-                match f.read_to_end(&mut data) {
-                    Ok(_) => {
-                        if let Ok(blorb) = Blorb::try_from(data) {
-                            info!(target: "app::sound", "{}", blorb);
-                            if let Ok(manager) = Manager::new(blorb) {
-                                Some(manager)
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    }
+            Ok(mut f) => match Blorb::try_from(&mut f) {
+                Ok(blorb) => match Manager::new(blorb) {
+                    Ok(m) => Some(m),
                     Err(e) => {
-                        error!(target: "app::blorb", "Error reading {}: {}", &filename, e);
+                        info!(target: "app::sound", "Error initializing sound manager: {}", e);
                         None
                     }
+                },
+                Err(e) => {
+                    info!(target: "app::sound", "Error parsing resource file: {}", e);
+                    None
                 }
-            }
+            },
             Err(e) => {
-                error!(target: "app::blorb", "Error opening {}: {}", &filename, e);
+                error!(target: "app::blorb", "Error reading {}: {}", &filename, e);
                 None
             }
         }

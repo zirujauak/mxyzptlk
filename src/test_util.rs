@@ -1,6 +1,12 @@
-use std::{cell::RefCell, collections::VecDeque};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, VecDeque},
+};
+
+use iff::Chunk;
 
 use crate::{
+    blorb::{Blorb, Entry, IFhd, Index, Loop, RIdx},
     config::Config,
     instruction::{
         Branch, Instruction, Opcode, OpcodeForm, Operand, OperandCount, OperandType, StoreResult,
@@ -709,7 +715,7 @@ pub fn mock_unsorted_dictionary(map: &mut [u8]) {
 macro_rules! assert_ok {
     ($result:expr) => {{
         let x = $result;
-        assert!(x.is_ok());
+        assert!(x.is_ok(), "{:?} is not Ok", x);
         x.unwrap()
     }};
 }
@@ -869,4 +875,25 @@ pub fn mock_properties(map: &mut [u8], object: usize, properties: &[(u8, &Vec<u8
             }
         }
     }
+}
+
+pub fn mock_blorb() -> Blorb {
+    let ridx = RIdx::new(vec![
+        Index::new("Snd ".to_string(), 1, 0x100),
+        Index::new("Snd ".to_string(), 2, 0x200),
+        Index::new("Pic ".to_string(), 1, 0x300),
+        Index::new("Snd ".to_string(), 4, 0x400),
+    ]);
+    let sloop = Loop::new(vec![Entry::new(1, 10), Entry::new(2, 20)]);
+    let mut sounds = HashMap::new();
+    sounds.insert(0x100, Chunk::new_chunk(0x100, "OGGV", vec![1, 1, 1, 1]));
+    sounds.insert(0x400, Chunk::new_chunk(0x400, "OGGV", vec![4, 4, 4, 4]));
+    sounds.insert(0x200, Chunk::new_form(0x200, "AIFF", vec![]));
+    Blorb::new(
+        ridx,
+        IFhd::new(0x1234, &[], 0x5678, 0x98abcd),
+        sounds,
+        Some(sloop),
+        None,
+    )
 }

@@ -1,5 +1,7 @@
 mod curses;
 
+use core::fmt;
+
 use crate::config::Config;
 use crate::error::*;
 
@@ -147,6 +149,8 @@ fn map_color(color: u8) -> Result<Color, RuntimeError> {
 fn map_colors(foreground: u8, background: u8) -> Result<(Color, Color), RuntimeError> {
     Ok((map_color(foreground)?, map_color(background)?))
 }
+
+#[derive(Debug)]
 pub struct Screen {
     version: u8,
     rows: u32,
@@ -707,6 +711,12 @@ pub trait Terminal {
     fn set_style(&mut self, _style: u8) {}
     fn buffer_mode(&mut self, _mode: u16) {}
     fn output_stream(&mut self, _stream: u8, _table: Option<usize>) {}
+}
+
+impl fmt::Debug for dyn Terminal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", "Terminal")
+    }
 }
 
 #[cfg(test)]

@@ -139,6 +139,7 @@ pub enum OperandCount {
     _VAR,
 }
 
+#[derive(Debug)]
 pub struct Opcode {
     version: u8,
     opcode: u8,
@@ -355,6 +356,7 @@ impl Opcode {
     }
 }
 
+#[derive(Debug)]
 pub struct Instruction {
     address: usize,
     opcode: Opcode,

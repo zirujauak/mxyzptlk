@@ -11,6 +11,7 @@ use super::state::State;
 
 pub mod screen;
 
+#[derive(Debug)]
 struct Stream3 {
     address: usize,
     buffer: Vec<u16>,
@@ -37,6 +38,7 @@ impl Stream3 {
     }
 }
 
+#[derive(Debug)]
 pub struct IO {
     version: u8,
     screen: Screen,
