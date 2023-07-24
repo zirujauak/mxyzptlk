@@ -58,6 +58,10 @@ It's worth pointing out that sound-enabled games will run normally with a non-li
 
 ### Games
 
+#### File types
+`mxyzptlk` supports both "raw" zcode files (.z#) and Blorb files with an `Exec` chunk.  Attempting to run a Blorb file without an `Exec` file will result in an error.  Wrapping the zcode into a Blorb is convenient, but not required.
+
+#### Where do I get games?
 There are many places to get game files (legally or not), but I've listed my two favorite _legal_ sources:
 
 * The [Interactive Fiction Archive](https://www.ifarchive.org/indexes/if-archive/) 

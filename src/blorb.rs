@@ -376,6 +376,15 @@ impl TryFrom<&Chunk> for Blorb {
     }
 }
 
+impl TryFrom<Vec<u8>> for Blorb {
+    type Error = RuntimeError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let chunk = Chunk::from(&value);
+        Blorb::try_from(&chunk)
+    }
+}
+
 impl TryFrom<&mut File> for Blorb {
     type Error = RuntimeError;
 
@@ -770,6 +779,60 @@ mod tests {
     fn test_blorb_try_from_chunk_wrong_id() {
         let iff = Chunk::new_chunk(0, "IFRS", vec![]);
         assert!(Blorb::try_from(&iff).is_err());
+    }
+
+    #[test]
+    fn test_blorb_try_vec_u8() {
+        let data = vec![
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x86, b'I', b'F', b'R', b'S', b'I', b'F',
+            b'h', b'd', 0x00, 0x00, 0x00, 0x0d, 0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x32, 0x32,
+            0x56, 0x78, 0x9a, 0xbc, 0xde, 0x00, b'R', b'I', b'd', b'x', 0x00, 0x00, 0x00, 0x1c,
+            0x00, 0x00, 0x00, 0x02, b'S', b'n', b'd', b' ', 0x01, 0x02, 0x03, 0x04, 0x00, 0x00,
+            0x00, 0x46, b'S', b'n', b'd', b' ', 0x05, 0x06, 0x07, 0x08, 0x00, 0x00, 0x00, 0x52,
+            b'O', b'G', b'G', b'V', 0x00, 0x00, 0x00, 0x04, 0x0a, 0x0b, 0x0c, 0x0d, b'F', b'O',
+            b'R', b'M', 0x00, 0x00, 0x00, 0x10, b'A', b'I', b'F', b'F', b'C', b'O', b'M', b'M',
+            0x00, 0x00, 0x00, 0x04, 0x0f, 0x10, 0x11, 0x12, b'L', b'o', b'o', b'p', 0x00, 0x00,
+            0x00, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02,
+            0x00, 0x00, 0x00, 0x00, b'E', b'x', b'e', b'c', 0x00, 0x00, 0x00, 0x04, 0x13, 0x14,
+            0x15, 0x16,
+        ];
+        let b = Blorb::try_from(data);
+        assert!(fs::remove_file("test.blb").is_ok());
+        let blorb = assert_ok!(b);
+        assert_some_eq!(
+            blorb.ifhd(),
+            &IFhd::new(
+                0x1234,
+                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
+                0x5678,
+                0x9abcde
+            )
+        );
+        assert_eq!(
+            blorb.ridx(),
+            &RIdx::new(vec![
+                Index::new("Snd ".to_string(), 0x01020304, 0x46),
+                Index::new("Snd ".to_string(), 0x05060708, 0x52)
+            ])
+        );
+        assert_some_eq!(
+            blorb.loops(),
+            &Loop::new(vec![Entry::new(1, 2), Entry::new(2, 0)])
+        );
+        assert_eq!(blorb.sounds().len(), 2);
+        assert_some_eq!(
+            blorb.sounds().get(&0x46),
+            &Chunk::new_chunk(0x46, "OGGV", vec![0x0a, 0x0b, 0x0c, 0x0d])
+        );
+        assert_some_eq!(
+            blorb.sounds().get(&0x52),
+            &Chunk::new_form(
+                0x52,
+                "AIFF",
+                vec![Chunk::new_chunk(0x5E, "COMM", vec![0x0f, 0x10, 0x11, 0x12])]
+            )
+        );
+        assert_some_eq!(blorb.exec(), &vec![0x13, 0x14, 0x15, 0x16]);
     }
 
     #[test]

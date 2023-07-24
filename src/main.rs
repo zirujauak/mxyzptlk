@@ -4,7 +4,9 @@ extern crate log;
 
 use std::env;
 use std::fs::File;
+use std::io::Read;
 use std::panic;
+use std::process::exit;
 
 pub mod blorb;
 pub mod config;
@@ -27,48 +29,33 @@ use sound::Manager;
 use zmachine::state::memory::Memory;
 use zmachine::ZMachine;
 
-fn initialize_sound_engine(name: &str, memory: &Memory) -> Option<Manager> {
-    if let Some(filename) = files::find_existing(name, &["blorb", "blb"]) {
-        info!(target: "app::sound", "Resource file: {}", filename);
-        match File::open(&filename) {
-            Ok(mut f) => match Blorb::try_from(&mut f) {
-                Ok(blorb) => {
-                    if let Some(ifhd) = blorb.ifhd() {
-                        // TODO: Refactor this when adding Exec chunk support
-                        let release = memory.read_word(0x02).unwrap();
-                        let checksum = memory.read_word(0x1C).unwrap();
-                        let serial = [
-                            memory.read_byte(0x12).unwrap(),
-                            memory.read_byte(0x13).unwrap(),
-                            memory.read_byte(0x14).unwrap(),
-                            memory.read_byte(0x15).unwrap(),
-                            memory.read_byte(0x16).unwrap(),
-                            memory.read_byte(0x17).unwrap(),
-                        ]
-                        .to_vec();
-                        if release != ifhd.release_number()
-                            || checksum != ifhd.checksum()
-                            || &serial != ifhd.serial_number()
-                        {
-                            error!(target: "app::sound", "Resource file does not match the game");
-                            return None;
-                        }
-                    }
-                    match Manager::new(blorb) {
-                        Ok(m) => Some(m),
-                        Err(e) => {
-                            info!(target: "app::sound", "Error initializing sound manager: {}", e);
-                            None
-                        }
-                    }
-                }
-                Err(e) => {
-                    info!(target: "app::sound", "Error parsing resource file: {}", e);
-                    None
-                }
-            },
+fn initialize_sound_engine(memory: &Memory, blorb: Option<Blorb>) -> Option<Manager> {
+    if let Some(blorb) = blorb {
+        if let Some(ifhd) = blorb.ifhd() {
+            // TODO: Refactor this when adding Exec chunk support
+            let release = memory.read_word(0x02).unwrap();
+            let checksum = memory.read_word(0x1C).unwrap();
+            let serial = [
+                memory.read_byte(0x12).unwrap(),
+                memory.read_byte(0x13).unwrap(),
+                memory.read_byte(0x14).unwrap(),
+                memory.read_byte(0x15).unwrap(),
+                memory.read_byte(0x16).unwrap(),
+                memory.read_byte(0x17).unwrap(),
+            ]
+            .to_vec();
+            if release != ifhd.release_number()
+                || checksum != ifhd.checksum()
+                || &serial != ifhd.serial_number()
+            {
+                error!(target: "app::sound", "Resource file does not match the game");
+                return None;
+            }
+        }
+        match Manager::new(blorb) {
+            Ok(m) => Some(m),
             Err(e) => {
-                error!(target: "app::blorb", "Error reading {}: {}", &filename, e);
+                info!(target: "app::sound", "Error initializing sound manager: {}", e);
                 None
             }
         }
@@ -140,32 +127,112 @@ fn main() {
         prev(info);
     }));
 
+    let mut data = Vec::new();
     match File::open(filename) {
-        Ok(mut f) => match Memory::try_from(&mut f) {
-            Ok(memory) => {
-                let sound_manager = initialize_sound_engine(&full_name, &memory);
-                let mut zmachine = ZMachine::new(memory, config, sound_manager, &name)
-                    .expect("Error creating state");
-
-                trace!(target: "app::trace", "Begin execution");
-                if let Err(r) = zmachine.run() {
-                    let error: Vec<_> = format!("\r{}\rPress any key to exit", r)
-                        .as_bytes()
-                        .iter()
-                        .map(|x| *x as u16)
-                        .collect();
-                    let _ = zmachine.print(&error);
-                    let _ = zmachine.read_key(0);
-                    let _ = zmachine.quit();
-                    panic!("{}", r)
-                }
-            }
+        Ok(mut f) => match f.read_to_end(&mut data) {
+            Ok(_) => {}
             Err(e) => {
-                panic!("Error reading file '{}': {}", filename, e);
+                error!(target: "app::trace", "Error reading {}: {}", filename, e);
+                println!("Error reading {}", filename);
+                exit(-1);
             }
         },
         Err(e) => {
-            panic!("Error opening '{}': {}", filename, e);
+            error!(target: "app::trace", "Error reading {}: {}", filename, e);
+            println!("Error reading {}", filename);
+            exit(-1);
         }
     }
+
+    let blorb = if data[0..4] == [b'F', b'O', b'R', b'M'] {
+        info!(target: "app::trace", "Reading Blorb");
+        match Blorb::try_from(data.clone()) {
+            Ok(blorb) => Some(blorb),
+            Err(e) => {
+                error!(target: "app::trace", "Error reading blorb {}: {}", filename, e);
+                exit(-1);
+            }
+        }
+    } else if let Some(filename) = files::find_existing(&full_name, &["blorb", "blb"]) {
+        info!(target: "app::sound", "Resource file: {}", filename);
+        match File::open(&filename) {
+            Ok(mut f) => match Blorb::try_from(&mut f) {
+                Ok(blorb) => Some(blorb),
+                Err(e) => {
+                    error!(target: "app::trace", "Error reading blorb {}: {}", filename, e);
+                    None
+                }
+            },
+            Err(e) => {
+                error!(target: "app::trace", "Error opening blorb {}: {}", filename, e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let zcode = match &blorb {
+        Some(b) => match b.exec() {
+            Some(d) => d.clone(),
+            None => {
+                if data[0] == b'F' {
+                    error!(target: "app::trace", "No Exec chunk in blorb {}", filename);
+                    exit(-1);
+                } else {
+                    data
+                }
+            }
+        },
+        None => data,
+    };
+
+    let memory = Memory::new(zcode);
+    let sound_manager = initialize_sound_engine(&memory, blorb);
+    let mut zmachine =
+        ZMachine::new(memory, config, sound_manager, &name).expect("Error creating state");
+
+    trace!(target: "app::trace", "Begin execution");
+    if let Err(r) = zmachine.run() {
+        let error: Vec<_> = format!("\r{}\rPress any key to exit", r)
+            .as_bytes()
+            .iter()
+            .map(|x| *x as u16)
+            .collect();
+        let _ = zmachine.print(&error);
+        let _ = zmachine.read_key(0);
+        let _ = zmachine.quit();
+        panic!("{}", r)
+    }
+
+    //     Err(e) => {
+    //         error!(target: "app::trace", "Error loading zcode: {}", e);
+    //         exit(-1);
+    //     }
+    // }
+    //     Ok(memory) => {
+    //         let sound_manager = initialize_sound_engine(&full_name, &memory);
+    //         let mut zmachine = ZMachine::new(memory, config, sound_manager, &name)
+    //             .expect("Error creating state");
+
+    //         trace!(target: "app::trace", "Begin execution");
+    //         if let Err(r) = zmachine.run() {
+    //             let error: Vec<_> = format!("\r{}\rPress any key to exit", r)
+    //                 .as_bytes()
+    //                 .iter()
+    //                 .map(|x| *x as u16)
+    //                 .collect();
+    //             let _ = zmachine.print(&error);
+    //             let _ = zmachine.read_key(0);
+    //             let _ = zmachine.quit();
+    //             panic!("{}", r)
+    //         }
+    //     }
+    //     Err(e) => {
+    //         panic!("Error reading file '{}': {}", filename, e);
+    //     }
+    // },
+    // Err(e) => {
+    //     panic!("Error opening '{}': {}", filename, e);
+    // }
 }
