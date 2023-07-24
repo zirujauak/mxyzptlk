@@ -34,6 +34,7 @@ use self::state::header::HeaderField;
 use self::state::memory::Memory;
 use self::state::State;
 
+#[derive(Debug)]
 pub struct ZMachine {
     name: String,
     version: u8,
@@ -861,20 +862,17 @@ impl ZMachine {
 
 #[cfg(test)]
 mod tests {
+
     use std::collections::HashMap;
+
+    use iff::Chunk;
 
     use crate::{
         assert_ok, assert_ok_eq, assert_print, assert_some, assert_some_eq,
-        iff::blorb::{
-            aiff::AIFF,
-            oggv::OGGV,
-            ridx::{Index, RIdx},
-            sloop::{Entry, Loop},
-            Blorb,
-        },
+        blorb::{Blorb, Entry, IFhd, Index, Loop, RIdx},
         test_util::{
             backspace, beep, buffer_mode, colors, cursor, erase_line, erase_window, input,
-            mock_object, mock_routine, play_sound, quit, scroll, set_input_delay,
+            mock_blorb, mock_object, mock_routine, play_sound, quit, scroll, set_input_delay,
             set_input_timeout, split, style, test_map, window,
         },
         zmachine::{io::screen::Style, state::header::Flags2},
@@ -1523,7 +1521,6 @@ mod tests {
             0x00, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x11, 0x11, 0x22, 0x22, 0x00, 0x06,
             0x23, 0x12, 0x00, 0x00, 0x00, 0x00, 0x88, 0x99, 0xaa, 0xbb,
         ];
-        println!("{:02x}", restore_data.len());
         let mut file = assert_ok!(fs::OpenOptions::new()
             .create(true)
             .truncate(true)
@@ -1538,6 +1535,7 @@ mod tests {
         assert_eq!(zmachine.frame_count(), 1);
         let r = zmachine.restore();
         assert!(fs::remove_file("test-z3.ifzs").is_ok());
+        println!("{:?}", r);
         let pc = assert_ok!(r);
         assert_some_eq!(pc, 0x9abc);
         assert_ok_eq!(header::flag2(&zmachine.state, Flags2::Transcripting), 1);
@@ -2365,19 +2363,7 @@ mod tests {
     fn test_read_key_sound_interrupt() {
         let map = test_map(5);
         let m = Memory::new(map);
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         zmachine.set_sound_interrupt(0x1234);
@@ -2504,19 +2490,7 @@ mod tests {
     fn test_read_line_sound_interrupt() {
         let map = test_map(5);
         let m = Memory::new(map);
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         zmachine.set_sound_interrupt(0x1234);
@@ -2821,19 +2795,7 @@ mod tests {
     fn test_play_sound_v3() {
         let map = test_map(3);
         let m = Memory::new(map);
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(1, 8, 0, None).is_ok());
@@ -2845,19 +2807,24 @@ mod tests {
     fn test_play_sound_v5() {
         let map = test_map(5);
         let m = Memory::new(map);
-        let ridx = RIdx::new(&[
+        let ridx = RIdx::new(vec![
             Index::new("Snd ".to_string(), 1, 0x100),
             Index::new("Snd ".to_string(), 2, 0x200),
             Index::new("Pic ".to_string(), 1, 0x300),
             Index::new("Snd ".to_string(), 4, 0x400),
         ]);
-        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let sloop = Loop::new(vec![Entry::new(1, 0), Entry::new(2, 20)]);
+        let mut sounds = HashMap::new();
+        sounds.insert(0x100, Chunk::new_chunk(0x100, "OGGV", vec![1, 1, 1, 1]));
+        sounds.insert(0x400, Chunk::new_chunk(0x400, "OGGV", vec![4, 4, 4, 4]));
+        sounds.insert(0x200, Chunk::new_form(0x200, "AIFF", vec![]));
+        let blorb = Blorb::new(
+            ridx,
+            IFhd::new(0x1234, &[], 0x5678, 0x98abcd),
+            sounds,
+            Some(sloop),
+            None,
+        );
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(1, 8, 0, None).is_ok());
@@ -2869,19 +2836,7 @@ mod tests {
     fn test_play_sound_v5_with_repeats() {
         let map = test_map(5);
         let m = Memory::new(map);
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(4, 8, 5, None).is_ok());
@@ -2893,19 +2848,7 @@ mod tests {
     fn test_play_sound_v5_with_interrupt() {
         let map = test_map(5);
         let m = Memory::new(map);
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(4, 8, 5, Some(0x500)).is_ok());
@@ -2918,19 +2861,7 @@ mod tests {
     fn test_play_sound_change_volume() {
         let map = test_map(5);
         let m = Memory::new(map);
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(4, 8, 5, None).is_ok());
@@ -2945,19 +2876,24 @@ mod tests {
     fn test_play_sound_no_effect() {
         let map = test_map(5);
         let m = Memory::new(map);
-        let ridx = RIdx::new(&[
+        let ridx = RIdx::new(vec![
             Index::new("Snd ".to_string(), 1, 0x100),
             Index::new("Snd ".to_string(), 2, 0x200),
             Index::new("Pic ".to_string(), 1, 0x300),
             Index::new("Snd ".to_string(), 4, 0x400),
         ]);
-        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let sloop = Loop::new(vec![Entry::new(1, 0), Entry::new(2, 20)]);
+        let mut sounds = HashMap::new();
+        sounds.insert(0x100, Chunk::new_chunk(0x100, "OGGV", vec![1, 1, 1, 1]));
+        sounds.insert(0x400, Chunk::new_chunk(0x400, "OGGV", vec![4, 4, 4, 4]));
+        sounds.insert(0x200, Chunk::new_form(0x200, "AIFF", vec![]));
+        let blorb = Blorb::new(
+            ridx,
+            IFhd::new(0x1234, &[], 0x5678, 0x98abcd),
+            sounds,
+            Some(sloop),
+            None,
+        );
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(2, 8, 5, None).is_ok());
@@ -2979,19 +2915,7 @@ mod tests {
     fn test_stop_sound() {
         let map = test_map(5);
         let m = Memory::new(map);
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(4, 8, 5, None).is_ok());
@@ -3006,19 +2930,7 @@ mod tests {
     fn test_stop_sound_not_playing() {
         let map = test_map(5);
         let m = Memory::new(map);
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(!zmachine.is_sound_playing());
@@ -3041,19 +2953,7 @@ mod tests {
     fn test_is_sound_playing() {
         let map = test_map(5);
         let m = Memory::new(map);
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 0), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let manager = assert_ok!(Manager::new(blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(!zmachine.is_sound_playing());

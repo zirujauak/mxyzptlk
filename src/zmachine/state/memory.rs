@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read};
+use std::{fmt, fs::File, io::Read};
 
 use crate::error::*;
 
@@ -8,6 +8,17 @@ pub struct Memory {
     version: u8,
     map: Vec<u8>,
     dynamic: Vec<u8>,
+}
+
+impl fmt::Debug for Memory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Memory: version{}, {} bytes",
+            self.version,
+            self.map.len()
+        )
+    }
 }
 
 pub fn word_value(hb: u8, lb: u8) -> u16 {

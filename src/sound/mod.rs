@@ -16,11 +16,10 @@ use crate::sound::rodio_player::*;
 #[cfg(test)]
 use crate::sound::test_player::*;
 
-use crate::{
-    error::RuntimeError,
-    iff::blorb::{aiff::AIFF, oggv::OGGV, Blorb},
-};
+use crate::{blorb::Blorb, error::RuntimeError};
+use iff::Chunk;
 
+#[derive(Debug)]
 pub struct Sound {
     number: u32,
     repeats: Option<u32>,
@@ -39,29 +38,33 @@ impl fmt::Display for Sound {
     }
 }
 
-impl From<(u32, &OGGV, Option<&u32>)> for Sound {
-    fn from((number, oggv, repeats): (u32, &OGGV, Option<&u32>)) -> Self {
-        Sound::new(number, oggv.data(), repeats)
-    }
-}
-
-#[cfg(feature = "sndfile")]
-impl From<(u32, &AIFF, Option<&u32>)> for Sound {
-    fn from((number, aiff, repeats): (u32, &AIFF, Option<&u32>)) -> Self {
-        match loader::convert_aiff(&Vec::from(aiff)) {
-            Ok(sound) => Sound::new(number, &sound, repeats),
-            Err(e) => {
-                error!(target: "app::sound", "Error converting AIFF resource: {}", e);
-                Sound::new(number, &[], repeats)
-            }
+#[cfg(not(feature = "sndfile"))]
+impl From<(u32, &Chunk, Option<&u32>)> for Sound {
+    fn from((number, chunk, repeats): (u32, &Chunk, Option<&u32>)) -> Self {
+        if chunk.id() == "OGGV" {
+            Sound::new(number, chunk.data(), repeats)
+        } else {
+            Sound::new(number, &[], repeats)
         }
     }
 }
 
-#[cfg(not(feature = "sndfile"))]
-impl From<(u32, &AIFF, Option<&u32>)> for Sound {
-    fn from((number, _aiff, _repeats): (u32, &AIFF, Option<&u32>)) -> Self {
-        Sound::new(number, &[], None)
+#[cfg(feature = "sndfile")]
+impl From<(u32, &Chunk, Option<&u32>)> for Sound {
+    fn from((number, chunk, repeats): (u32, &Chunk, Option<&u32>)) -> Self {
+        if chunk.id() == "OGGV" {
+            Sound::new(number, chunk.data(), repeats)
+        } else if chunk.id() == "FORM" && chunk.sub_id() == "AIFF" {
+            match loader::convert_aiff(&Vec::from(chunk)) {
+                Ok(s) => Sound::new(number, &s, repeats),
+                Err(e) => {
+                    error!(target: "app::sound", "Error converting AIFF resource: {}", e);
+                    Sound::new(number, &[], repeats)
+                }
+            }
+        } else {
+            Sound::new(number, &[], repeats)
+        }
     }
 }
 
@@ -94,6 +97,12 @@ pub trait Player {
     fn change_volume(&mut self, volume: u8);
 }
 
+impl fmt::Debug for dyn Player {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", "Player")
+    }
+}
+#[derive(Debug)]
 pub struct Manager {
     player: Option<Box<dyn Player>>,
     sounds: HashMap<u32, Sound>,
@@ -104,25 +113,19 @@ impl From<Blorb> for HashMap<u32, Sound> {
     fn from(value: Blorb) -> Self {
         let mut sounds = HashMap::new();
         let mut loops = HashMap::new();
-        if let Some(l) = value.sloop() {
+        if let Some(l) = value.loops() {
             for entry in l.entries() {
                 loops.insert(entry.number(), entry.repeats());
             }
         }
 
-        if let Some(ridx) = value.ridx() {
-            for index in ridx.entries() {
-                if index.usage().eq("Snd ") {
-                    if let Some(oggv) = value.oggv().get(&(index.start() as usize)) {
-                        let s = Sound::from((index.number(), oggv, loops.get(&index.number())));
+        for index in value.ridx().indices() {
+            if index.usage().eq("Snd ") {
+                if let Some(chunk) = value.sounds().get(&(index.start())) {
+                    let s = Sound::from((index.number(), chunk, loops.get(&index.number())));
+                    if !s.data().is_empty() {
                         info!(target: "app::sound", "Sound: {}", s);
                         sounds.insert(index.number(), s);
-                    } else if let Some(aiff) = value.aiff().get(&(index.start() as usize)) {
-                        let s = Sound::from((index.number(), aiff, loops.get(&(index.number()))));
-                        info!(target: "app::sound", "Sound: {}", s);
-                        if !s.data.is_empty() {
-                            sounds.insert(index.number(), s);
-                        }
                     }
                 }
             }
@@ -226,18 +229,14 @@ impl Manager {
 mod tests {
     use crate::{
         assert_ok, assert_some, assert_some_eq,
-        iff::blorb::{
-            ridx::{Index, RIdx},
-            sloop::{Entry, Loop},
-        },
-        test_util::play_sound,
+        test_util::{mock_blorb, play_sound},
     };
 
     use super::*;
 
     #[test]
-    fn test_sound_from_oggv() {
-        let oggv = OGGV::new(&[1, 2, 3, 4]);
+    fn test_sound_from_chunk_oggv() {
+        let oggv = Chunk::new_chunk(0, "OGGV", vec![1, 2, 3, 4]);
         let sound = Sound::from((1, &oggv, None));
         assert_eq!(sound.number(), 1);
         assert_eq!(sound.data(), &[1, 2, 3, 4]);
@@ -246,7 +245,7 @@ mod tests {
 
     #[test]
     fn test_sound_from_oggv_repeats() {
-        let oggv = OGGV::new(&[1, 2, 3, 4]);
+        let oggv: Chunk = Chunk::new_chunk(0, "OGGV", vec![1, 2, 3, 4]);
         let sound = Sound::from((1, &oggv, Some(&5)));
         assert_eq!(sound.number(), 1);
         assert_eq!(sound.data(), &[1, 2, 3, 4]);
@@ -255,7 +254,7 @@ mod tests {
 
     #[test]
     fn test_sound_from_aiff_no_sndfile() {
-        let aiff = AIFF::new(&[1, 2, 3, 4]);
+        let aiff = Chunk::new_form(0, "AIFF", vec![]);
         let sound = Sound::from((1, &aiff, None));
         assert_eq!(sound.number(), 1);
         assert!(sound.data().is_empty());
@@ -264,28 +263,16 @@ mod tests {
 
     #[test]
     fn test_sound_from_aiff_no_sndfile_repeats() {
-        let aiff = AIFF::new(&[1, 2, 3, 4]);
+        let aiff = Chunk::new_form(0, "AIFF", vec![]);
         let sound = Sound::from((1, &aiff, Some(&5)));
         assert_eq!(sound.number(), 1);
         assert!(sound.data().is_empty());
-        assert!(sound.repeats().is_none());
+        assert_some_eq!(sound.repeats(), &5);
     }
 
     #[test]
     fn test_hashmap_u32_sound_from_blorb() {
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let map = HashMap::from(blorb);
         let snd = assert_some!(map.get(&1));
         assert_eq!(snd.number(), 1);
@@ -300,19 +287,7 @@ mod tests {
 
     #[test]
     fn test_manager_new() {
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let manager = assert_ok!(Manager::new(blorb));
         assert!(manager.player.is_some());
         assert_eq!(manager.sounds.len(), 2);
@@ -321,19 +296,7 @@ mod tests {
 
     #[test]
     fn test_play_sound() {
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let mut manager = assert_ok!(Manager::new(blorb));
         assert!(manager.play_sound(1, 8, None).is_ok());
         assert!(manager.is_playing());
@@ -343,19 +306,7 @@ mod tests {
 
     #[test]
     fn test_play_sound_override_repeats() {
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let mut manager = assert_ok!(Manager::new(blorb));
         assert!(manager.play_sound(1, 8, Some(1)).is_ok());
         assert!(manager.is_playing());
@@ -365,19 +316,7 @@ mod tests {
 
     #[test]
     fn test_play_sound_invalid_effect() {
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let mut manager = assert_ok!(Manager::new(blorb));
         assert!(manager.play_sound(3, 8, Some(1)).is_ok());
         assert!(!manager.is_playing());
@@ -387,19 +326,7 @@ mod tests {
 
     #[test]
     fn test_stop_sound() {
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let mut manager = assert_ok!(Manager::new(blorb));
         assert!(manager.play_sound(4, 4, Some(1)).is_ok());
         assert!(manager.is_playing());
@@ -413,19 +340,7 @@ mod tests {
 
     #[test]
     fn test_stop_sound_not_playing() {
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let mut manager = assert_ok!(Manager::new(blorb));
         manager.stop_sound();
         assert!(!manager.is_playing());
@@ -435,19 +350,7 @@ mod tests {
 
     #[test]
     fn test_change_volume() {
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let mut manager = assert_ok!(Manager::new(blorb));
         assert!(manager.play_sound(4, 4, Some(1)).is_ok());
         assert!(manager.is_playing());
@@ -461,19 +364,7 @@ mod tests {
 
     #[test]
     fn test_change_volume_not_playing() {
-        let ridx = RIdx::new(&[
-            Index::new("Snd ".to_string(), 1, 0x100),
-            Index::new("Snd ".to_string(), 2, 0x200),
-            Index::new("Pic ".to_string(), 1, 0x300),
-            Index::new("Snd ".to_string(), 4, 0x400),
-        ]);
-        let sloop = Loop::new(&[Entry::new(1, 10), Entry::new(2, 20)]);
-        let mut oggv = HashMap::new();
-        let mut aiff = HashMap::new();
-        oggv.insert(0x100, OGGV::new(&[1, 1, 1, 1]));
-        oggv.insert(0x400, OGGV::new(&[4, 4, 4, 4]));
-        aiff.insert(0x200, AIFF::new(&[2, 2, 2, 2]));
-        let blorb = Blorb::new(Some(ridx), None, oggv, aiff, Some(sloop));
+        let blorb = mock_blorb();
         let mut manager = assert_ok!(Manager::new(blorb));
         manager.change_volume(8);
         assert!(!manager.is_playing());

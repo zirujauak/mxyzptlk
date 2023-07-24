@@ -17,6 +17,7 @@ mod frame;
 pub mod header;
 pub mod memory;
 
+#[derive(Debug)]
 pub struct State {
     version: u8,
     memory: Memory,

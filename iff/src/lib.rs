@@ -18,6 +18,7 @@ use std::{
 /// this length includes the 4-bytes `sub_id` value.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Chunk {
+    offset: u32,
     id: Vec<u8>,
     length: u32,
     sub_id: Vec<u8>,
@@ -42,7 +43,7 @@ impl Chunk {
     /// * `id`: IFF Id of the chunk
     /// * `data`: The chunk data.  Data will be padded with a 0 if needed to ensure
     /// the vector is an even number of bytes
-    pub fn new_chunk(id: &str, data: Vec<u8>) -> Chunk {
+    pub fn new_chunk(offset: u32, id: &str, data: Vec<u8>) -> Chunk {
         let length = data.len() as u32;
         // Pad data, if needed
         let data = if length % 2 == 1 {
@@ -54,6 +55,7 @@ impl Chunk {
         };
 
         Chunk {
+            offset,
             id: id_to_vec(id),
             length,
             sub_id: Vec::new(),
@@ -62,15 +64,20 @@ impl Chunk {
         }
     }
 
-    pub fn new_form(sub_id: &str, chunks: Vec<Chunk>) -> Chunk {
+    pub fn new_form(offset: u32, sub_id: &str, chunks: Vec<Chunk>) -> Chunk {
         let length = chunks.iter().fold(4, |l, c| l + 8 + c.length);
         Chunk {
+            offset,
             id: id_to_vec("FORM"),
             length,
             sub_id: id_to_vec(sub_id),
             chunks,
             data: Vec::new(),
         }
+    }
+
+    pub fn offset(&self) -> u32 {
+        self.offset
     }
 
     pub fn id(&self) -> String {
@@ -156,7 +163,7 @@ impl Chunk {
 ///
 /// # Examples
 /// ```
-/// use ifflib::vec_as_unsigned;
+/// use iff::vec_as_unsigned;
 /// assert_eq!(vec_as_unsigned(&[0x12, 0x34, 0x56]), 0x123456)
 /// ```
 pub fn vec_as_unsigned(v: &[u8]) -> usize {
@@ -176,7 +183,7 @@ pub fn vec_as_unsigned(v: &[u8]) -> usize {
 ///
 /// # Examples
 /// ```
-/// use ifflib::unsigned_as_vec;
+/// use iff::unsigned_as_vec;
 /// assert_eq!(unsigned_as_vec(0x123456, 3), vec![0x12, 0x34, 0x56]);
 /// ```
 pub fn unsigned_as_vec(value: usize, length: usize) -> Vec<u8> {
@@ -192,26 +199,28 @@ impl fmt::Display for Chunk {
         if self.id() == "FORM" {
             write!(
                 f,
-                "{}/{}, {:06x} bytes with {} chunks",
+                "{}/{}, {:06x} bytes with {} chunks @ {:06x}",
                 self.id(),
                 self.sub_id(),
                 self.length,
-                self.chunks.len()
+                self.chunks.len(),
+                self.offset()
             )
         } else {
             write!(
                 f,
-                "{}, {:06x} with {} bytes of data",
+                "{}, {:06x} with {} bytes of data @ {:06x}",
                 self.id(),
                 self.length,
-                self.data.len()
+                self.data.len(),
+                self.offset()
             )
         }
     }
 }
 
-impl From<Chunk> for Vec<u8> {
-    fn from(value: Chunk) -> Self {
+impl From<&Chunk> for Vec<u8> {
+    fn from(value: &Chunk) -> Self {
         let mut data = Vec::new();
         data.extend(&value.id);
         data.extend(unsigned_as_vec(value.length() as usize, 4));
@@ -220,7 +229,7 @@ impl From<Chunk> for Vec<u8> {
         } else {
             data.extend(&value.sub_id);
             for c in value.chunks() {
-                data.extend(Vec::from(c.clone()))
+                data.extend(Vec::from(c))
             }
         }
         if data.len() % 2 == 1 {
@@ -230,16 +239,23 @@ impl From<Chunk> for Vec<u8> {
         data
     }
 }
-impl From<Vec<u8>> for Chunk {
-    fn from(value: Vec<u8>) -> Self {
-        let id = value[0..4].to_vec();
-        let length = vec_as_unsigned(&value[4..8]) as u32;
+
+impl From<&Vec<u8>> for Chunk {
+    fn from(value: &Vec<u8>) -> Self {
+        Chunk::from((0, value))
+    }
+}
+
+impl From<(usize, &Vec<u8>)> for Chunk {
+    fn from((start, value): (usize, &Vec<u8>)) -> Self {
+        let id = value[start..start + 4].to_vec();
+        let length = vec_as_unsigned(&value[start + 4..start + 8]) as u32;
         if id == [b'F', b'O', b'R', b'M'] {
-            let sub_id = value[8..12].to_vec();
+            let sub_id = value[start + 8..start + 12].to_vec();
             let mut chunks = Vec::new();
-            let mut offset = 12;
-            while offset < length as usize {
-                let chunk = Chunk::from(value[offset..].to_vec());
+            let mut offset = start + 12;
+            while offset < start + length as usize {
+                let chunk = Chunk::from((offset, value));
                 offset += 8 + chunk.length() as usize;
                 if offset % 2 == 1 {
                     offset += 1;
@@ -248,6 +264,7 @@ impl From<Vec<u8>> for Chunk {
             }
 
             Chunk {
+                offset: start as u32,
                 id,
                 length,
                 sub_id,
@@ -255,8 +272,9 @@ impl From<Vec<u8>> for Chunk {
                 data: Vec::new(),
             }
         } else {
-            let data = value[8..8 + length as usize].to_vec();
+            let data = value[start + 8..start + 8 + length as usize].to_vec();
             Chunk {
+                offset: start as u32,
                 id,
                 length,
                 sub_id: Vec::new(),
@@ -273,12 +291,21 @@ impl TryFrom<&mut File> for Chunk {
     fn try_from(value: &mut File) -> Result<Self, Self::Error> {
         let mut data = Vec::new();
         value.read_to_end(&mut data)?;
-        Ok(Chunk::from(data))
+        if data.len() >= 12 {
+            Ok(Chunk::from(&data))
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("File doesn't contain enough data: {}", data.len()),
+            ))
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, io::Write, path::Path};
+
     use super::*;
 
     #[test]
@@ -290,7 +317,8 @@ mod tests {
 
     #[test]
     fn test_new_chunk() {
-        let chunk = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7]);
+        let chunk = Chunk::new_chunk(0, "Test", vec![1, 2, 3, 4, 5, 6, 7]);
+        assert_eq!(chunk.offset, 0);
         assert_eq!(chunk.id, vec![b'T', b'e', b's', b't']);
         assert_eq!(chunk.id(), "Test");
         assert_eq!(chunk.length(), 7);
@@ -302,9 +330,10 @@ mod tests {
 
     #[test]
     fn test_new_form() {
-        let c1 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let c2 = Chunk::new_chunk("Foo", vec![4, 3, 2, 1]);
-        let chunk = Chunk::new_form("FTst", vec![c1.clone(), c2.clone()]);
+        let c1 = Chunk::new_chunk(12, "Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let c2 = Chunk::new_chunk(28, "Foo", vec![4, 3, 2, 1]);
+        let chunk = Chunk::new_form(0, "FTst", vec![c1.clone(), c2.clone()]);
+        assert_eq!(chunk.offset, 0);
         assert_eq!(chunk.id, vec![b'F', b'O', b'R', b'M']);
         assert_eq!(chunk.id(), "FORM");
         // Length = 4 (sub id) + chunk 1 (8 + 8 data) + chunk 2 (8 + 4 data)
@@ -319,9 +348,9 @@ mod tests {
 
     #[test]
     fn test_find_chunk() {
-        let c1 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let c2 = Chunk::new_chunk("Foo", vec![4, 3, 2, 1]);
-        let chunk = Chunk::new_form("FTst", vec![c1.clone(), c2]);
+        let c1 = Chunk::new_chunk(12, "Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let c2 = Chunk::new_chunk(28, "Foo", vec![4, 3, 2, 1]);
+        let chunk = Chunk::new_form(0, "FTst", vec![c1.clone(), c2]);
         let found = chunk.find_chunk("Test", "");
         assert!(found.is_some());
         assert_eq!(found.unwrap(), &c1);
@@ -329,9 +358,9 @@ mod tests {
 
     #[test]
     fn test_find_chunk_multiple() {
-        let c1 = Chunk::new_chunk("Test", vec![4, 3, 2, 1]);
-        let c2 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let chunk = Chunk::new_form("FTst", vec![c1.clone(), c2]);
+        let c1 = Chunk::new_chunk(12, "Test", vec![4, 3, 2, 1]);
+        let c2 = Chunk::new_chunk(24, "Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let chunk = Chunk::new_form(0, "FTst", vec![c1.clone(), c2]);
         let found = chunk.find_chunk("Test", "");
         assert!(found.is_some());
         assert_eq!(found.unwrap(), &c1);
@@ -339,22 +368,23 @@ mod tests {
 
     #[test]
     fn test_find_chunk_none() {
-        let c1 = Chunk::new_chunk("Test", vec![4, 3, 2, 1]);
-        let c2 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let chunk = Chunk::new_form("FTst", vec![c1, c2]);
+        let c1 = Chunk::new_chunk(12, "Test", vec![4, 3, 2, 1]);
+        let c2 = Chunk::new_chunk(24, "Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let chunk = Chunk::new_form(0, "FTst", vec![c1, c2]);
         let found = chunk.find_chunk("None", "");
         assert!(found.is_none());
     }
 
     #[test]
     fn test_find_chunk_with_sub_id() {
-        let c1 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let c2 = Chunk::new_chunk("Foo", vec![4, 3, 2, 1]);
-        let c3 = Chunk::new_form("SbId", vec![c2.clone()]);
-        let chunk = Chunk::new_form("FTst", vec![c1, c3]);
+        let c1 = Chunk::new_chunk(12, "Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let c2 = Chunk::new_chunk(30, "Foo", vec![4, 3, 2, 1]);
+        let c3 = Chunk::new_form(28, "SbId", vec![c2.clone()]);
+        let chunk = Chunk::new_form(0, "FTst", vec![c1, c3]);
         let found = chunk.find_chunk("FORM", "SbId");
         assert!(found.is_some());
         let found = found.unwrap();
+        assert_eq!(found.offset, 28);
         assert_eq!(found.id, vec![b'F', b'O', b'R', b'M']);
         assert_eq!(found.id(), "FORM");
         // Length = 4 (sub id) + chunk 2 (8 + 4 data)
@@ -368,9 +398,9 @@ mod tests {
 
     #[test]
     fn test_find_first_chunk() {
-        let c1 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let c2 = Chunk::new_chunk("Foo", vec![4, 3, 2, 1]);
-        let chunk = Chunk::new_form("FTst", vec![c1, c2.clone()]);
+        let c1 = Chunk::new_chunk(12, "Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let c2 = Chunk::new_chunk(28, "Foo", vec![4, 3, 2, 1]);
+        let chunk = Chunk::new_form(0, "FTst", vec![c1, c2.clone()]);
         let found = chunk.find_first_chunk(vec![("Nope", ""), ("Foo ", ""), ("Test", "")]);
         assert!(found.is_some());
         let found = found.unwrap();
@@ -379,19 +409,19 @@ mod tests {
 
     #[test]
     fn test_find_first_chunk_none() {
-        let c1 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let c2 = Chunk::new_chunk("Foo", vec![4, 3, 2, 1]);
-        let chunk = Chunk::new_form("FTst", vec![c1, c2]);
+        let c1 = Chunk::new_chunk(12, "Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let c2 = Chunk::new_chunk(28, "Foo", vec![4, 3, 2, 1]);
+        let chunk = Chunk::new_form(0, "FTst", vec![c1, c2]);
         let found = chunk.find_first_chunk(vec![("Nope", ""), ("Foop", ""), ("Tast", "")]);
         assert!(found.is_none());
     }
 
     #[test]
     fn test_find_chunks() {
-        let c1 = Chunk::new_chunk("Test", vec![4, 3, 2, 1]);
-        let c2 = Chunk::new_chunk("Otro", vec![5, 6, 7, 8, 9, 10, 11, 12]);
-        let c3 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let chunk = Chunk::new_form("FTst", vec![c1.clone(), c2, c3.clone()]);
+        let c1 = Chunk::new_chunk(12, "Test", vec![4, 3, 2, 1]);
+        let c2 = Chunk::new_chunk(24, "Otro", vec![5, 6, 7, 8, 9, 10, 11, 12]);
+        let c3 = Chunk::new_chunk(40, "Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let chunk = Chunk::new_form(0, "FTst", vec![c1.clone(), c2, c3.clone()]);
         let found = chunk.find_chunks("Test", "");
         assert_eq!(found.len(), 2);
         assert_eq!(found[0], &c1);
@@ -400,26 +430,120 @@ mod tests {
 
     #[test]
     fn test_find_chunks_none() {
-        let c1 = Chunk::new_chunk("Test", vec![4, 3, 2, 1]);
-        let c2 = Chunk::new_chunk("Otro", vec![5, 6, 7, 8, 9, 10, 11, 12]);
-        let c3 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let chunk = Chunk::new_form("FTst", vec![c1, c2, c3]);
+        let c1 = Chunk::new_chunk(12, "Test", vec![4, 3, 2, 1]);
+        let c2 = Chunk::new_chunk(24, "Otro", vec![5, 6, 7, 8, 9, 10, 11, 12]);
+        let c3 = Chunk::new_chunk(40, "Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let chunk = Chunk::new_form(0, "FTst", vec![c1, c2, c3]);
         let found = chunk.find_chunks("Nope", "");
         assert!(found.is_empty());
     }
 
     #[test]
     fn test_find_chunks_with_sub_id() {
-        let c1 = Chunk::new_chunk("Test", vec![4, 3, 2, 1]);
-        let c2 = Chunk::new_chunk("Otro", vec![5, 6, 7, 8, 9, 10, 11, 12]);
-        let c3 = Chunk::new_chunk("Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let c4 = Chunk::new_form("Sb1", vec![c1, c2]);
-        let c5 = Chunk::new_form("Sb1", vec![c3]);
-        let c6 = Chunk::new_form("Sub2", vec![]);
-        let chunk = Chunk::new_form("FTst", vec![c4.clone(), c5.clone(), c6]);
+        let c1 = Chunk::new_chunk(24, "Test", vec![4, 3, 2, 1]);
+        let c2 = Chunk::new_chunk(36, "Otro", vec![5, 6, 7, 8, 9, 10, 11, 12]);
+        let c3 = Chunk::new_chunk(64, "Test", vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let c4 = Chunk::new_form(12, "Sb1", vec![c1, c2]);
+        let c5 = Chunk::new_form(52, "Sb1", vec![c3]);
+        let c6 = Chunk::new_form(80, "Sub2", vec![]);
+        let chunk = Chunk::new_form(0, "FTst", vec![c4.clone(), c5.clone(), c6]);
         let found = chunk.find_chunks("FORM", "Sb1 ");
         assert_eq!(found.len(), 2);
         assert_eq!(found[0], &c4);
         assert_eq!(found[1], &c5);
+    }
+
+    #[test]
+    fn test_from_vec_u8() {
+        let v = vec![
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x34, b'S', b'U', b'B', b' ', b'C', b'h',
+            b'n', b'k', 0x00, 0x00, 0x00, 0x04, 0x01, 0x02, 0x03, 0x04, b'F', b'O', b'R', b'M',
+            0x00, 0x00, 0x00, 0x1C, b'C', b'l', b'C', b'k', b'B', b'n', b'z', b' ', 0x00, 0x00,
+            0x00, 0x04, 0x05, 0x06, 0x07, 0x08, b'C', b'h', b'n', b'k', 0x00, 0x00, 0x00, 0x04,
+            0x09, 0x0a, 0x0b, 0x0c,
+        ];
+        let chunk = Chunk::from(&v);
+        assert_eq!(chunk.id(), "FORM");
+        assert_eq!(chunk.length(), 0x34);
+        assert_eq!(chunk.sub_id(), "SUB ");
+        assert_eq!(
+            chunk.chunks(),
+            &vec![
+                Chunk::new_chunk(0x0c, "Chnk", vec![0x01, 0x02, 0x03, 0x04]),
+                Chunk::new_form(
+                    0x18,
+                    "ClCk",
+                    vec![
+                        Chunk::new_chunk(0x24, "Bnz ", vec![0x05, 0x06, 0x07, 0x08]),
+                        Chunk::new_chunk(0x30, "Chnk", vec![0x09, 0x0a, 0x0b, 0x0c])
+                    ]
+                )
+            ]
+        )
+    }
+
+    #[test]
+    fn test_from_file() {
+        let v = vec![
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x34, b'S', b'U', b'B', b' ', b'C', b'h',
+            b'n', b'k', 0x00, 0x00, 0x00, 0x04, 0x01, 0x02, 0x03, 0x04, b'F', b'O', b'R', b'M',
+            0x00, 0x00, 0x00, 0x1C, b'C', b'l', b'C', b'k', b'B', b'n', b'z', b' ', 0x00, 0x00,
+            0x00, 0x04, 0x05, 0x06, 0x07, 0x08, b'C', b'h', b'n', b'k', 0x00, 0x00, 0x00, 0x04,
+            0x09, 0x0a, 0x0b, 0x0c,
+        ];
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open("test.iff");
+        assert!(f.is_ok());
+        let mut file = f.unwrap();
+        assert!(file.write_all(&v).is_ok());
+        assert!(file.flush().is_ok());
+        assert!(Path::new("test.iff").exists());
+        let f = fs::OpenOptions::new().read(true).open("test.iff");
+        assert!(f.is_ok());
+        let mut file = f.unwrap();
+        let chunk = Chunk::try_from(&mut file);
+        assert!(fs::remove_file("test.iff").is_ok());
+        assert!(chunk.is_ok());
+        let chunk = chunk.unwrap();
+        assert_eq!(chunk.id(), "FORM");
+        assert_eq!(chunk.length(), 0x34);
+        assert_eq!(chunk.sub_id(), "SUB ");
+        assert_eq!(
+            chunk.chunks(),
+            &vec![
+                Chunk::new_chunk(0x0c, "Chnk", vec![0x01, 0x02, 0x03, 0x04]),
+                Chunk::new_form(
+                    0x18,
+                    "ClCk",
+                    vec![
+                        Chunk::new_chunk(0x24, "Bnz ", vec![0x05, 0x06, 0x07, 0x08]),
+                        Chunk::new_chunk(0x30, "Chnk", vec![0x09, 0x0a, 0x0b, 0x0c])
+                    ]
+                )
+            ]
+        )
+    }
+
+    #[test]
+    fn test_from_file_error() {
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open("test-2.iff");
+        assert!(f.is_ok());
+        let mut file = f.unwrap();
+        assert!(file.write_all(&[]).is_ok());
+        assert!(file.flush().is_ok());
+        assert!(Path::new("test-2.iff").exists());
+        let f = fs::OpenOptions::new().read(true).open("test-2.iff");
+        assert!(f.is_ok());
+        let mut file = f.unwrap();
+        let chunk = Chunk::try_from(&mut file);
+        assert!(fs::remove_file("test-2.iff").is_ok());
+        assert!(chunk.is_err());
     }
 }

@@ -1,8 +1,9 @@
 use std::fmt;
 
-use ifflib::Chunk;
+use iff::Chunk;
 
 use crate::error::{ErrorCode, RuntimeError};
+
 #[derive(Clone, Debug)]
 pub struct IFhd {
     release_number: u16,
@@ -65,10 +66,10 @@ impl fmt::Display for IFhd {
 impl From<&Chunk> for IFhd {
     fn from(value: &Chunk) -> IFhd {
         let data = value.data();
-        let release_number = ifflib::vec_as_unsigned(&data[0..2]) as u16;
+        let release_number = iff::vec_as_unsigned(&data[0..2]) as u16;
         let serial_number = data[2..8].to_vec();
-        let checksum = ifflib::vec_as_unsigned(&data[8..10]) as u16;
-        let pc = ifflib::vec_as_unsigned(&data[10..13]) as u32;
+        let checksum = iff::vec_as_unsigned(&data[8..10]) as u16;
+        let pc = iff::vec_as_unsigned(&data[10..13]) as u32;
 
         IFhd {
             release_number,
@@ -82,17 +83,28 @@ impl From<&Chunk> for IFhd {
 impl From<IFhd> for Chunk {
     fn from(value: IFhd) -> Self {
         let mut data = Vec::new();
-        data.extend(ifflib::unsigned_as_vec(value.release_number as usize, 2));
+        data.extend(iff::unsigned_as_vec(value.release_number as usize, 2));
         data.extend(&value.serial_number);
-        data.extend(ifflib::unsigned_as_vec(value.checksum as usize, 2));
-        data.extend(ifflib::unsigned_as_vec(value.pc as usize, 3));
-        Chunk::new_chunk("IFhd", data)
+        data.extend(iff::unsigned_as_vec(value.checksum as usize, 2));
+        data.extend(iff::unsigned_as_vec(value.pc as usize, 3));
+        Chunk::new_chunk(0, "IFhd", data)
     }
 }
 
 pub struct Mem {
     compressed: bool,
     memory: Vec<u8>,
+}
+
+impl fmt::Debug for Mem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "compressed: {}, {} bytes",
+            self.compressed,
+            self.memory.len()
+        )
+    }
 }
 
 impl Mem {
@@ -123,10 +135,11 @@ impl From<Mem> for Chunk {
     fn from(value: Mem) -> Self {
         let id = if value.compressed { "CMem" } else { "UMem" };
 
-        Chunk::new_chunk(id, value.memory().clone())
+        Chunk::new_chunk(0, id, value.memory().clone())
     }
 }
 
+#[derive(Debug)]
 pub struct Stk {
     return_address: u32,
     flags: u8,
@@ -183,21 +196,23 @@ impl Stk {
 impl From<Stk> for Vec<u8> {
     fn from(value: Stk) -> Self {
         let mut data = Vec::new();
-        data.extend(ifflib::unsigned_as_vec(value.return_address as usize, 3));
+        data.extend(iff::unsigned_as_vec(value.return_address as usize, 3));
         data.push(value.flags);
         data.push(value.result_variable);
         data.push(value.arguments);
-        data.extend(ifflib::unsigned_as_vec(value.stack.len(), 2));
+        data.extend(iff::unsigned_as_vec(value.stack.len(), 2));
         for v in value.variables {
-            data.extend(ifflib::unsigned_as_vec(v as usize, 2));
+            data.extend(iff::unsigned_as_vec(v as usize, 2));
         }
         for v in value.stack {
-            data.extend(ifflib::unsigned_as_vec(v as usize, 2));
+            data.extend(iff::unsigned_as_vec(v as usize, 2));
         }
 
         data
     }
 }
+
+#[derive(Debug)]
 pub struct Stks {
     stks: Vec<Stk>,
 }
@@ -217,21 +232,21 @@ impl From<&Chunk> for Stks {
         let mut stks = Vec::new();
         let mut offset = 0;
         let data = value.data();
-        while value.length() as usize - offset > 0 {
-            let return_address = ifflib::vec_as_unsigned(&data[offset..offset + 3]) as u32;
+        while value.length() as usize > offset {
+            let return_address = iff::vec_as_unsigned(&data[offset..offset + 3]) as u32;
             let flags = data[offset + 3];
             let result_variable = data[offset + 4];
             let arguments = data[offset + 5];
-            let stack_size = ifflib::vec_as_unsigned(&data[offset + 6..offset + 8]);
+            let stack_size = iff::vec_as_unsigned(&data[offset + 6..offset + 8]);
             let mut variables = Vec::new();
             for i in 0..flags as usize & 0xf {
                 let n = offset + 8 + (i * 2);
-                variables.push(ifflib::vec_as_unsigned(&data[n..n + 2]) as u16);
+                variables.push(iff::vec_as_unsigned(&data[n..n + 2]) as u16);
             }
             let mut stack = Vec::new();
             for i in 0..stack_size {
                 let n = offset + 8 + (variables.len() * 2) + (i * 2);
-                stack.push(ifflib::vec_as_unsigned(&data[n..n + 2]) as u16);
+                stack.push(iff::vec_as_unsigned(&data[n..n + 2]) as u16);
             }
 
             offset += 8 + (variables.len() * 2) + (stack.len() * 2);
@@ -256,10 +271,11 @@ impl From<Stks> for Chunk {
             data.extend(&Vec::from(stk))
         }
 
-        Chunk::new_chunk("Stks", data)
+        Chunk::new_chunk(0, "Stks", data)
     }
 }
 
+#[derive(Debug)]
 pub struct Quetzal {
     ifhd: IFhd,
     mem: Mem,
@@ -322,7 +338,7 @@ impl TryFrom<Vec<u8>> for Quetzal {
     type Error = RuntimeError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let chunk = Chunk::from(value);
+        let chunk = Chunk::from((0, &value));
         Quetzal::try_from(chunk)
     }
 }
@@ -332,13 +348,13 @@ impl From<Quetzal> for Chunk {
         let mem = Chunk::from(value.mem);
         let stks = Chunk::from(value.stks);
 
-        Chunk::new_form("IFZS", vec![ifhd, mem, stks])
+        Chunk::new_form(0, "IFZS", vec![ifhd, mem, stks])
     }
 }
 
 impl From<Quetzal> for Vec<u8> {
     fn from(value: Quetzal) -> Self {
         let chunk = Chunk::from(value);
-        Vec::from(chunk)
+        Vec::from(&chunk)
     }
 }
