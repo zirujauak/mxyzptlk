@@ -159,9 +159,9 @@ impl TryFrom<&Chunk> for RIdx {
                 Err(RuntimeError::new(
                     ErrorCode::System,
                     format!(
-                        "Chunk data not large enough to hold {} entries: {}/{}",
-                        count,
+                        "Chunk data size should be {} for {} entries: {}",
                         4 + (count * 12),
+                        count,
                         value.length()
                     ),
                 ))
@@ -345,6 +345,7 @@ impl TryFrom<&Chunk> for Blorb {
                     "No RIdx chunk".to_string(),
                 ));
             }
+            let ridx = RIdx::try_from(ridx_chunk.unwrap())?;
 
             let loop_chunk = value.find_chunk("Loop", "");
             let loops = match loop_chunk {
@@ -353,9 +354,36 @@ impl TryFrom<&Chunk> for Blorb {
             };
             let oggv_chunks = value.find_chunks("OGGV", "");
             let aiff_chunks = value.find_chunks("FORM", "AIFF");
-            let exec_chunk = value.find_chunk("Exec", "");
 
-            let exec = exec_chunk.map(|x| x.data().clone());
+            // Look for an index with usage 'Exec'
+            let execs: Vec<&Index> = ridx
+                .indices()
+                .iter()
+                .filter(|x| x.usage() == "Exec" && x.number() == 0)
+                .collect();
+            let exec = if execs.len() == 1 {
+                if execs[0].number() != 0 {
+                    warn!("Exec index should have number '0': {}", execs[0].number());
+                    None
+                } else {
+                    match value.find_chunk("ZCOD", "") {
+                        Some(e) => {
+                            if e.offset() == execs[0].start() {
+                                Some(e.data().clone())
+                            } else {
+                                warn!(target: "app::trace", "'Exec' resources should start at {:06x}, but the ZCOD chunk starts at {:06}, therefore ignoring it", execs[0].start, e.offset());
+                                None
+                            }
+                        }
+                        None => {
+                            warn!(target: "app::trace", "'Exec' resource index exists, but no ZCOD chunk found");
+                            None
+                        }
+                    }
+                }
+            } else {
+                None
+            };
 
             let mut sounds = HashMap::new();
             for c in oggv_chunks {
@@ -367,12 +395,21 @@ impl TryFrom<&Chunk> for Blorb {
 
             Ok(Blorb {
                 ifhd,
-                ridx: RIdx::try_from(ridx_chunk.unwrap())?,
+                ridx,
                 sounds,
                 loops,
                 exec,
             })
         }
+    }
+}
+
+impl TryFrom<Vec<u8>> for Blorb {
+    type Error = RuntimeError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let chunk = Chunk::from(&value);
+        Blorb::try_from(&chunk)
     }
 }
 
@@ -672,8 +709,9 @@ mod tests {
             0x22,
             "RIdx",
             vec![
-                0x00, 0x00, 0x00, 0x02, b'S', b'n', b'd', b' ', 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc,
+                0x00, 0x00, 0x00, 0x03, b'S', b'n', b'd', b' ', 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc,
                 0xde, 0xf0, b'S', b'n', b'd', b' ', 0x21, 0x43, 0x65, 0x87, 0xa9, 0xcb, 0xed, 0x0f,
+                b'E', b'x', b'e', b'c', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x88,
             ],
         );
         let l = Chunk::new_chunk(
@@ -684,9 +722,9 @@ mod tests {
                 0x00, 0x00,
             ],
         );
-        let exec = Chunk::new_chunk(0x58, "Exec", vec![0x11, 0x22, 0x33, 0x44]);
-        let oggv = Chunk::new_chunk(0x64, "OGGV", vec![1, 2, 3, 4]);
-        let aiff = Chunk::new_form(0x70, "AIFF", vec![]);
+        let exec = Chunk::new_chunk(0x88, "ZCOD", vec![0x11, 0x22, 0x33, 0x44]);
+        let oggv = Chunk::new_chunk(0x70, "OGGV", vec![1, 2, 3, 4]);
+        let aiff = Chunk::new_form(0x7C, "AIFF", vec![]);
         let iff = Chunk::new_form(
             0,
             "IFRS",
@@ -706,7 +744,8 @@ mod tests {
             blorb.ridx(),
             &RIdx::new(vec![
                 Index::new("Snd ".to_string(), 0x12345678, 0x9abcdef0),
-                Index::new("Snd ".to_string(), 0x21436587, 0xa9cbed0f)
+                Index::new("Snd ".to_string(), 0x21436587, 0xa9cbed0f),
+                Index::new("Exec".to_string(), 0, 0x88),
             ])
         );
         assert_some_eq!(
@@ -714,13 +753,20 @@ mod tests {
             &Loop::new(vec![Entry::new(1, 2), Entry::new(2, 0)])
         );
         assert_eq!(blorb.sounds().len(), 2);
-        assert_some_eq!(blorb.sounds().get(&0x64), &oggv);
-        assert_some_eq!(blorb.sounds().get(&0x70), &aiff);
+        assert_some_eq!(blorb.sounds().get(&0x70), &oggv);
+        assert_some_eq!(blorb.sounds().get(&0x7C), &aiff);
         assert_some_eq!(blorb.exec(), &vec![0x11, 0x22, 0x33, 0x44]);
     }
 
     #[test]
-    fn test_blorb_try_from_chunk_no_ifhd() {
+    fn test_blorb_try_from_chunk_no_exec() {
+        let ifhd = Chunk::new_chunk(
+            0x0C,
+            "IFhd",
+            vec![
+                0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x32, 0x32, 0x56, 0x78, 0x9a, 0xbc, 0xde,
+            ],
+        );
         let ridx = Chunk::new_chunk(
             0x22,
             "RIdx",
@@ -737,7 +783,244 @@ mod tests {
                 0x00, 0x00,
             ],
         );
-        let exec = Chunk::new_chunk(0x58, "Exec", vec![0x11, 0x22, 0x33, 0x44]);
+        let oggv = Chunk::new_chunk(0x70, "OGGV", vec![1, 2, 3, 4]);
+        let aiff = Chunk::new_form(0x7C, "AIFF", vec![]);
+        let iff = Chunk::new_form(0, "IFRS", vec![ifhd, ridx, l, oggv.clone(), aiff.clone()]);
+        let blorb = assert_ok!(Blorb::try_from(&iff));
+        assert_some_eq!(
+            blorb.ifhd(),
+            &IFhd::new(
+                0x1234,
+                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
+                0x5678,
+                0x9abcde
+            )
+        );
+        assert_eq!(
+            blorb.ridx(),
+            &RIdx::new(vec![
+                Index::new("Snd ".to_string(), 0x12345678, 0x9abcdef0),
+                Index::new("Snd ".to_string(), 0x21436587, 0xa9cbed0f),
+            ])
+        );
+        assert_some_eq!(
+            blorb.loops(),
+            &Loop::new(vec![Entry::new(1, 2), Entry::new(2, 0)])
+        );
+        assert_eq!(blorb.sounds().len(), 2);
+        assert_some_eq!(blorb.sounds().get(&0x70), &oggv);
+        assert_some_eq!(blorb.sounds().get(&0x7C), &aiff);
+        assert!(blorb.exec().is_none());
+    }
+
+    #[test]
+    fn test_blorb_try_from_wrong_zcode_offset() {
+        let ifhd = Chunk::new_chunk(
+            0x0C,
+            "IFhd",
+            vec![
+                0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x32, 0x32, 0x56, 0x78, 0x9a, 0xbc, 0xde,
+            ],
+        );
+        let ridx = Chunk::new_chunk(
+            0x22,
+            "RIdx",
+            vec![
+                0x00, 0x00, 0x00, 0x03, b'S', b'n', b'd', b' ', 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc,
+                0xde, 0xf0, b'S', b'n', b'd', b' ', 0x21, 0x43, 0x65, 0x87, 0xa9, 0xcb, 0xed, 0x0f,
+                b'E', b'x', b'e', b'c', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x86,
+            ],
+        );
+        let l = Chunk::new_chunk(
+            0x46,
+            "Loop",
+            vec![
+                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+                0x00, 0x00,
+            ],
+        );
+        let exec = Chunk::new_chunk(0x88, "ZCOD", vec![0x11, 0x22, 0x33, 0x44]);
+        let oggv = Chunk::new_chunk(0x70, "OGGV", vec![1, 2, 3, 4]);
+        let aiff = Chunk::new_form(0x7C, "AIFF", vec![]);
+        let iff = Chunk::new_form(
+            0,
+            "IFRS",
+            vec![ifhd, ridx, l, oggv.clone(), aiff.clone(), exec],
+        );
+        let blorb = assert_ok!(Blorb::try_from(&iff));
+        assert_some_eq!(
+            blorb.ifhd(),
+            &IFhd::new(
+                0x1234,
+                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
+                0x5678,
+                0x9abcde
+            )
+        );
+        assert_eq!(
+            blorb.ridx(),
+            &RIdx::new(vec![
+                Index::new("Snd ".to_string(), 0x12345678, 0x9abcdef0),
+                Index::new("Snd ".to_string(), 0x21436587, 0xa9cbed0f),
+                Index::new("Exec".to_string(), 0, 0x86),
+            ])
+        );
+        assert_some_eq!(
+            blorb.loops(),
+            &Loop::new(vec![Entry::new(1, 2), Entry::new(2, 0)])
+        );
+        assert_eq!(blorb.sounds().len(), 2);
+        assert_some_eq!(blorb.sounds().get(&0x70), &oggv);
+        assert_some_eq!(blorb.sounds().get(&0x7C), &aiff);
+        assert!(blorb.exec().is_none());
+    }
+
+    #[test]
+    fn test_blorb_try_from_wrong_exec_number() {
+        let ifhd = Chunk::new_chunk(
+            0x0C,
+            "IFhd",
+            vec![
+                0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x32, 0x32, 0x56, 0x78, 0x9a, 0xbc, 0xde,
+            ],
+        );
+        let ridx = Chunk::new_chunk(
+            0x22,
+            "RIdx",
+            vec![
+                0x00, 0x00, 0x00, 0x03, b'S', b'n', b'd', b' ', 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc,
+                0xde, 0xf0, b'S', b'n', b'd', b' ', 0x21, 0x43, 0x65, 0x87, 0xa9, 0xcb, 0xed, 0x0f,
+                b'E', b'x', b'e', b'c', 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x88,
+            ],
+        );
+        let l = Chunk::new_chunk(
+            0x46,
+            "Loop",
+            vec![
+                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+                0x00, 0x00,
+            ],
+        );
+        let exec = Chunk::new_chunk(0x88, "ZCOD", vec![0x11, 0x22, 0x33, 0x44]);
+        let oggv = Chunk::new_chunk(0x70, "OGGV", vec![1, 2, 3, 4]);
+        let aiff = Chunk::new_form(0x7C, "AIFF", vec![]);
+        let iff = Chunk::new_form(
+            0,
+            "IFRS",
+            vec![ifhd, ridx, l, oggv.clone(), aiff.clone(), exec],
+        );
+        let blorb = assert_ok!(Blorb::try_from(&iff));
+        assert_some_eq!(
+            blorb.ifhd(),
+            &IFhd::new(
+                0x1234,
+                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
+                0x5678,
+                0x9abcde
+            )
+        );
+        assert_eq!(
+            blorb.ridx(),
+            &RIdx::new(vec![
+                Index::new("Snd ".to_string(), 0x12345678, 0x9abcdef0),
+                Index::new("Snd ".to_string(), 0x21436587, 0xa9cbed0f),
+                Index::new("Exec".to_string(), 1, 0x88),
+            ])
+        );
+        assert_some_eq!(
+            blorb.loops(),
+            &Loop::new(vec![Entry::new(1, 2), Entry::new(2, 0)])
+        );
+        assert_eq!(blorb.sounds().len(), 2);
+        assert_some_eq!(blorb.sounds().get(&0x70), &oggv);
+        assert_some_eq!(blorb.sounds().get(&0x7C), &aiff);
+        assert!(blorb.exec().is_none());
+    }
+
+    #[test]
+    fn test_blorb_try_from_multiple_exec() {
+        let ifhd = Chunk::new_chunk(
+            0x0C,
+            "IFhd",
+            vec![
+                0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x32, 0x32, 0x56, 0x78, 0x9a, 0xbc, 0xde,
+            ],
+        );
+        let ridx = Chunk::new_chunk(
+            0x22,
+            "RIdx",
+            vec![
+                0x00, 0x00, 0x00, 0x04, b'S', b'n', b'd', b' ', 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc,
+                0xde, 0xf0, b'S', b'n', b'd', b' ', 0x21, 0x43, 0x65, 0x87, 0xa9, 0xcb, 0xed, 0x0f,
+                b'E', b'x', b'e', b'c', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x88, b'E', b'x',
+                b'e', b'c', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x98,
+            ],
+        );
+        let l = Chunk::new_chunk(
+            0x46,
+            "Loop",
+            vec![
+                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+                0x00, 0x00,
+            ],
+        );
+        let exec = Chunk::new_chunk(0x88, "ZCOD", vec![0x11, 0x22, 0x33, 0x44]);
+        let oggv = Chunk::new_chunk(0x70, "OGGV", vec![1, 2, 3, 4]);
+        let aiff = Chunk::new_form(0x7C, "AIFF", vec![]);
+        let iff = Chunk::new_form(
+            0,
+            "IFRS",
+            vec![ifhd, ridx, l, oggv.clone(), aiff.clone(), exec],
+        );
+        let blorb = assert_ok!(Blorb::try_from(&iff));
+        assert_some_eq!(
+            blorb.ifhd(),
+            &IFhd::new(
+                0x1234,
+                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
+                0x5678,
+                0x9abcde
+            )
+        );
+        assert_eq!(
+            blorb.ridx(),
+            &RIdx::new(vec![
+                Index::new("Snd ".to_string(), 0x12345678, 0x9abcdef0),
+                Index::new("Snd ".to_string(), 0x21436587, 0xa9cbed0f),
+                Index::new("Exec".to_string(), 0, 0x88),
+                Index::new("Exec".to_string(), 0, 0x98),
+            ])
+        );
+        assert_some_eq!(
+            blorb.loops(),
+            &Loop::new(vec![Entry::new(1, 2), Entry::new(2, 0)])
+        );
+        assert_eq!(blorb.sounds().len(), 2);
+        assert_some_eq!(blorb.sounds().get(&0x70), &oggv);
+        assert_some_eq!(blorb.sounds().get(&0x7C), &aiff);
+        assert!(blorb.exec().is_none());
+    }
+
+    #[test]
+    fn test_blorb_try_from_chunk_no_ifhd() {
+        let ridx = Chunk::new_chunk(
+            0x22,
+            "RIdx",
+            vec![
+                0x00, 0x00, 0x00, 0x03, b'S', b'n', b'd', b' ', 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc,
+                0xde, 0xf0, b'S', b'n', b'd', b' ', 0x21, 0x43, 0x65, 0x87, 0xa9, 0xcb, 0xed, 0x0f,
+                b'E', b'x', b'e', b'c', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x58,
+            ],
+        );
+        let l = Chunk::new_chunk(
+            0x46,
+            "Loop",
+            vec![
+                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+                0x00, 0x00,
+            ],
+        );
+        let exec = Chunk::new_chunk(0x58, "ZCOD", vec![0x11, 0x22, 0x33, 0x44]);
         let oggv = Chunk::new_chunk(0x64, "OGGV", vec![1, 2, 3, 4]);
         let aiff = Chunk::new_form(0x70, "AIFF", vec![]);
         let iff = Chunk::new_form(0, "IFRS", vec![ridx, l, oggv.clone(), aiff.clone(), exec]);
@@ -747,7 +1030,8 @@ mod tests {
             blorb.ridx(),
             &RIdx::new(vec![
                 Index::new("Snd ".to_string(), 0x12345678, 0x9abcdef0),
-                Index::new("Snd ".to_string(), 0x21436587, 0xa9cbed0f)
+                Index::new("Snd ".to_string(), 0x21436587, 0xa9cbed0f),
+                Index::new("Exec".to_string(), 0, 0x58),
             ])
         );
         assert_some_eq!(
@@ -773,31 +1057,21 @@ mod tests {
     }
 
     #[test]
-    fn test_blorb_try_from_file() {
+    fn test_blorb_try_vec_u8() {
         let data = vec![
-            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x86, b'I', b'F', b'R', b'S', b'I', b'F',
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x92, b'I', b'F', b'R', b'S', b'I', b'F',
             b'h', b'd', 0x00, 0x00, 0x00, 0x0d, 0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x32, 0x32,
-            0x56, 0x78, 0x9a, 0xbc, 0xde, 0x00, b'R', b'I', b'd', b'x', 0x00, 0x00, 0x00, 0x1c,
-            0x00, 0x00, 0x00, 0x02, b'S', b'n', b'd', b' ', 0x01, 0x02, 0x03, 0x04, 0x00, 0x00,
-            0x00, 0x46, b'S', b'n', b'd', b' ', 0x05, 0x06, 0x07, 0x08, 0x00, 0x00, 0x00, 0x52,
-            b'O', b'G', b'G', b'V', 0x00, 0x00, 0x00, 0x04, 0x0a, 0x0b, 0x0c, 0x0d, b'F', b'O',
-            b'R', b'M', 0x00, 0x00, 0x00, 0x10, b'A', b'I', b'F', b'F', b'C', b'O', b'M', b'M',
-            0x00, 0x00, 0x00, 0x04, 0x0f, 0x10, 0x11, 0x12, b'L', b'o', b'o', b'p', 0x00, 0x00,
-            0x00, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02,
-            0x00, 0x00, 0x00, 0x00, b'E', b'x', b'e', b'c', 0x00, 0x00, 0x00, 0x04, 0x13, 0x14,
-            0x15, 0x16,
+            0x56, 0x78, 0x9a, 0xbc, 0xde, 0x00, b'R', b'I', b'd', b'x', 0x00, 0x00, 0x00, 0x28,
+            0x00, 0x00, 0x00, 0x03, b'S', b'n', b'd', b' ', 0x01, 0x02, 0x03, 0x04, 0x00, 0x00,
+            0x00, 0x52, b'S', b'n', b'd', b' ', 0x05, 0x06, 0x07, 0x08, 0x00, 0x00, 0x00, 0x5E,
+            b'E', b'x', b'e', b'c', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8E, b'O', b'G',
+            b'G', b'V', 0x00, 0x00, 0x00, 0x04, 0x0a, 0x0b, 0x0c, 0x0d, b'F', b'O', b'R', b'M',
+            0x00, 0x00, 0x00, 0x10, b'A', b'I', b'F', b'F', b'C', b'O', b'M', b'M', 0x00, 0x00,
+            0x00, 0x04, 0x0f, 0x10, 0x11, 0x12, b'L', b'o', b'o', b'p', 0x00, 0x00, 0x00, 0x10,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+            0x00, 0x00, b'Z', b'C', b'O', b'D', 0x00, 0x00, 0x00, 0x04, 0x13, 0x14, 0x15, 0x16,
         ];
-        let mut file = assert_ok!(fs::OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open("test.blb"));
-        assert!(file.write_all(&data).is_ok());
-        assert!(file.flush().is_ok());
-        assert!(Path::new("test.blb").exists());
-        let mut file = assert_ok!(fs::OpenOptions::new().read(true).open("test.blb"));
-        let b = Blorb::try_from(&mut file);
-        assert!(fs::remove_file("test.blb").is_ok());
+        let b = Blorb::try_from(data);
         let blorb = assert_ok!(b);
         assert_some_eq!(
             blorb.ifhd(),
@@ -811,8 +1085,9 @@ mod tests {
         assert_eq!(
             blorb.ridx(),
             &RIdx::new(vec![
-                Index::new("Snd ".to_string(), 0x01020304, 0x46),
-                Index::new("Snd ".to_string(), 0x05060708, 0x52)
+                Index::new("Snd ".to_string(), 0x01020304, 0x52),
+                Index::new("Snd ".to_string(), 0x05060708, 0x5E),
+                Index::new("Exec".to_string(), 0, 0x8E),
             ])
         );
         assert_some_eq!(
@@ -821,15 +1096,79 @@ mod tests {
         );
         assert_eq!(blorb.sounds().len(), 2);
         assert_some_eq!(
-            blorb.sounds().get(&0x46),
-            &Chunk::new_chunk(0x46, "OGGV", vec![0x0a, 0x0b, 0x0c, 0x0d])
+            blorb.sounds().get(&0x52),
+            &Chunk::new_chunk(0x52, "OGGV", vec![0x0a, 0x0b, 0x0c, 0x0d])
         );
         assert_some_eq!(
-            blorb.sounds().get(&0x52),
+            blorb.sounds().get(&0x5E),
             &Chunk::new_form(
-                0x52,
+                0x5E,
                 "AIFF",
-                vec![Chunk::new_chunk(0x5E, "COMM", vec![0x0f, 0x10, 0x11, 0x12])]
+                vec![Chunk::new_chunk(0x6A, "COMM", vec![0x0f, 0x10, 0x11, 0x12])]
+            )
+        );
+        assert_some_eq!(blorb.exec(), &vec![0x13, 0x14, 0x15, 0x16]);
+    }
+
+    #[test]
+    fn test_blorb_try_from_file() {
+        let data = vec![
+            b'F', b'O', b'R', b'M', 0x00, 0x00, 0x00, 0x92, b'I', b'F', b'R', b'S', b'I', b'F',
+            b'h', b'd', 0x00, 0x00, 0x00, 0x0d, 0x12, 0x34, 0x32, 0x33, 0x30, 0x37, 0x32, 0x32,
+            0x56, 0x78, 0x9a, 0xbc, 0xde, 0x00, b'R', b'I', b'd', b'x', 0x00, 0x00, 0x00, 0x28,
+            0x00, 0x00, 0x00, 0x03, b'S', b'n', b'd', b' ', 0x01, 0x02, 0x03, 0x04, 0x00, 0x00,
+            0x00, 0x52, b'S', b'n', b'd', b' ', 0x05, 0x06, 0x07, 0x08, 0x00, 0x00, 0x00, 0x5E,
+            b'E', b'x', b'e', b'c', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8E, b'O', b'G',
+            b'G', b'V', 0x00, 0x00, 0x00, 0x04, 0x0a, 0x0b, 0x0c, 0x0d, b'F', b'O', b'R', b'M',
+            0x00, 0x00, 0x00, 0x10, b'A', b'I', b'F', b'F', b'C', b'O', b'M', b'M', 0x00, 0x00,
+            0x00, 0x04, 0x0f, 0x10, 0x11, 0x12, b'L', b'o', b'o', b'p', 0x00, 0x00, 0x00, 0x10,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+            0x00, 0x00, b'Z', b'C', b'O', b'D', 0x00, 0x00, 0x00, 0x04, 0x13, 0x14, 0x15, 0x16,
+        ];
+        let mut file = assert_ok!(fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open("test.blb"));
+        assert!(file.write_all(&data).is_ok());
+        assert!(file.flush().is_ok());
+        assert!(Path::new("test.blb").exists());
+        let mut file = assert_ok!(fs::OpenOptions::new().read(true).open("test.blb"));
+        let b = Blorb::try_from(&mut file);
+        assert_ok!(fs::remove_file("test.blb"));
+        let blorb = assert_ok!(b);
+        assert_some_eq!(
+            blorb.ifhd(),
+            &IFhd::new(
+                0x1234,
+                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
+                0x5678,
+                0x9abcde
+            )
+        );
+        assert_eq!(
+            blorb.ridx(),
+            &RIdx::new(vec![
+                Index::new("Snd ".to_string(), 0x01020304, 0x52),
+                Index::new("Snd ".to_string(), 0x05060708, 0x5E),
+                Index::new("Exec".to_string(), 0, 0x8E),
+            ])
+        );
+        assert_some_eq!(
+            blorb.loops(),
+            &Loop::new(vec![Entry::new(1, 2), Entry::new(2, 0)])
+        );
+        assert_eq!(blorb.sounds().len(), 2);
+        assert_some_eq!(
+            blorb.sounds().get(&0x52),
+            &Chunk::new_chunk(0x52, "OGGV", vec![0x0a, 0x0b, 0x0c, 0x0d])
+        );
+        assert_some_eq!(
+            blorb.sounds().get(&0x5E),
+            &Chunk::new_form(
+                0x5E,
+                "AIFF",
+                vec![Chunk::new_chunk(0x6A, "COMM", vec![0x0f, 0x10, 0x11, 0x12])]
             )
         );
         assert_some_eq!(blorb.exec(), &vec![0x13, 0x14, 0x15, 0x16]);

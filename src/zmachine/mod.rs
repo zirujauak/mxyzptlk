@@ -869,7 +869,7 @@ mod tests {
 
     use crate::{
         assert_ok, assert_ok_eq, assert_print, assert_some, assert_some_eq,
-        blorb::{Blorb, Entry, IFhd, Index, Loop, RIdx},
+        blorb::{Blorb, Entry, Index, Loop, RIdx},
         test_util::{
             backspace, beep, buffer_mode, colors, cursor, erase_line, erase_window, input,
             mock_blorb, mock_object, mock_routine, play_sound, quit, scroll, set_input_delay,
@@ -1535,7 +1535,6 @@ mod tests {
         assert_eq!(zmachine.frame_count(), 1);
         let r = zmachine.restore();
         assert!(fs::remove_file("test-z3.ifzs").is_ok());
-        println!("{:?}", r);
         let pc = assert_ok!(r);
         assert_some_eq!(pc, 0x9abc);
         assert_ok_eq!(header::flag2(&zmachine.state, Flags2::Transcripting), 1);
