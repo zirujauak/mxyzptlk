@@ -204,35 +204,4 @@ fn main() {
         let _ = zmachine.quit();
         panic!("{}", r)
     }
-
-    //     Err(e) => {
-    //         error!(target: "app::trace", "Error loading zcode: {}", e);
-    //         exit(-1);
-    //     }
-    // }
-    //     Ok(memory) => {
-    //         let sound_manager = initialize_sound_engine(&full_name, &memory);
-    //         let mut zmachine = ZMachine::new(memory, config, sound_manager, &name)
-    //             .expect("Error creating state");
-
-    //         trace!(target: "app::trace", "Begin execution");
-    //         if let Err(r) = zmachine.run() {
-    //             let error: Vec<_> = format!("\r{}\rPress any key to exit", r)
-    //                 .as_bytes()
-    //                 .iter()
-    //                 .map(|x| *x as u16)
-    //                 .collect();
-    //             let _ = zmachine.print(&error);
-    //             let _ = zmachine.read_key(0);
-    //             let _ = zmachine.quit();
-    //             panic!("{}", r)
-    //         }
-    //     }
-    //     Err(e) => {
-    //         panic!("Error reading file '{}': {}", filename, e);
-    //     }
-    // },
-    // Err(e) => {
-    //     panic!("Error opening '{}': {}", filename, e);
-    // }
 }

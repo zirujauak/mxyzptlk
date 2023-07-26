@@ -1535,7 +1535,6 @@ mod tests {
         assert_eq!(zmachine.frame_count(), 1);
         let r = zmachine.restore();
         assert!(fs::remove_file("test-z3.ifzs").is_ok());
-        println!("{:?}", r);
         let pc = assert_ok!(r);
         assert_some_eq!(pc, 0x9abc);
         assert_ok_eq!(header::flag2(&zmachine.state, Flags2::Transcripting), 1);
