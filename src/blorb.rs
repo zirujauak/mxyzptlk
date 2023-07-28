@@ -2,7 +2,10 @@ use std::{collections::HashMap, fs::File};
 
 use iff::Chunk;
 
-use crate::error::{ErrorCode, RuntimeError};
+use crate::{
+    error::{ErrorCode, RuntimeError},
+    runtime_error,
+};
 
 #[derive(Clone, Debug)]
 pub struct IFhd {
@@ -53,18 +56,17 @@ impl TryFrom<&Chunk> for IFhd {
 
     fn try_from(value: &Chunk) -> Result<Self, Self::Error> {
         if value.id() != "IFhd" {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::System,
-                format!("Chunk ID is not 'IFhd': '{}'", value.id()),
-            ))
+                "Chunk ID is not 'IFhd': '{}'",
+                value.id(),
+            )
         } else if value.length() < 13 {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::System,
-                format!(
-                    "Chunk data should be (at least) 13 bytes: {}",
-                    value.length()
-                ),
-            ))
+                "Chunk data should be (at least) 13 bytes: {}",
+                value.length()
+            )
         } else {
             let data = value.data();
             let release_number = iff::vec_as_unsigned(&data[0..2]) as u16;
@@ -115,10 +117,11 @@ impl TryFrom<&[u8]> for Index {
     type Error = RuntimeError;
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() != 12 {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::System,
-                format!("Index entry should be 12 bytes: {}", value.len()),
-            ))
+                "Index entry should be 12 bytes: {}",
+                value.len()
+            )
         } else {
             let usage = value[0..4].iter().map(|x| *x as char).collect::<String>();
             let number = iff::vec_as_unsigned(&value[4..8]) as u32;
@@ -148,23 +151,18 @@ impl TryFrom<&Chunk> for RIdx {
 
     fn try_from(value: &Chunk) -> Result<Self, Self::Error> {
         if value.id() != "RIdx" {
-            Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Chunk is not 'RIdx': '{}'", value.id()),
-            ))
+            runtime_error!(ErrorCode::System, "Chunk is not 'RIdx': '{}'", value.id())
         } else {
             let data = value.data();
             let count = iff::vec_as_unsigned(&data[0..4]);
             if data.len() != 4 + (count * 12) {
-                Err(RuntimeError::new(
+                runtime_error!(
                     ErrorCode::System,
-                    format!(
-                        "Chunk data size should be {} for {} entries: {}",
-                        4 + (count * 12),
-                        count,
-                        value.length()
-                    ),
-                ))
+                    "Chunk data size should be {} for {} entries: {}",
+                    4 + (count * 12),
+                    count,
+                    value.length()
+                )
             } else {
                 let mut indices = Vec::new();
                 for i in 0..count {
@@ -203,10 +201,11 @@ impl TryFrom<&[u8]> for Entry {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() != 8 {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::System,
-                format!("Entry data should be 8 bytes: {}", value.len()),
-            ))
+                "Entry data should be 8 bytes: {}",
+                value.len()
+            )
         } else {
             let number = iff::vec_as_unsigned(&value[0..4]) as u32;
             let repeats = iff::vec_as_unsigned(&value[4..8]) as u32;
@@ -235,18 +234,17 @@ impl TryFrom<&Chunk> for Loop {
 
     fn try_from(value: &Chunk) -> Result<Self, Self::Error> {
         if value.id() != "Loop" {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::System,
-                format!("Chunk id is not 'Loop': '{}'", value.id()),
-            ))
+                "Chunk id is not 'Loop': '{}'",
+                value.id()
+            )
         } else if value.length() % 8 != 0 {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::System,
-                format!(
-                    "Chunk data length should be a multiple of 8: '{}'",
-                    value.length()
-                ),
-            ))
+                "Chunk data length should be a multiple of 8: '{}'",
+                value.length()
+            )
         } else {
             let data = value.data();
             let mut offset = 0;
@@ -313,14 +311,12 @@ impl TryFrom<&Chunk> for Blorb {
 
     fn try_from(value: &Chunk) -> Result<Self, Self::Error> {
         if value.id() != "FORM" || value.sub_id() != "IFRS" {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::System,
-                format!(
-                    "Expected 'FORM'/'IFRS': '{}'/'{}'",
-                    value.id(),
-                    value.sub_id()
-                ),
-            ))
+                "Expected 'FORM'/'IFRS': '{}'/'{}'",
+                value.id(),
+                value.sub_id()
+            )
         } else {
             let ifhd_chunk = value.find_chunk("IFhd", "");
             let ifhd = match ifhd_chunk {
@@ -340,10 +336,7 @@ impl TryFrom<&Chunk> for Blorb {
 
             let ridx_chunk = value.find_chunk("RIdx", "");
             if ridx_chunk.is_none() {
-                return Err(RuntimeError::new(
-                    ErrorCode::System,
-                    "No RIdx chunk".to_string(),
-                ));
+                return runtime_error!(ErrorCode::System, "No RIdx chunk");
             }
             let ridx = RIdx::try_from(ridx_chunk.unwrap())?;
 
@@ -419,10 +412,7 @@ impl TryFrom<&mut File> for Blorb {
     fn try_from(value: &mut File) -> Result<Self, Self::Error> {
         match Chunk::try_from(value) {
             Ok(c) => Blorb::try_from(&c),
-            Err(e) => Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Error opening file: {}", e),
-            )),
+            Err(e) => runtime_error!(ErrorCode::System, "Error opening file: {}", e),
         }
     }
 }

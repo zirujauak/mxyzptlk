@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use crate::error::{ErrorCode, RuntimeError};
+use crate::{
+    error::{ErrorCode, RuntimeError},
+    runtime_error,
+};
 
 fn string_to_vec_u16(s: String) -> Vec<u16> {
     s.chars().map(|c| c as u16).collect()
@@ -16,7 +19,7 @@ pub fn first_available(base: &str, suffix: &str) -> Result<Vec<u16>, RuntimeErro
                     return Ok(string_to_vec_u16(filename));
                 }
             }
-            Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+            Err(e) => return runtime_error!(ErrorCode::System, "{}", e),
         }
 
         n += 1;
@@ -42,7 +45,7 @@ pub fn last_existing(base: &str, suffix: &str) -> Result<Vec<u16>, RuntimeError>
                     }
                 }
             }
-            Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+            Err(e) => return runtime_error!(ErrorCode::System, "{}", e),
         }
 
         n += 1;

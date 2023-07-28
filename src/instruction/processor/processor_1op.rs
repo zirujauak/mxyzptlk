@@ -2,7 +2,7 @@ use crate::{
     error::{ErrorCode, RuntimeError},
     instruction::Instruction,
     object::{self, property},
-    text,
+    runtime_error, text,
     zmachine::ZMachine,
 };
 
@@ -112,10 +112,10 @@ pub fn remove_obj(
                 }
 
                 if sibling == 0 {
-                    return Err(RuntimeError::new(
+                    return runtime_error!(
                         ErrorCode::ObjectTreeState,
-                        "Unable to find previous sibling of removed object".to_string(),
-                    ));
+                        "Unable to find previous sibling of removed object"
+                    );
                 }
 
                 let o = object::sibling(zmachine, object)?;

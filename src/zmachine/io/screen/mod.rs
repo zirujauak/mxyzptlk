@@ -1,9 +1,10 @@
 mod curses;
 
 use core::fmt;
+use std::any::type_name;
 
 use crate::config::Config;
-use crate::error::*;
+use crate::{error::*, runtime_error};
 
 #[cfg(not(test))]
 use curses::pancurses::new_terminal;
@@ -139,10 +140,7 @@ fn map_color(color: u8) -> Result<Color, RuntimeError> {
         7 => Ok(Color::Magenta),
         8 => Ok(Color::Cyan),
         9 => Ok(Color::White),
-        _ => Err(RuntimeError::new(
-            ErrorCode::InvalidColor,
-            format!("Invalid color {}", color),
-        )),
+        _ => runtime_error!(ErrorCode::InvalidColor, "Invalid color {}", color),
     }
 }
 
@@ -309,10 +307,7 @@ impl Screen {
             7 => Ok(Color::Magenta),
             8 => Ok(Color::Cyan),
             9 => Ok(Color::White),
-            _ => Err(RuntimeError::new(
-                ErrorCode::InvalidColor,
-                format!("Invalid color {}", color),
-            )),
+            _ => runtime_error!(ErrorCode::InvalidColor, "Invalid color {}", color),
         }
     }
 
@@ -361,10 +356,7 @@ impl Screen {
             self.cursor_1 = Some((self.top, 1));
             Ok(())
         } else {
-            Err(RuntimeError::new(
-                ErrorCode::InvalidWindow,
-                format!("Invalid window {}", window),
-            ))
+            runtime_error!(ErrorCode::InvalidWindow, "Invalid window {}", window)
         }
     }
 
@@ -463,10 +455,11 @@ impl Screen {
                 self.lines_since_input = 0;
                 Ok(())
             }
-            _ => Err(RuntimeError::new(
+            _ => runtime_error!(
                 ErrorCode::InvalidWindow,
-                format!("ERASE_WINDOW invalid window {}", window),
-            )), // This is an error
+                "ERASE_WINDOW invalid window {}",
+                window
+            ),
         }
     }
 
@@ -684,6 +677,7 @@ impl Screen {
 }
 
 pub trait Terminal {
+    fn type_name(&self) -> &str;
     fn size(&self) -> (u32, u32);
     fn print_at(
         &mut self,
@@ -715,7 +709,7 @@ pub trait Terminal {
 
 impl fmt::Debug for dyn Terminal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", "Terminal")
+        write!(f, "{}", &self.type_name())
     }
 }
 

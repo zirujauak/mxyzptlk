@@ -1,6 +1,6 @@
 use std::{fmt, fs::File, io::Read};
 
-use crate::error::*;
+use crate::{error::*, runtime_error};
 
 use super::header::HeaderField;
 
@@ -38,10 +38,7 @@ impl TryFrom<&mut File> for Memory {
         let mut d = Vec::new();
         match value.read_to_end(&mut d) {
             Ok(_) => Ok(Memory::new(d)),
-            Err(e) => Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Error reading file: {}", e),
-            )),
+            Err(e) => runtime_error!(ErrorCode::System, "Error reading file: {}", e),
         }
     }
 }
@@ -93,14 +90,12 @@ impl Memory {
         if address < self.map.len() {
             Ok(self.map[address])
         } else {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::InvalidAddress,
-                format!(
-                    "Byte address {:#06x} beyond end of memory ({:#06x})",
-                    address,
-                    self.map.len() - 1
-                ),
-            ))
+                "Byte address {:#06x} beyond end of memory ({:#06x})",
+                address,
+                self.map.len() - 1
+            )
         }
     }
 
@@ -108,14 +103,12 @@ impl Memory {
         if address < self.map.len() - 1 {
             Ok(word_value(self.map[address], self.map[address + 1]))
         } else {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::InvalidAddress,
-                format!(
-                    "Word address {:#06x} beyond end of memory ({:#06x})",
-                    address,
-                    self.map.len() - 1
-                ),
-            ))
+                "Word address {:#06x} beyond end of memory ({:#06x})",
+                address,
+                self.map.len() - 1
+            )
         }
     }
 
@@ -125,14 +118,12 @@ impl Memory {
             self.map[address] = value;
             Ok(())
         } else {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::InvalidAddress,
-                format!(
-                    "Byte address {:#06x} beyond end of memory ({:#06x})",
-                    address,
-                    self.map.len() - 1
-                ),
-            ))
+                "Byte address {:#06x} beyond end of memory ({:#06x})",
+                address,
+                self.map.len() - 1
+            )
         }
     }
 
@@ -144,14 +135,12 @@ impl Memory {
             self.map[address + 1] = lb;
             Ok(())
         } else {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::InvalidAddress,
-                format!(
-                    "Word address {:#06x} beyond end of memory ({:#06x})",
-                    address,
-                    self.map.len() - 1
-                ),
-            ))
+                "Word address {:#06x} beyond end of memory ({:#06x})",
+                address,
+                self.map.len() - 1
+            )
         }
     }
 

@@ -1,7 +1,7 @@
 use serde_yaml::{self, Value};
 use std::fs::File;
 
-use crate::error::{ErrorCode, RuntimeError};
+use crate::{error::{ErrorCode, RuntimeError}, runtime_error};
 
 #[derive(Debug)]
 pub struct Config {
@@ -41,7 +41,7 @@ impl TryFrom<File> for Config {
 
                 Ok(Config::new(foreground, background, logging))
             }
-            Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+            Err(e) => runtime_error!(ErrorCode::System, "{}", e),
         }
     }
 }

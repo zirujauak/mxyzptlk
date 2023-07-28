@@ -1,6 +1,6 @@
-use crate::error::*;
 use crate::instruction::StoreResult;
 use crate::quetzal::{Stk, Stks};
+use crate::{error::*, runtime_error};
 
 #[derive(Debug)]
 pub struct Frame {
@@ -116,10 +116,7 @@ impl Frame {
             info!(target: "app::stack", "Pop {:04x} [{}]", v, self.stack.len());
             Ok(v)
         } else {
-            Err(RuntimeError::new(
-                ErrorCode::StackUnderflow,
-                "Poppped an empty stack".to_string(),
-            ))
+            runtime_error!(ErrorCode::StackUnderflow, "Poppped an empty stack")
         }
     }
 
@@ -127,10 +124,7 @@ impl Frame {
         if let Some(v) = self.stack.last() {
             Ok(*v)
         } else {
-            Err(RuntimeError::new(
-                ErrorCode::StackUnderflow,
-                "Peeked an empty stack".to_string(),
-            ))
+            runtime_error!(ErrorCode::StackUnderflow, "Peeked an empty stack")
         }
     }
 
@@ -153,14 +147,12 @@ impl Frame {
         } else if variable <= self.local_variables.len() as u8 {
             Ok(self.local_variables[variable as usize - 1])
         } else {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::InvalidLocalVariable,
-                format!(
-                    "Read for local variable {} out of range ({})",
-                    variable,
-                    self.local_variables.len()
-                ),
-            ))
+                "Read for local variable {} out of range ({})",
+                variable,
+                self.local_variables.len()
+            )
         }
     }
 
@@ -170,14 +162,12 @@ impl Frame {
         } else if variable <= self.local_variables().len() as u8 {
             Ok(self.local_variables[variable as usize - 1])
         } else {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::InvalidLocalVariable,
-                format!(
-                    "Peek for local variable {} out of range ({})",
-                    variable,
-                    self.local_variables.len()
-                ),
-            ))
+                "Peek for local variable {} out of range ({})",
+                variable,
+                self.local_variables.len()
+            )
         }
     }
     pub fn set_local_variable(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
@@ -188,14 +178,12 @@ impl Frame {
             self.local_variables[variable as usize - 1] = value;
             Ok(())
         } else {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::InvalidLocalVariable,
-                format!(
-                    "Write to local variable {} out of range ({})",
-                    variable,
-                    self.local_variables.len()
-                ),
-            ))
+                "Write to local variable {} out of range ({})",
+                variable,
+                self.local_variables.len()
+            )
         }
     }
 
@@ -212,14 +200,12 @@ impl Frame {
             self.local_variables[variable as usize - 1] = value;
             Ok(())
         } else {
-            Err(RuntimeError::new(
+            runtime_error!(
                 ErrorCode::InvalidLocalVariable,
-                format!(
-                    "Write to local variable {} out of range ({})",
-                    variable,
-                    self.local_variables.len()
-                ),
-            ))
+                "Write to local variable {} out of range ({})",
+                variable,
+                self.local_variables.len()
+            )
         }
     }
 

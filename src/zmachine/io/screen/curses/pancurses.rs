@@ -98,6 +98,10 @@ impl PCTerminal {
 }
 
 impl Terminal for PCTerminal {
+    fn type_name(&self) -> &str {
+        &"PCTerminal"
+    }
+
     fn size(&self) -> (u32, u32) {
         let (rows, columns) = self.window.get_max_yx();
         (rows as u32, columns as u32)

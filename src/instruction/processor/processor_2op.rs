@@ -150,13 +150,12 @@ pub fn insert_obj(
                     }
 
                     if sibling == 0 {
-                        return Err(RuntimeError::new(
+                        return runtime_error!(
                             ErrorCode::ObjectTreeState,
-                            format!(
-                                "Unable to find previous sibling of object {} in parent {}",
-                                object, old_parent
-                            ),
-                        ));
+                            "Unable to find previous sibling of object {} in parent {}",
+                            object,
+                            old_parent
+                        );
                     }
 
                     let o = object::sibling(zmachine, object)?;
@@ -277,10 +276,12 @@ pub fn div(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, 
     for w in operands[1..].iter() {
         // Divide by zero
         if *w == 0 {
-            return Err(RuntimeError::new(
+            return runtime_error!(
                 ErrorCode::System,
-                format!("Divide by zero: {}, {:?}", instruction, operands),
-            ));
+                "Divide by zero: {}, {:?}",
+                instruction,
+                operands
+            );
         }
         value = i16::overflowing_div(value, *w as i16).0;
     }
@@ -295,10 +296,12 @@ pub fn modulus(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
     let mut value = operands[0] as i16;
     for w in operands[1..].iter() {
         if *w == 0 {
-            return Err(RuntimeError::new(
+            return runtime_error!(
                 ErrorCode::System,
-                format!("Divide by zero: {}, {:?}", instruction, operands),
-            ));
+                "Divide by zero: {}, {:?}",
+                instruction,
+                operands
+            );
         }
         value = i16::overflowing_rem(value, *w as i16).0;
     }

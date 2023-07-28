@@ -3,6 +3,7 @@ use std::{fs::File, io::Write};
 use crate::{
     config::Config,
     error::{ErrorCode, RuntimeError},
+    runtime_error,
 };
 
 use self::screen::{CellStyle, Color, InputEvent, Screen, Style};
@@ -55,10 +56,11 @@ impl IO {
             4 => Screen::new_v4(config)?,
             5 | 7 | 8 => Screen::new_v5(config)?,
             _ => {
-                return Err(RuntimeError::new(
+                return runtime_error!(
                     ErrorCode::UnsupportedVersion,
-                    format!("Version {} is unsupported", version),
-                ))
+                    "Version {} is unsupported",
+                    version
+                )
             }
         };
 
@@ -116,20 +118,18 @@ impl IO {
                     self.stream_3.push(Stream3::new(address));
                     Ok(())
                 } else {
-                    Err(RuntimeError::new(
+                    runtime_error!(
                         ErrorCode::System,
-                        "Stream 3 enabled without a table to write to".to_string(),
-                    ))
+                        "Stream 3 enabled without a table to write to"
+                    )
                 }
             }
-            4 => Err(RuntimeError::new(
+            4 => runtime_error!(ErrorCode::System, "Stream 4 is not implemented yet"),
+            _ => runtime_error!(
                 ErrorCode::System,
-                "Stream 4 is not implemented yet".to_string(),
-            )),
-            _ => Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Stream {} is not a valid stream [1..4]", stream),
-            )),
+                "Stream {} is not a valid stream [1..4]",
+                stream
+            ),
         }
     }
 
@@ -160,14 +160,8 @@ impl IO {
                     Ok(())
                 }
             }
-            4 => Err(RuntimeError::new(
-                ErrorCode::System,
-                "Stream 4 is not implemented yet".to_string(),
-            )),
-            _ => Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Stream {} is not a valid stream [1..4]", stream),
-            )),
+            4 => runtime_error!(ErrorCode::System, "Stream 4 is not implemented yet"),
+            _ => runtime_error!(ErrorCode::System, "Stream {} is not a valid stream [1..4]", stream),
         }
     }
 
@@ -205,10 +199,10 @@ impl IO {
                     }
                 }
             } else {
-                return Err(RuntimeError::new(
+                return runtime_error!(
                     ErrorCode::System,
-                    "Stream 3 enabled, but no table to write to".to_string(),
-                ));
+                    "Stream 3 enabled, but no table to write to"
+                );
             }
         } else if self.is_stream_enabled(1) {
             if self.screen.selected_window() == 1 || !self.buffered {
@@ -239,10 +233,10 @@ impl IO {
             if let Some(s) = self.stream_3.last_mut() {
                 s.buffer.push(0xd);
             } else {
-                return Err(RuntimeError::new(
+                return runtime_error!(
                     ErrorCode::System,
-                    "Stream 3 enabled, but no table to write to".to_string(),
-                ));
+                    "Stream 3 enabled, but no table to write to"
+                );
             }
         } else {
             if self.is_stream_enabled(1) {
@@ -271,10 +265,7 @@ impl IO {
 
     pub fn set_window(&mut self, window: u16) -> Result<(), RuntimeError> {
         if window > 1 {
-            Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("{} is not a valid window [0..1]", window),
-            ))
+            runtime_error!(ErrorCode::System, "{} is not a valid window [0..1]", window)
         } else {
             self.screen.select_window(window as u8)
         }
@@ -292,10 +283,11 @@ impl IO {
                 self.screen.erase_window(1)?;
                 self.screen.erase_window(0)
             }
-            _ => Err(RuntimeError::new(
+            _ => runtime_error!(
                 ErrorCode::System,
-                format!("{} is not a valid window to erase [-2, -1, 0, 1]", window),
-            )),
+                "{} is not a valid window to erase [-2, -1, 0, 1]",
+                window
+            ),
         }
     }
 

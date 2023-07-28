@@ -32,6 +32,13 @@ impl RuntimeError {
     }
 }
 
+#[macro_export]
+macro_rules! runtime_error {
+    ($code:expr, $($arg:tt)*) => {
+        Err(RuntimeError::new($code, format!($($arg)*)))
+    };
+}
+
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({:?}) {}", self.code, self.message)

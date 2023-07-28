@@ -17,24 +17,17 @@ fn tempfile(data: Option<&Vec<u8>>) -> Result<(NamedTempFile, File), RuntimeErro
                 if let Some(d) = data {
                     match tempfile.write_all(d) {
                         Ok(_) => Ok((tempfile, file)),
-                        Err(e) => Err(RuntimeError::new(
-                            ErrorCode::System,
-                            format!("Error writing to tempfile: {}", e),
-                        )),
+                        Err(e) => {
+                            runtime_error!(ErrorCode::System, "Error writing to tempfile: {}", e)
+                        }
                     }
                 } else {
                     Ok((tempfile, file))
                 }
             }
-            Err(e) => Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Error opening tempfile: {}", e),
-            )),
+            Err(e) => runtime_error!(ErrorCode::System, "Error opening tempfile: {}", e),
         },
-        Err(e) => Err(RuntimeError::new(
-            ErrorCode::System,
-            format!("Error creating tempfile: {}", e),
-        )),
+        Err(e) => runtime_error!(ErrorCode::System, "Error creating tempfile: {}", e),
     }
 }
 
@@ -64,32 +57,29 @@ pub fn convert_aiff(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
                                 let mut x: Vec<u8> = Vec::new();
                                 match destfile.read_to_end(&mut x) {
                                     Ok(_) => Ok(x),
-                                    Err(e) => Err(RuntimeError::new(
+                                    Err(e) => runtime_error!(
                                         ErrorCode::System,
-                                        format!("Error reading converted sound data: {}", e),
-                                    )),
+                                        "Error reading converted sound data: {}",
+                                        e
+                                    ),
                                 }
                             }
-                            Err(_) => Err(RuntimeError::new(
+                            Err(_) => runtime_error!(
                                 ErrorCode::System,
-                                "sndfile: Error writing convered sound data:".to_string(),
-                            )),
+                                "sndfile: Error writing convered sound data:"
+                            ),
                         },
-                        Err(_) => Err(RuntimeError::new(
+                        Err(_) => runtime_error!(
                             ErrorCode::System,
-                            "sndfile: Error reading source sound data:".to_string(),
-                        )),
+                            "sndfile: Error reading source sound data:"
+                        ),
                     }
                 }
-                Err(e) => Err(RuntimeError::new(
-                    ErrorCode::System,
-                    format!("Error opening output tempfile: {:?}", e),
-                )),
+                Err(e) => {
+                    runtime_error!(ErrorCode::System, "Error opening output tempfile: {:?}", e)
+                }
             }
         }
-        Err(e) => Err(RuntimeError::new(
-            ErrorCode::System,
-            format!("Error loading AIFF file: {:?}", e),
-        )),
+        Err(e) => runtime_error!(ErrorCode::System, "Error loading AIFF file: {:?}", e),
     }
 }

@@ -13,6 +13,10 @@ pub fn new_terminal() -> Box<dyn Terminal> {
 struct TestTerminal;
 
 impl Terminal for TestTerminal {
+    fn type_name(&self) -> &str {
+        "TestTerminal"
+    }
+    
     fn size(&self) -> (u32, u32) {
         (24, 80)
     }

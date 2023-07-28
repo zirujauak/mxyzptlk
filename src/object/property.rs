@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 
 use crate::{
     error::*,
+    runtime_error,
     zmachine::{state::header::HeaderField, ZMachine},
 };
 
@@ -160,13 +161,13 @@ pub fn property(zmachine: &ZMachine, object: usize, property: u8) -> Result<u16,
         match property_size {
             1 => Ok(zmachine.read_byte(property_data_address)? as u16),
             2 => zmachine.read_word(property_data_address),
-            _ => Err(RuntimeError::new(
+            _ => runtime_error!(
                 ErrorCode::PropertySize,
-                format!(
-                    "Read of property {} on object {} has size {}",
-                    property, object, property_size
-                ),
-            )),
+                "Read of property {} on object {} has size {}",
+                property,
+                object,
+                property_size
+            ),
         }
     }
 }
@@ -206,10 +207,10 @@ pub fn set_property(
 ) -> Result<(), RuntimeError> {
     let property_address = address(zmachine, object, property)?;
     if property_address == 0 {
-        Err(RuntimeError::new(
+        runtime_error!(
             ErrorCode::ObjectTreeState,
-            "Can't get properyt address for property 0".to_string(),
-        ))
+            "Can't get properyt address for property 0"
+        )
     } else {
         let property_size = size(zmachine, property_address)?;
         let property_data = match zmachine.version() {
