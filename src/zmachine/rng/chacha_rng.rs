@@ -26,7 +26,7 @@ impl ZRng for ChaChaRng {
     fn type_name(&self) -> &str {
         "ChaChaRng"
     }
-    
+
     fn seed(&mut self, seed: u16) {
         if seed == 0 {
             self.rng = ChaCha8Rng::from_entropy();

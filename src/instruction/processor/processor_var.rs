@@ -2,8 +2,8 @@ use crate::{
     error::{ErrorCode, RuntimeError},
     instruction::{processor::store_result, Instruction},
     object::property,
-    text,
-    zmachine::{io::screen::Interrupt, state::header::HeaderField, ZMachine}, runtime_error,
+    runtime_error, text,
+    zmachine::{io::screen::Interrupt, state::header::HeaderField, ZMachine},
 };
 
 use super::{branch, call_fn, operand_values};

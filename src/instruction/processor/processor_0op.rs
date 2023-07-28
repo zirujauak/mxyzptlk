@@ -1,8 +1,8 @@
 use crate::error::{ErrorCode, RuntimeError};
 use crate::instruction::{decoder, Instruction};
-use crate::{text, runtime_error};
 use crate::zmachine::state::header::HeaderField;
 use crate::zmachine::ZMachine;
+use crate::{runtime_error, text};
 
 use super::branch;
 use super::store_result;

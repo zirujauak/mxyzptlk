@@ -2,7 +2,8 @@ use std::cmp::Ordering;
 
 use crate::{
     error::*,
-    zmachine::{state::header::HeaderField, ZMachine}, runtime_error,
+    runtime_error,
+    zmachine::{state::header::HeaderField, ZMachine},
 };
 
 const ALPHABET_V3: [[char; 26]; 3] = [

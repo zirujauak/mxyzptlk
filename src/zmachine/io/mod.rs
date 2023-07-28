@@ -161,7 +161,11 @@ impl IO {
                 }
             }
             4 => runtime_error!(ErrorCode::System, "Stream 4 is not implemented yet"),
-            _ => runtime_error!(ErrorCode::System, "Stream {} is not a valid stream [1..4]", stream),
+            _ => runtime_error!(
+                ErrorCode::System,
+                "Stream {} is not a valid stream [1..4]",
+                stream
+            ),
         }
     }
 

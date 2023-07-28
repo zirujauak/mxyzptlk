@@ -16,7 +16,7 @@ impl Terminal for TestTerminal {
     fn type_name(&self) -> &str {
         "TestTerminal"
     }
-    
+
     fn size(&self) -> (u32, u32) {
         (24, 80)
     }

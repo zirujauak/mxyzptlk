@@ -1,7 +1,10 @@
 use serde_yaml::{self, Value};
 use std::fs::File;
 
-use crate::{error::{ErrorCode, RuntimeError}, runtime_error};
+use crate::{
+    error::{ErrorCode, RuntimeError},
+    runtime_error,
+};
 
 #[derive(Debug)]
 pub struct Config {
