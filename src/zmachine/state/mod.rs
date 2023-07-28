@@ -1,11 +1,9 @@
 use std::{collections::VecDeque, fmt};
 
-use log4rs::config::runtime;
-
 use crate::{
     error::{ErrorCode, RuntimeError},
     quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
-    runtime_error,
+    fatal_error,
 };
 
 use self::{
@@ -167,7 +165,7 @@ impl State {
         if let Some(frame) = self.frames.last() {
             Ok(frame)
         } else {
-            runtime_error!(ErrorCode::StackUnderflow, "No runtime frame")
+            fatal_error!(ErrorCode::StackUnderflow, "No runtime frame")
         }
     }
 
@@ -175,7 +173,7 @@ impl State {
         if let Some(frame) = self.frames.last_mut() {
             Ok(frame)
         } else {
-            runtime_error!(ErrorCode::StackUnderflow, "No runtime frame")
+            fatal_error!(ErrorCode::StackUnderflow, "No runtime frame")
         }
     }
 
@@ -257,7 +255,7 @@ impl State {
         if address < 0x10000 {
             self.memory.read_byte(address)
         } else {
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::IllegalAccess,
                 "Byte address {:#06x} is in high memory",
                 address
@@ -269,7 +267,7 @@ impl State {
         if address < 0xFFFF {
             self.memory.read_word(address)
         } else {
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::IllegalAccess,
                 "Word address {:#06x} is in high memory",
                 address
@@ -281,7 +279,7 @@ impl State {
         if address < self.static_mark {
             self.memory.write_byte(address, value)
         } else {
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::IllegalAccess,
                 "Byte address {:#04x} is above the end of dynamic memory ({:#04x})",
                 address,
@@ -295,7 +293,7 @@ impl State {
             self.memory.write_word(address, value)?;
             Ok(())
         } else {
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::IllegalAccess,
                 "Word address {:#04x} is above the end of dynamic memory ({:#04x})",
                 address,
@@ -409,7 +407,7 @@ impl State {
                     .read_word(HeaderField::RoutinesOffset as usize)? as usize
                     * 8)),
             8 => Ok(address as usize * 8),
-            _ => runtime_error!(
+            _ => fatal_error!(
                 ErrorCode::UnsupportedVersion,
                 "Unsupported version: {}",
                 self.version
@@ -425,7 +423,7 @@ impl State {
                 + (self.memory.read_word(HeaderField::StringsOffset as usize)? as usize * 8)),
             8 => Ok(address as usize * 8),
             // TODO: error
-            _ => runtime_error!(
+            _ => fatal_error!(
                 ErrorCode::UnsupportedVersion,
                 "Unsupported version: {}",
                 self.version
@@ -479,7 +477,7 @@ impl State {
             self.current_frame_mut()?.set_input_interrupt(true);
             Ok(initial_pc)
         } else {
-            runtime_error!(ErrorCode::System, "No read interrupt pending")
+            fatal_error!(ErrorCode::System, "No read interrupt pending")
         }
     }
 
@@ -519,7 +517,7 @@ impl State {
             self.clear_sound_interrupt();
             Ok(initial_pc)
         } else {
-            runtime_error!(ErrorCode::System, "No pending interrupt")
+            fatal_error!(ErrorCode::System, "No pending interrupt")
         }
     }
 
@@ -538,7 +536,7 @@ impl State {
 
             Ok(self.current_frame()?.pc())
         } else {
-            runtime_error!(ErrorCode::System, "No frame to return to")
+            fatal_error!(ErrorCode::System, "No frame to return to")
         }
     }
 
@@ -604,7 +602,7 @@ impl State {
         let ifhd = IFhd::try_from((&*self, 0))?;
         if &ifhd != quetzal.ifhd() {
             error!(target: "app::quetzal", "Save file was created from a different story file");
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::Restore,
                 "Save file was created from a different story file"
             )
@@ -630,7 +628,7 @@ impl State {
             self.restore_state(quetzal)
         } else {
             warn!(target: "app::quetzal", "No saved state for undo");
-            runtime_error!(ErrorCode::Restore, "Undo stack is empty")
+            fatal_error!(ErrorCode::Restore, "Undo stack is empty")
         }
     }
 

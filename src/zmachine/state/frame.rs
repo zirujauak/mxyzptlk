@@ -1,6 +1,6 @@
 use crate::instruction::StoreResult;
 use crate::quetzal::{Stk, Stks};
-use crate::{error::*, runtime_error};
+use crate::{error::*, fatal_error};
 
 #[derive(Debug)]
 pub struct Frame {
@@ -116,7 +116,7 @@ impl Frame {
             info!(target: "app::stack", "Pop {:04x} [{}]", v, self.stack.len());
             Ok(v)
         } else {
-            runtime_error!(ErrorCode::StackUnderflow, "Poppped an empty stack")
+            fatal_error!(ErrorCode::StackUnderflow, "Poppped an empty stack")
         }
     }
 
@@ -124,7 +124,7 @@ impl Frame {
         if let Some(v) = self.stack.last() {
             Ok(*v)
         } else {
-            runtime_error!(ErrorCode::StackUnderflow, "Peeked an empty stack")
+            fatal_error!(ErrorCode::StackUnderflow, "Peeked an empty stack")
         }
     }
 
@@ -147,7 +147,7 @@ impl Frame {
         } else if variable <= self.local_variables.len() as u8 {
             Ok(self.local_variables[variable as usize - 1])
         } else {
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::InvalidLocalVariable,
                 "Read for local variable {} out of range ({})",
                 variable,
@@ -162,7 +162,7 @@ impl Frame {
         } else if variable <= self.local_variables().len() as u8 {
             Ok(self.local_variables[variable as usize - 1])
         } else {
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::InvalidLocalVariable,
                 "Peek for local variable {} out of range ({})",
                 variable,
@@ -178,7 +178,7 @@ impl Frame {
             self.local_variables[variable as usize - 1] = value;
             Ok(())
         } else {
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::InvalidLocalVariable,
                 "Write to local variable {} out of range ({})",
                 variable,
@@ -200,7 +200,7 @@ impl Frame {
             self.local_variables[variable as usize - 1] = value;
             Ok(())
         } else {
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::InvalidLocalVariable,
                 "Write to local variable {} out of range ({})",
                 variable,

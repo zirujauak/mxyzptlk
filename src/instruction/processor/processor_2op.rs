@@ -150,7 +150,7 @@ pub fn insert_obj(
                     }
 
                     if sibling == 0 {
-                        return runtime_error!(
+                        return fatal_error!(
                             ErrorCode::ObjectTreeState,
                             "Unable to find previous sibling of object {} in parent {}",
                             object,
@@ -276,7 +276,7 @@ pub fn div(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, 
     for w in operands[1..].iter() {
         // Divide by zero
         if *w == 0 {
-            return runtime_error!(
+            return fatal_error!(
                 ErrorCode::System,
                 "Divide by zero: {}, {:?}",
                 instruction,
@@ -296,7 +296,7 @@ pub fn modulus(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
     let mut value = operands[0] as i16;
     for w in operands[1..].iter() {
         if *w == 0 {
-            return runtime_error!(
+            return fatal_error!(
                 ErrorCode::System,
                 "Divide by zero: {}, {:?}",
                 instruction,

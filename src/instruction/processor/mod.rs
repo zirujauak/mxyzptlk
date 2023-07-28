@@ -1,5 +1,5 @@
 use crate::zmachine::ZMachine;
-use crate::{error::*, runtime_error};
+use crate::{error::*, fatal_error};
 
 use super::*;
 
@@ -102,7 +102,7 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
             //         (5, 0x0b) | (7, 0x0b) | (8, 0x0b) => processor_ext::print_unicode(context, instruction),
             //         (5, 0x0c) | (7, 0x0c) | (8, 0x0c) => processor_ext::check_unicode(context, instruction),
             //         (5, 0x0d) | (7, 0x0d) | (8, 0x0d) => processor_ext::set_true_colour(context, instruction),
-            (_, _) => runtime_error!(
+            (_, _) => fatal_error!(
                 ErrorCode::UnimplementedInstruction,
                 "Unimplemented EXT instruction: {}",
                 instruction.opcode()
@@ -126,7 +126,7 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
                 (3, 0xc) => processor_0op::show_status(zmachine, instruction),
                 (_, 0xd) => processor_0op::verify(zmachine, instruction),
                 (_, 0xf) => processor_0op::piracy(zmachine, instruction),
-                (_, _) => runtime_error!(
+                (_, _) => fatal_error!(
                     ErrorCode::UnimplementedInstruction,
                     "Unimplemented instruction: {}",
                     instruction.opcode()
@@ -152,7 +152,7 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
                 (_, 0xe) => processor_1op::load(zmachine, instruction),
                 (3, 0xf) | (4, 0xf) => processor_1op::not(zmachine, instruction),
                 (_, 0xf) => processor_1op::call_1n(zmachine, instruction),
-                (_, _) => runtime_error!(
+                (_, _) => fatal_error!(
                     ErrorCode::UnimplementedInstruction,
                     "Unimplemented instruction: {}",
                     instruction.opcode()
@@ -191,7 +191,7 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
                     processor_2op::set_colour(zmachine, instruction)
                 }
                 (5, 0x1c) | (7, 0x1c) | (8, 0x1c) => processor_2op::throw(zmachine, instruction),
-                (_, _) => runtime_error!(
+                (_, _) => fatal_error!(
                     ErrorCode::UnimplementedInstruction,
                     "Unimplemented instruction: {}",
                     instruction.opcode()
@@ -256,7 +256,7 @@ pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<us
                 (5, 0x1f) | (7, 0x1f) | (8, 0x1f) => {
                     processor_var::check_arg_count(zmachine, instruction)
                 }
-                (_, _) => runtime_error!(
+                (_, _) => fatal_error!(
                     ErrorCode::UnimplementedInstruction,
                     "Unimplemented instruction: {}",
                     instruction.opcode()

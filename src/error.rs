@@ -21,36 +21,50 @@ pub enum ErrorCode {
     UnsupportedVersion,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum ErrorType {
+    Recoverable,
+    Fatal
+}
 pub struct RuntimeError {
+    error_type: ErrorType,
     code: ErrorCode,
     message: String,
 }
 
 impl RuntimeError {
-    pub fn new(code: ErrorCode, message: String) -> RuntimeError {
-        RuntimeError { code, message }
+    pub fn recoverable(code: ErrorCode, message: String) -> RuntimeError {
+        RuntimeError { error_type: ErrorType::Recoverable, code, message }
+    }
+
+    pub fn fatal(code: ErrorCode, message: String) -> RuntimeError {
+        RuntimeError { error_type: ErrorType::Fatal, code, message }
+    }
+
+    pub fn is_recoverable(&self) -> bool {
+        self.error_type == ErrorType::Recoverable
+    }
+
+    pub fn is_fatal(&self) -> bool {
+        self.error_type == ErrorType::Fatal
     }
 }
 
 #[macro_export]
-macro_rules! runtime_error {
+macro_rules! fatal_error {
     ($code:expr, $($arg:tt)*) => {
-        Err(RuntimeError::new($code, format!($($arg)*)))
+        Err(RuntimeError::fatal($code, format!($($arg)*)))
     };
 }
 
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({:?}) {}", self.code, self.message)
+        write!(f, "{:?} [{:?}] {}", self.error_type, self.code, self.message)
     }
 }
 
 impl fmt::Debug for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "RuntimeError {{ code: {:?}, message: {} }}",
-            self.code, self.message
-        )
+        write!(f, "{:?} [{:?}] {}", self.error_type, self.code, self.message)
     }
 }

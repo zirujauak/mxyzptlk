@@ -4,7 +4,7 @@ use iff::Chunk;
 
 use crate::{
     error::{ErrorCode, RuntimeError},
-    runtime_error,
+    fatal_error,
 };
 
 #[derive(Clone, Debug)]
@@ -309,15 +309,15 @@ impl TryFrom<Chunk> for Quetzal {
     fn try_from(value: Chunk) -> Result<Self, Self::Error> {
         let ifhd_chunk = value.find_chunk("IFhd", "");
         if ifhd_chunk.is_none() {
-            return runtime_error!(ErrorCode::System, "No IFhd chunk");
+            return fatal_error!(ErrorCode::System, "No IFhd chunk");
         }
         let mem_chunk = value.find_first_chunk(vec![("CMem", ""), ("UMem", "")]);
         if mem_chunk.is_none() {
-            return runtime_error!(ErrorCode::System, "No CMem or UMem chunk");
+            return fatal_error!(ErrorCode::System, "No CMem or UMem chunk");
         }
         let stks_chunk = value.find_chunk("Stks", "");
         if stks_chunk.is_none() {
-            return runtime_error!(ErrorCode::System, "No Stks chunk",);
+            return fatal_error!(ErrorCode::System, "No Stks chunk",);
         }
 
         Ok(Quetzal::new(

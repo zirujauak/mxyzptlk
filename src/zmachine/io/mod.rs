@@ -3,7 +3,7 @@ use std::{fs::File, io::Write};
 use crate::{
     config::Config,
     error::{ErrorCode, RuntimeError},
-    runtime_error,
+    fatal_error,
 };
 
 use self::screen::{CellStyle, Color, InputEvent, Screen, Style};
@@ -56,7 +56,7 @@ impl IO {
             4 => Screen::new_v4(config)?,
             5 | 7 | 8 => Screen::new_v5(config)?,
             _ => {
-                return runtime_error!(
+                return fatal_error!(
                     ErrorCode::UnsupportedVersion,
                     "Version {} is unsupported",
                     version
@@ -118,14 +118,14 @@ impl IO {
                     self.stream_3.push(Stream3::new(address));
                     Ok(())
                 } else {
-                    runtime_error!(
+                    fatal_error!(
                         ErrorCode::System,
                         "Stream 3 enabled without a table to write to"
                     )
                 }
             }
-            4 => runtime_error!(ErrorCode::System, "Stream 4 is not implemented yet"),
-            _ => runtime_error!(
+            4 => fatal_error!(ErrorCode::System, "Stream 4 is not implemented yet"),
+            _ => fatal_error!(
                 ErrorCode::System,
                 "Stream {} is not a valid stream [1..4]",
                 stream
@@ -160,8 +160,8 @@ impl IO {
                     Ok(())
                 }
             }
-            4 => runtime_error!(ErrorCode::System, "Stream 4 is not implemented yet"),
-            _ => runtime_error!(
+            4 => fatal_error!(ErrorCode::System, "Stream 4 is not implemented yet"),
+            _ => fatal_error!(
                 ErrorCode::System,
                 "Stream {} is not a valid stream [1..4]",
                 stream
@@ -203,7 +203,7 @@ impl IO {
                     }
                 }
             } else {
-                return runtime_error!(
+                return fatal_error!(
                     ErrorCode::System,
                     "Stream 3 enabled, but no table to write to"
                 );
@@ -237,7 +237,7 @@ impl IO {
             if let Some(s) = self.stream_3.last_mut() {
                 s.buffer.push(0xd);
             } else {
-                return runtime_error!(
+                return fatal_error!(
                     ErrorCode::System,
                     "Stream 3 enabled, but no table to write to"
                 );
@@ -269,7 +269,7 @@ impl IO {
 
     pub fn set_window(&mut self, window: u16) -> Result<(), RuntimeError> {
         if window > 1 {
-            runtime_error!(ErrorCode::System, "{} is not a valid window [0..1]", window)
+            fatal_error!(ErrorCode::System, "{} is not a valid window [0..1]", window)
         } else {
             self.screen.select_window(window as u8)
         }
@@ -287,7 +287,7 @@ impl IO {
                 self.screen.erase_window(1)?;
                 self.screen.erase_window(0)
             }
-            _ => runtime_error!(
+            _ => fatal_error!(
                 ErrorCode::System,
                 "{} is not a valid window to erase [-2, -1, 0, 1]",
                 window

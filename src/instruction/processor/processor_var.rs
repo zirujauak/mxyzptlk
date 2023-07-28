@@ -2,7 +2,7 @@ use crate::{
     error::{ErrorCode, RuntimeError},
     instruction::{processor::store_result, Instruction},
     object::property,
-    runtime_error, text,
+    fatal_error, text,
     zmachine::{io::screen::Interrupt, state::header::HeaderField, ZMachine},
 };
 
@@ -184,7 +184,7 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
             debug!(target: "app::input", "Read interrupt firing");
             return zmachine.call_read_interrupt(routine, instruction.address());
         } else {
-            return runtime_error!(
+            return fatal_error!(
                 ErrorCode::System,
                 "Read returned no terminator, but there is no interrupt to run"
             );
@@ -443,7 +443,7 @@ pub fn sound_effect(
                 }
                 3 | 4 => zmachine.stop_sound()?,
                 _ => {
-                    return runtime_error!(
+                    return fatal_error!(
                         ErrorCode::System,
                         "Invalid SOUND_EFFECT effect {}",
                         effect,
@@ -462,7 +462,7 @@ pub fn read_char(
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if !operands.is_empty() && operands[0] != 1 {
-        return runtime_error!(
+        return fatal_error!(
             ErrorCode::Instruction,
             "READ_CHAR argument 1 must be 1, was {}",
             operands[0]
@@ -500,7 +500,7 @@ pub fn read_char(
                     Interrupt::Sound => zmachine.call_sound_interrupt(instruction.address()),
                 }
             } else {
-                runtime_error!(
+                fatal_error!(
                     ErrorCode::System,
                     "read_key return no character or interrupt"
                 )

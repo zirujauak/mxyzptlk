@@ -2,7 +2,7 @@ use crate::error::{ErrorCode, RuntimeError};
 use crate::instruction::{decoder, Instruction};
 use crate::zmachine::state::header::HeaderField;
 use crate::zmachine::ZMachine;
-use crate::{runtime_error, text};
+use crate::{fatal_error, text};
 
 use super::branch;
 use super::store_result;
@@ -57,14 +57,14 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
         match instruction.branch() {
             Some(b) => b.address(),
             None => {
-                return runtime_error!(ErrorCode::Save, "V3 SAVE should be a branch instruction")
+                return fatal_error!(ErrorCode::Save, "V3 SAVE should be a branch instruction")
             }
         }
     } else {
         match instruction.store() {
             Some(r) => r.address,
             None => {
-                return runtime_error!(ErrorCode::Save, "V4 SAVE should be a store instruction")
+                return fatal_error!(ErrorCode::Save, "V4 SAVE should be a store instruction")
             }
         }
     };

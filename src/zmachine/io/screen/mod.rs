@@ -1,10 +1,9 @@
 mod curses;
 
 use core::fmt;
-use std::any::type_name;
 
 use crate::config::Config;
-use crate::{error::*, runtime_error};
+use crate::{error::*, fatal_error};
 
 #[cfg(not(test))]
 use curses::pancurses::new_terminal;
@@ -140,7 +139,7 @@ fn map_color(color: u8) -> Result<Color, RuntimeError> {
         7 => Ok(Color::Magenta),
         8 => Ok(Color::Cyan),
         9 => Ok(Color::White),
-        _ => runtime_error!(ErrorCode::InvalidColor, "Invalid color {}", color),
+        _ => fatal_error!(ErrorCode::InvalidColor, "Invalid color {}", color),
     }
 }
 
@@ -307,7 +306,7 @@ impl Screen {
             7 => Ok(Color::Magenta),
             8 => Ok(Color::Cyan),
             9 => Ok(Color::White),
-            _ => runtime_error!(ErrorCode::InvalidColor, "Invalid color {}", color),
+            _ => fatal_error!(ErrorCode::InvalidColor, "Invalid color {}", color),
         }
     }
 
@@ -356,7 +355,7 @@ impl Screen {
             self.cursor_1 = Some((self.top, 1));
             Ok(())
         } else {
-            runtime_error!(ErrorCode::InvalidWindow, "Invalid window {}", window)
+            fatal_error!(ErrorCode::InvalidWindow, "Invalid window {}", window)
         }
     }
 
@@ -455,7 +454,7 @@ impl Screen {
                 self.lines_since_input = 0;
                 Ok(())
             }
-            _ => runtime_error!(
+            _ => fatal_error!(
                 ErrorCode::InvalidWindow,
                 "ERASE_WINDOW invalid window {}",
                 window

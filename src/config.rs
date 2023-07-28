@@ -3,7 +3,7 @@ use std::fs::File;
 
 use crate::{
     error::{ErrorCode, RuntimeError},
-    runtime_error,
+    fatal_error,
 };
 
 #[derive(Debug)]
@@ -44,7 +44,7 @@ impl TryFrom<File> for Config {
 
                 Ok(Config::new(foreground, background, logging))
             }
-            Err(e) => runtime_error!(ErrorCode::System, "{}", e),
+            Err(e) => fatal_error!(ErrorCode::System, "{}", e),
         }
     }
 }

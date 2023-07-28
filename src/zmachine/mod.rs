@@ -19,7 +19,7 @@ use crate::instruction::decoder;
 use crate::instruction::processor;
 use crate::instruction::StoreResult;
 use crate::object::property;
-use crate::runtime_error;
+use crate::fatal_error;
 use crate::sound::Manager;
 use crate::text;
 use crate::zmachine::io::screen::Interrupt;
@@ -352,7 +352,7 @@ impl ZMachine {
                     if !self.io.is_stream_2_open() {
                         if let Err(e) = self.start_stream_2() {
                             error!(target: "app::stream", "Error starting stream 2: {}", e);
-                            return runtime_error!(
+                            return fatal_error!(
                                 ErrorCode::System,
                                 "Error creating transcript file: {}",
                                 e
@@ -377,7 +377,7 @@ impl ZMachine {
                 self.io
                     .disable_output_stream(&mut self.state, i16::abs(stream) as u8)
             }
-            _ => runtime_error!(
+            _ => fatal_error!(
                 ErrorCode::System,
                 "Output stream {} is not valid: [-4..4]",
                 stream
@@ -658,19 +658,19 @@ impl ZMachine {
         let f = self.read_line(&n, 32, &['\r' as u16], 0)?;
         let filename = match String::from_utf16(&f) {
             Ok(s) => s.trim().to_string(),
-            Err(e) => return runtime_error!(ErrorCode::System, "Error parsing user input: {}", e),
+            Err(e) => return fatal_error!(ErrorCode::System, "Error parsing user input: {}", e),
         };
 
         if !overwrite {
             match Path::new(&filename).try_exists() {
                 Ok(b) => match b {
                     true => {
-                        return runtime_error!(ErrorCode::System, "'{}' already exists.", filename)
+                        return fatal_error!(ErrorCode::System, "'{}' already exists.", filename)
                     }
                     false => {}
                 },
                 Err(e) => {
-                    return runtime_error!(
+                    return fatal_error!(
                         ErrorCode::System,
                         "Error checking if '{}' exists: {}",
                         filename,
@@ -683,7 +683,7 @@ impl ZMachine {
         match Regex::new(r"^((.*\.z\d)|(.*\.blb)|(.*\.blorb))$") {
             Ok(r) => {
                 if r.is_match(&filename) {
-                    runtime_error!(
+                    fatal_error!(
                         ErrorCode::System,
                         "Filenames ending in '.z#' are not allowed"
                     )
@@ -691,7 +691,7 @@ impl ZMachine {
                     Ok(filename)
                 }
             }
-            Err(e) => runtime_error!(
+            Err(e) => fatal_error!(
                 ErrorCode::System,
                 "Interal error with regex checking filename: {}",
                 e
@@ -713,7 +713,7 @@ impl ZMachine {
                 .open(filename.trim())
             {
                 Ok(f) => Ok(f),
-                Err(e) => runtime_error!(ErrorCode::System, "{}", e),
+                Err(e) => fatal_error!(ErrorCode::System, "{}", e),
             },
             Err(e) => {
                 self.print_str(format!("Error creating file: {}\r", e))?;
@@ -733,11 +733,11 @@ impl ZMachine {
 
         match file.write_all(data) {
             Ok(_) => (),
-            Err(e) => return runtime_error!(ErrorCode::System, "{}", e),
+            Err(e) => return fatal_error!(ErrorCode::System, "{}", e),
         };
         match file.flush() {
             Ok(_) => Ok(()),
-            Err(e) => runtime_error!(ErrorCode::System, "{}", e),
+            Err(e) => fatal_error!(ErrorCode::System, "{}", e),
         }
     }
 
@@ -747,9 +747,9 @@ impl ZMachine {
         match File::open(filename.trim()) {
             Ok(mut file) => match file.read_to_end(&mut data) {
                 Ok(_) => Ok(data),
-                Err(e) => runtime_error!(ErrorCode::System, "{}", e),
+                Err(e) => fatal_error!(ErrorCode::System, "{}", e),
             },
-            Err(e) => runtime_error!(ErrorCode::System, "{}: {}", filename, e),
+            Err(e) => fatal_error!(ErrorCode::System, "{}: {}", filename, e),
         }
     }
 

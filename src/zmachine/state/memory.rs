@@ -1,6 +1,6 @@
 use std::{fmt, fs::File, io::Read};
 
-use crate::{error::*, runtime_error};
+use crate::{error::*, fatal_error};
 
 use super::header::HeaderField;
 
@@ -38,7 +38,7 @@ impl TryFrom<&mut File> for Memory {
         let mut d = Vec::new();
         match value.read_to_end(&mut d) {
             Ok(_) => Ok(Memory::new(d)),
-            Err(e) => runtime_error!(ErrorCode::System, "Error reading file: {}", e),
+            Err(e) => fatal_error!(ErrorCode::System, "Error reading file: {}", e),
         }
     }
 }
@@ -90,7 +90,7 @@ impl Memory {
         if address < self.map.len() {
             Ok(self.map[address])
         } else {
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::InvalidAddress,
                 "Byte address {:#06x} beyond end of memory ({:#06x})",
                 address,
@@ -103,7 +103,7 @@ impl Memory {
         if address < self.map.len() - 1 {
             Ok(word_value(self.map[address], self.map[address + 1]))
         } else {
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::InvalidAddress,
                 "Word address {:#06x} beyond end of memory ({:#06x})",
                 address,
@@ -118,7 +118,7 @@ impl Memory {
             self.map[address] = value;
             Ok(())
         } else {
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::InvalidAddress,
                 "Byte address {:#06x} beyond end of memory ({:#06x})",
                 address,
@@ -135,7 +135,7 @@ impl Memory {
             self.map[address + 1] = lb;
             Ok(())
         } else {
-            runtime_error!(
+            fatal_error!(
                 ErrorCode::InvalidAddress,
                 "Word address {:#06x} beyond end of memory ({:#06x})",
                 address,
@@ -182,14 +182,12 @@ impl Memory {
 
     pub fn restore(&mut self, data: &Vec<u8>) -> Result<(), RuntimeError> {
         if data.len() != self.dynamic.len() {
-            Err(RuntimeError::new(
+            fatal_error!(
                 ErrorCode::Restore,
-                format!(
-                    "Dynamic memory size doesn't match: {:04x} != {:04x}",
-                    self.dynamic.len(),
-                    data.len()
-                ),
-            ))
+                "Dynamic memory size doesn't match: {:04x} != {:04x}",
+                self.dynamic.len(),
+                data.len()
+            )
         } else {
             self.map[..][..data.len()].copy_from_slice(data);
             Ok(())
