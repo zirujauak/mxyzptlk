@@ -56,16 +56,12 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
     let pc = if zmachine.version() == 3 {
         match instruction.branch() {
             Some(b) => b.address(),
-            None => {
-                return fatal_error!(ErrorCode::Save, "V3 SAVE should be a branch instruction")
-            }
+            None => return fatal_error!(ErrorCode::Save, "V3 SAVE should be a branch instruction"),
         }
     } else {
         match instruction.store() {
             Some(r) => r.address,
-            None => {
-                return fatal_error!(ErrorCode::Save, "V4 SAVE should be a store instruction")
-            }
+            None => return fatal_error!(ErrorCode::Save, "V4 SAVE should be a store instruction"),
         }
     };
 

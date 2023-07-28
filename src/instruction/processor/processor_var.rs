@@ -1,8 +1,9 @@
 use crate::{
     error::{ErrorCode, RuntimeError},
+    fatal_error,
     instruction::{processor::store_result, Instruction},
     object::property,
-    fatal_error, text,
+    text,
     zmachine::{io::screen::Interrupt, state::header::HeaderField, ZMachine},
 };
 

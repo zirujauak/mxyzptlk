@@ -2,8 +2,8 @@ use std::{collections::VecDeque, fmt};
 
 use crate::{
     error::{ErrorCode, RuntimeError},
-    quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
     fatal_error,
+    quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
 };
 
 use self::{

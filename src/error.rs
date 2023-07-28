@@ -24,7 +24,7 @@ pub enum ErrorCode {
 #[derive(Debug, PartialEq)]
 pub enum ErrorType {
     Recoverable,
-    Fatal
+    Fatal,
 }
 pub struct RuntimeError {
     error_type: ErrorType,
@@ -34,11 +34,19 @@ pub struct RuntimeError {
 
 impl RuntimeError {
     pub fn recoverable(code: ErrorCode, message: String) -> RuntimeError {
-        RuntimeError { error_type: ErrorType::Recoverable, code, message }
+        RuntimeError {
+            error_type: ErrorType::Recoverable,
+            code,
+            message,
+        }
     }
 
     pub fn fatal(code: ErrorCode, message: String) -> RuntimeError {
-        RuntimeError { error_type: ErrorType::Fatal, code, message }
+        RuntimeError {
+            error_type: ErrorType::Fatal,
+            code,
+            message,
+        }
     }
 
     pub fn is_recoverable(&self) -> bool {
@@ -59,12 +67,20 @@ macro_rules! fatal_error {
 
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?} [{:?}] {}", self.error_type, self.code, self.message)
+        write!(
+            f,
+            "{:?} [{:?}] {}",
+            self.error_type, self.code, self.message
+        )
     }
 }
 
 impl fmt::Debug for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?} [{:?}] {}", self.error_type, self.code, self.message)
+        write!(
+            f,
+            "{:?} [{:?}] {}",
+            self.error_type, self.code, self.message
+        )
     }
 }

@@ -14,12 +14,12 @@ use std::time::UNIX_EPOCH;
 
 use crate::config::Config;
 use crate::error::*;
+use crate::fatal_error;
 use crate::files;
 use crate::instruction::decoder;
 use crate::instruction::processor;
 use crate::instruction::StoreResult;
 use crate::object::property;
-use crate::fatal_error;
 use crate::sound::Manager;
 use crate::text;
 use crate::zmachine::io::screen::Interrupt;

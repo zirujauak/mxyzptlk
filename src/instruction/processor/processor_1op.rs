@@ -1,8 +1,9 @@
 use crate::{
     error::{ErrorCode, RuntimeError},
+    fatal_error,
     instruction::Instruction,
     object::{self, property},
-    fatal_error, text,
+    text,
     zmachine::ZMachine,
 };
 
