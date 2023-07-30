@@ -63,17 +63,17 @@ fn check_config(name: &str) -> bool {
 }
 
 pub fn config_file(name: &str) -> Option<String> {
-    // Check ~/.mxyzptlk/{name} first
-    if let Some(home) = dirs::home_dir() {
+    if check_config(name) {
+        // Check the CWD first
+        Some(name.to_string())
+    } else if let Some(home) = dirs::home_dir() {
+        // And then check ~/.mxyzptlk/{name} if not found
         let filename = format!("{}/.mxyzptlk/{}", home.to_str().unwrap(), name);
         if check_config(&filename) {
-            return Some(filename);
+            Some(filename)
+        } else {
+            None
         }
-    }
-
-    // If not there, check CWD
-    if check_config(name) {
-        Some(name.to_string())
     } else {
         None
     }

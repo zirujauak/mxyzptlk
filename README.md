@@ -112,11 +112,11 @@ The default configuration will `ignore` recoverable errors, which is what most u
 
 ### Configuration
 
-As referenced in the installation instructions, the `config.yml` as shipped contains the default configuration.  If you're happy with the default color screen (white foreground on black background) and don't need logs for debugging a zcode file or fixing bugs in the interpreter, then you probably don't need this file.  However, if you wish to change the default color scheme, terminal library, or enable logging, you'll need to ensure a copy of this file is either present in the `.mxyzptlk/` directory in "home" directory (which varies by platform).
+As referenced in the installation instructions, the `config.yml` as shipped contains the default configuration.  If you're happy with the default color screen (white foreground on black background) and don't need logs for debugging a zcode file or fixing bugs in the interpreter, then you probably don't need this file.  However, if you wish to change the default color scheme, terminal library, or enable logging, you'll need to ensure a copy of this file is either present in the `.mxyzptlk/` directory in the "home" directory (which varies by platform) or the current working directory where `mxyzptlk` is launched from, with the current working directory taking precedence.
 
 ### Logs
 
-When logging is enabled, execution will dump quite a bit of output to various `.log` files in the current working directory.  Logging is disabled by default, but can be enabled via the `config.yml` file (see above) and further refined by changing the various `level` values in `log4rs.yml` for different log files.  
+When logging is enabled, execution will dump quite a bit of output to various `.log` files in the current working directory.  Logging is disabled by default, but can be enabled via the `config.yml` file (see above) and further refined by changing the various `level` values in `log4rs.yml` for different log files.  As with `config.yml`, `log4rs.yml` should be located in the `.mxyzptlk/` directory in the home directory or the current working directory, with any copy in the current working directory taking precedence.
 
 ## Building from source
 
