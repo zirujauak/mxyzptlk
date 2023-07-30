@@ -373,10 +373,6 @@ impl fmt::Display for Instruction {
         for b in &self.bytes {
             write!(f, "{:02x} ", b)?;
         }
-        // // Padding
-        // for _ in 0..(23 - self.bytes.len()) {
-        //     write!(f, "   ")?;
-        // }
 
         write!(f, " {}", self.opcode())?;
 
