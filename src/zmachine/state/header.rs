@@ -103,7 +103,7 @@ pub fn flag2(state: &State, flag: Flags2) -> Result<u8, RuntimeError> {
 pub fn set_flag1(state: &mut State, flag: u8) -> Result<(), RuntimeError> {
     let flags = field_byte(state, HeaderField::Flags1)?;
     let new = flags | flag;
-    debug!(target: "app::header", "Set FLAG1 {:08b}: {:08b} => {:08b}", flag, flags, new);
+    debug!(target: "app::state", "Set FLAG1 {:08b}: {:08b} => {:08b}", flag, flags, new);
     state.write_byte(HeaderField::Flags1 as usize, new)
 }
 
@@ -111,14 +111,14 @@ pub fn set_flag2(state: &mut State, flag: Flags2) -> Result<(), RuntimeError> {
     let f = format!("{:?}", flag);
     let flags = field_word(state, HeaderField::Flags2)?;
     let new = flags | flag as u16;
-    debug!(target: "app::header", "Set FLAG2 {}: {:010b} => {:010b}", f, flags, new);
+    debug!(target: "app::state", "Set FLAG2 {}: {:010b} => {:010b}", f, flags, new);
     state.memory.write_word(HeaderField::Flags2 as usize, new)
 }
 
 pub fn clear_flag1(state: &mut State, flag: u8) -> Result<(), RuntimeError> {
     let flags = field_byte(state, HeaderField::Flags1)?;
     let new = flags & !flag;
-    debug!(target: "app::header", "Clear FLAG1 {:08b}: {:08b} => {:08b}", flag, flags, new);
+    debug!(target: "app::state", "Clear FLAG1 {:08b}: {:08b} => {:08b}", flag, flags, new);
     state.write_byte(HeaderField::Flags1 as usize, new)
 }
 
@@ -126,14 +126,14 @@ pub fn clear_flag2(state: &mut State, flag: Flags2) -> Result<(), RuntimeError> 
     let f = format!("{:?}", flag);
     let flags = field_word(state, HeaderField::Flags2)?;
     let new = flags & !(flag as u16);
-    debug!(target: "app::header", "Clear FLAG2 {}: {:010b} => {:010b}", f, flags, new);
+    debug!(target: "app::state", "Clear FLAG2 {}: {:010b} => {:010b}", f, flags, new);
     state.memory.write_word(HeaderField::Flags2 as usize, new)
 }
 
 pub fn set_extension(state: &mut State, index: usize, value: u16) -> Result<(), RuntimeError> {
     let extension_table_address = field_word(state, HeaderField::ExtensionTable)? as usize;
     if extension_table_address > 0 {
-        debug!(target: "app::header", "Set extension table word {} to {:04x}", index, value);
+        debug!(target: "app::state", "Set extension table word {} to {:04x}", index, value);
         let table_size = state.read_word(extension_table_address)? as usize;
         if table_size >= index {
             state.write_word(extension_table_address + (index * 2), value)?;

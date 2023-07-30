@@ -184,13 +184,13 @@ impl IO {
                     .map(|c| if *c == 0x0d { 0x0a } else { *c as u8 })
                     .collect();
                 if let Err(e) = f.write_all(&t) {
-                    error!(target: "app::io", "Error writing to transcript file: {}", e);
+                    error!(target: "app::stream", "Error writing to transcript file: {}", e);
                 }
                 if let Err(e) = f.flush() {
-                    error!(target: "app::io", "Error writing to transcript file: {}", e);
+                    error!(target: "app::stream", "Error writing to transcript file: {}", e);
                 }
             } else {
-                warn!(target: "app::io", "Stream 2 is not open");
+                warn!(target: "app::stream", "Stream 2 is not open");
             }
         }
 

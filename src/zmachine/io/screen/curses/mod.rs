@@ -81,7 +81,7 @@ fn char_to_u16(c: char) -> InputEvent {
         '\u{a1}' => InputEvent::from_char(0xde),
         '\u{bf}' => InputEvent::from_char(0xdf),
         _ => {
-            error!(target: "app::input", "Unmapped input {:02x}", c as u8);
+            error!(target: "app::screen", "Unmapped input {:02x}", c as u8);
             InputEvent::no_input()
         }
     }
@@ -165,7 +165,7 @@ fn map_output(zchar: u16, font: u8) -> char {
             0xde => '\u{a1}',
             0xdf => '\u{bf}',
             _ => {
-                error!(target: "app::input", "Unmapped font {} character {:04x}", font, zchar);
+                error!(target: "app::screen", "Unmapped font {} character {:04x}", font, zchar);
                 zchar as u8 as char
             }
         },
@@ -178,7 +178,7 @@ fn map_output(zchar: u16, font: u8) -> char {
             0xd9 => '\u{2518}',
             0xda => '\u{250c}',
             _ => {
-                warn!(target: "app::trace", "Unmapped font 3 character {:04x}", zchar);
+                warn!(target: "app::screen", "Unmapped font 3 character {:04x}", zchar);
                 zchar as u8 as char
             }
         },

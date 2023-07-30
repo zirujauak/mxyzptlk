@@ -114,7 +114,7 @@ impl Memory {
 
     pub fn write_byte(&mut self, address: usize, value: u8) -> Result<(), RuntimeError> {
         if address < self.map.len() {
-            info!(target: "app::memory", "Write {:#02x} to ${:04x}", value, address);
+            debug!(target: "app::state", "Write {:#02x} to ${:04x}", value, address);
             self.map[address] = value;
             Ok(())
         } else {
@@ -129,7 +129,7 @@ impl Memory {
 
     pub fn write_word(&mut self, address: usize, value: u16) -> Result<(), RuntimeError> {
         if address < self.map.len() - 2 {
-            info!(target: "app::memory", "Write {:#04x} to ${:04x}", value, address);
+            debug!(target: "app::state", "Write {:#04x} to ${:04x}", value, address);
             let (hb, lb) = byte_values(value);
             self.map[address] = hb;
             self.map[address + 1] = lb;

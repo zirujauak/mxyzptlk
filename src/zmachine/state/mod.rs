@@ -56,10 +56,9 @@ impl TryFrom<&State> for Mem {
     type Error = RuntimeError;
 
     fn try_from(value: &State) -> Result<Self, Self::Error> {
-        debug!(target: "app::quetzal", "Building CMem chunk from state");
         let compressed_memory = value.memory().compress();
+        debug!(target: "app::state", "Compressed dynamic memory: {:04x} bytes", compressed_memory.len());
         let mem = Mem::new(true, compressed_memory);
-        // debug!(target: "app::quetzal", "CMem: {:?}", mem);
         Ok(mem)
     }
 }
@@ -68,8 +67,6 @@ impl TryFrom<(&State, usize)> for IFhd {
     type Error = RuntimeError;
 
     fn try_from((state, pc): (&State, usize)) -> Result<Self, Self::Error> {
-        debug!(target: "app::quetzal", "Building IFhd chunk from state");
-
         let release_number = header::field_word(state, HeaderField::Release)?;
         let mut serial_number = Vec::new();
         for i in 0..6 {
@@ -83,7 +80,7 @@ impl TryFrom<(&State, usize)> for IFhd {
             checksum,
             (pc as u32) & 0xFFFFFF,
         );
-        debug!(target: "app::quetzal", "IFhd: {}", ifhd);
+        debug!(target: "app::state", "State derived IFhd: {}", ifhd);
         Ok(ifhd)
     }
 }
@@ -92,7 +89,6 @@ impl TryFrom<&State> for Stks {
     type Error = RuntimeError;
 
     fn try_from(value: &State) -> Result<Self, Self::Error> {
-        debug!(target: "app::quetzal", "Building Stks chunk from state");
         let mut frames = Vec::new();
         for f in &value.frames {
             // Flags: 0b000rvvvv
@@ -130,6 +126,7 @@ impl TryFrom<&State> for Stks {
         }
 
         let stks = Stks::new(frames);
+        debug!(target: "app::state", "Runtime stack data: {} frames", stks.stks().len());
         Ok(stks)
     }
 }
@@ -333,6 +330,7 @@ impl State {
     }
 
     pub fn set_variable(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
+        debug!(target: "app::state", "Set variable {:02x} to {:04x}", variable, value);
         if variable < 16 {
             self.current_frame_mut()?
                 .set_local_variable(variable, value)
@@ -343,6 +341,7 @@ impl State {
     }
 
     pub fn set_variable_indirect(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
+        debug!(target: "app::state", "Set variable indirect {:02x} to {:04x}", variable, value);
         if variable < 16 {
             self.current_frame_mut()?
                 .set_local_variable_indirect(variable, value)
@@ -480,7 +479,7 @@ impl State {
         return_address: usize,
     ) -> Result<usize, RuntimeError> {
         if self.read_interrupt_pending {
-            debug!(target: "app::frame", "Read interrupt routine firing @ ${:06x}", address);
+            debug!(target: "app::state", "Read interrupt routine firing: ${:06x}", address);
             self.read_interrupt_result = Some(0);
             let initial_pc = self.call_routine(address, &vec![], None, return_address)?;
             self.current_frame_mut()?.set_input_interrupt(true);
@@ -540,7 +539,7 @@ impl State {
         if let Some(f) = self.frames.pop() {
             let n = self.current_frame_mut()?;
             n.set_pc(f.return_address());
-            debug!(target: "app::frame", "Return to ${:06x} -> {:?}", f.return_address(), f.result());
+            debug!(target: "app::state", "Return {:04x} => {:?} to ${:06x}", value, f.result(), f.return_address());
             if f.input_interrupt() {
                 if self.read_interrupt_pending {
                     self.read_interrupt_result = Some(value);
@@ -579,8 +578,7 @@ impl State {
     // Save/Restore
     pub fn save(&self, pc: usize) -> Result<Vec<u8>, RuntimeError> {
         let quetzal = Quetzal::try_from((self, pc))?;
-        debug!(target: "app::quetzal", "Saving game state");
-        // trace!(target: "app::quetzal", "{}", quetzal);
+        debug!(target: "app::state", "Game state encoded");
         Ok(Vec::from(quetzal))
     }
 
@@ -614,12 +612,12 @@ impl State {
 
     pub fn restore(&mut self, data: Vec<u8>) -> Result<Option<usize>, RuntimeError> {
         let quetzal = Quetzal::try_from(data)?;
-        debug!(target: "app::quetzal", "Restoring game state");
+        debug!(target: "app::state", "Restoring game state");
         // trace!(target: "app::quetzal", "{}", quetzal);
         // &*self is an immutable ref, necessary for try_from
         let ifhd = IFhd::try_from((&*self, 0))?;
         if &ifhd != quetzal.ifhd() {
-            error!(target: "app::quetzal", "Save file was created from a different story file");
+            error!(target: "app::state", "Restore state was created from a different story file");
             recoverable_error!(
                 ErrorCode::Restore,
                 "Save file was created from a different story file"
@@ -631,7 +629,7 @@ impl State {
 
     pub fn save_undo(&mut self, pc: usize) -> Result<(), RuntimeError> {
         let quetzal = Quetzal::try_from((&*self, pc))?;
-        debug!(target: "app::quetzal", "Storing undo state");
+        debug!(target: "app::state", "Storing undo state");
         self.undo_stack.push_back(quetzal);
         while self.undo_stack.len() > 10 {
             // Remove the first (oldest) entries
@@ -642,10 +640,10 @@ impl State {
 
     pub fn restore_undo(&mut self) -> Result<Option<usize>, RuntimeError> {
         if let Some(quetzal) = self.undo_stack.pop_back() {
-            debug!(target: "app::quetzal", "Restoring undo state");
+            debug!(target: "app::state", "Restoring undo state");
             self.restore_state(quetzal)
         } else {
-            warn!(target: "app::quetzal", "No saved state for undo");
+            warn!(target: "app::state", "No saved state for undo");
             recoverable_error!(ErrorCode::UndoNoState, "Undo stack is empty")
         }
     }

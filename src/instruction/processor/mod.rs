@@ -31,7 +31,7 @@ fn operand_values(
         v.push(value)
     }
     if !v.is_empty() {
-        info!(target: "app::instruction", "{}", l);
+        debug!(target: "app::instruction", "{}", l);
     }
     Ok(v)
 }
@@ -88,7 +88,7 @@ fn call_fn(
 }
 
 pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
-    info!(target: "app::instruction", "dispatch: {}", instruction);
+    debug!(target: "app::instruction", "dispatch: {}", instruction);
     match instruction.opcode().form() {
         OpcodeForm::Ext => match (zmachine.version(), instruction.opcode().instruction()) {
             // V6 opcodes have been omitted

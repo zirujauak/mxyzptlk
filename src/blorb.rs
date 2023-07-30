@@ -327,13 +327,13 @@ impl TryFrom<&Chunk> for Blorb {
                 Some(i) => match IFhd::try_from(i) {
                     Ok(i) => Some(i),
                     Err(e) => {
-                        error!(target: "app::sound", "Error reading IFhd chunk: {}", e);
-                        warn!(target: "app::sound", "Unable to extract IFhd chunk, unabled to verify relation to game");
+                        error!(target: "app::resource", "Error reading IFhd chunk: {}", e);
+                        warn!(target: "app::resource", "Unable to extract IFhd chunk, unabled to verify relation to game");
                         None
                     }
                 },
                 None => {
-                    warn!(target: "app::sound", "No IFhd chunk found, unable to verify relation to game");
+                    warn!(target: "app::resource", "No IFhd chunk found, unable to verify relation to game");
                     None
                 }
             };
@@ -368,12 +368,12 @@ impl TryFrom<&Chunk> for Blorb {
                             if e.offset() == execs[0].start() {
                                 Some(e.data().clone())
                             } else {
-                                warn!(target: "app::trace", "'Exec' resources should start at {:06x}, but the ZCOD chunk starts at {:06}, therefore ignoring it", execs[0].start, e.offset());
+                                warn!(target: "app::resource", "'Exec' resources should start at {:06x}, but the ZCOD chunk starts at {:06}, therefore ignoring it", execs[0].start, e.offset());
                                 None
                             }
                         }
                         None => {
-                            warn!(target: "app::trace", "'Exec' resource index exists, but no ZCOD chunk found");
+                            warn!(target: "app::resource", "'Exec' resource index exists, but no ZCOD chunk found");
                             None
                         }
                     }

@@ -4,58 +4,30 @@ appenders:
   stdout:
     kind: console
 
-  blorb:
-    kind: file
-    path: "blorb.log"
-    append: false
-    encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
-
-  frame:
-    kind: file
-    path: "frame.log"
-    append: false
-    encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
-
-  header:
-    kind: file
-    path: "header.log"
-    append: false
-    encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
-
   instruction:
     kind: file
     path: "instruction.log"
     append: false
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
-
-  input:
+  
+  mxyzptlk:
     kind: file
-    path: "input.log"
+    path: "mxyzptlk.log"
     append: false
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
-  memory:
+  resource:
     kind: file
-    path: "memory.log"
+    path: "resource.log"
     append: false
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
-  object:
+  screen:
     kind: file
-    path: "object.log"
-    append: false
-    encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
-
-  quetzal:
-    kind: file
-    path: "quetzal.log"
+    path: "screen.log"
     append: false
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
@@ -67,9 +39,9 @@ appenders:
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
-  stack:
+  state:
     kind: file
-    path: "stack.log"
+    path: "state.log"
     append: false
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
@@ -81,100 +53,50 @@ appenders:
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
 
-  variable:
-    kind: file
-    path: "variable.log"
-    append: false
-    encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]: {m}{n}"
-
-  trace:
-    kind: file
-    path: "trace.log"
-    append: false
-    encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} {l} [{X(instruction_count)}]:{f}/{L} - {m}{n}"
-
 root:
   level: info
   appenders:
-    - trace
+    - mxyzptlk
 
 loggers:
-  app::blorb:
-    level: warn
-    appenders:
-      - blorb
-    additive: false
-
-  app::frame:
-    level: warn
-    appenders:
-      - frame
-    additive: false
-
-  app::header:
-    level: warn
-    appenders:
-      - header
-    additive: false
-
-  app::input:
-    level: warn
-    appenders:
-      - input
-    additive: false
-
   app::instruction:
-    level: warn
+    level: info
     appenders:
       - instruction
+      - mxyzptlk
     additive: false
 
-  app::memory:
-    level: warn
+  app::resource:
+    level: info
     appenders:
-      - memory
+      - resource
+      - mxyzptlk
     additive: false
 
-  app::object:
-    level: warn
+  app::screen:
+    level: info
     appenders:
-      - object
-    additive: false
-
-  app::quetzal:
-    level: warn
-    appenders:
-      - quetzal
+      - screen
+      - mxyzptlk
     additive: false
 
   app::sound:
-    level: warn
+    level: info
     appenders:
       - sound
+      - mxyzptlk
     additive: false
 
-  app::stack:
-    level: warn
+  app::state:
+    level: info
     appenders:
-      - stack
+      - state
+      - mxyzptlk
     additive: false
 
   app::stream:
-    level: warn
-    appenders:
-      - stack
-    additive: false
-
-  app::variable:
-    level: warn
-    appenders:
-      - variable
-    additive: false
-
-  app::trace:
     level: info
     appenders:
-      - trace
+      - stream
+      - mxyzptlk
     additive: false
