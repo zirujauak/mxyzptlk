@@ -26,6 +26,7 @@ impl PCTerminal {
         pancurses::cbreak();
         pancurses::start_color();
         pancurses::mousemask(ALL_MOUSE_EVENTS, None);
+        pancurses::set_title("mxyzptlk - a rusty z-machine interpreter");
 
         window.keypad(true);
         window.clear();
