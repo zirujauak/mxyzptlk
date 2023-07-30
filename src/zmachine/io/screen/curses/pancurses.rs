@@ -159,9 +159,9 @@ impl Terminal for PCTerminal {
         self.window.mv(row as i32 - 1, 0);
         self.window.deleteln();
         let curs = self.window.get_max_yx();
-        for i in 0..curs.1 {
-            self.window.mvaddch(curs.0 - 1, i, ' ');
-        }
+        self.window.mv(curs.0 - 1, 0);
+        self.window.deleteln();
+        self.window.refresh();
     }
 
     fn backspace(&mut self, at: (u32, u32)) {
@@ -216,16 +216,10 @@ impl Terminal for PCTerminal {
         errwin.addstr(instruction);
         errwin.mv(5, 2);
         errwin.addstr(prompt_str);
-        // if recoverable {
-        //     errwin.addstr("Press 'C' to continue, or any other key to exit");
-        // } else {
-        //     errwin.addstr("Press any key to exit");
-        // }
         errwin.refresh();
         errwin.nodelay(false);
         loop {
             if let Some(ch) = errwin.getch() {
-                info!(target: "app::trace", "{:?}", ch);
                 errwin.delwin();
                 self.window.touch();
                 self.window.refresh();
