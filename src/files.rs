@@ -52,22 +52,28 @@ pub fn last_existing(base: &str, suffix: &str) -> Result<Vec<u16>, RuntimeError>
     }
 }
 
+fn check_config(name: &str) -> bool {
+    match Path::new(name).try_exists() {
+        Ok(b) => b,
+        Err(e) => {
+            info!(target: "app::trace", "Error checking existence of {}: {}", name, e);
+            false
+        }
+    }
+}
+
 pub fn config_file(name: &str) -> Option<String> {
+    // Check ~/.mxyzptlk/{name} first
     if let Some(home) = dirs::home_dir() {
         let filename = format!("{}/.mxyzptlk/{}", home.to_str().unwrap(), name);
-        match Path::new(&filename).try_exists() {
-            Ok(b) => {
-                if b {
-                    Some(filename.to_string())
-                } else {
-                    None
-                }
-            }
-            Err(e) => {
-                info!(target: "app::trace", "Error checking existence of {}: {}", filename, e);
-                None
-            }
+        if check_config(&filename) {
+            return Some(filename);
         }
+    }
+
+    // If not there, check CWD
+    if check_config(name) {
+        Some(name.to_string())
     } else {
         None
     }

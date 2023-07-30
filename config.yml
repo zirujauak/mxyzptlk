@@ -7,7 +7,7 @@
 #  7 = MAGENTA
 #  8 = CYAN
 #  9 = WHITE
-foreground: 8
+foreground: 9
 background: 2
 # Logging - "enabled" or "disabled"
 logging: disabled
