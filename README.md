@@ -93,7 +93,7 @@ File names ending in `.z#`, `.blorb`, or `.blb` are not permitted, nor will exis
 
 Any errors creating, opening, reading, or writing to files are reported by the interpreter and shouldn't halt game execution.  
 
-*\*If creation of the transcript file fails, the game code may print the transcript heading, but transcripting will _not_ be enabled and not text is written to disk.  Attempting to start scripting a second time _will_ prompt for a filename again*
+*\*If creation of the transcript file fails, the game code may print the transcript heading, but transcripting will _not_ be enabled and no text is written to disk.  In this case, toggling scripting off and on again _will_ prompt for a filename again*
 
 #### **A Note About Error Handling**
 Errors may occur during gameplay.  Some games (Infocom's `Sherlock`, in particular) may unintentionally do things that aren't allowd (like manipulate an invalid attribute - look at you, `Sherlock`).  There may be bugs in games (or `mxyzptlk` itself) that result in more serious errors, such as a stack underflow or divide by zero.
@@ -128,8 +128,7 @@ The following external libraries are optional:
     
     See the [Installation](#Installation) section above for instructions on installing the library.
 
-* Linux platforms may require additional libraries.  If compilation fails, the error output will list the missing libraries.
-
+* Linux platforms may require additional libraries when the `sndfile` feature is enabled.  If compilation fails, the error output will list the missing libraries.  Below are libraries that I've seen required on various Linux platforms during development:
     * ALSA development libraries (`libasound2-dev`)
     * UDEV development libraries (`libudev-dev`)
 
@@ -146,7 +145,7 @@ cargo build --release
 #### Features
 * `sndfile` - include `libsndfile` for automatic AIFF sound resource conversion.
 
-For example, for a build including `libsndfile`:
+To build with `libsndfile`:
 ```
 cargo build --release --features sndfile
 ```
@@ -159,7 +158,7 @@ The source code includes extensive unit tests.  To run these tests:
 cargo test
 ```
 
-Unit tests silently create and (usually) delete several files named `test-...`.  Avoid saving games or transcripts in the repo with similar names to avoid potential data loss.
+Unit tests silently create and (usually) delete several files named `test-...`.  Avoid saving games or transcripts in the source resposiblty with similar names to avoid potential data loss.
 
 ### Profiling
 
