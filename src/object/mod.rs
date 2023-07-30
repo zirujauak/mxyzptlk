@@ -1,6 +1,5 @@
 use crate::{
     error::*,
-    recoverable_error,
     zmachine::{state::header::HeaderField, ZMachine},
 };
 
@@ -9,7 +8,7 @@ pub mod property;
 
 fn object_address(zmachine: &ZMachine, object: usize) -> Result<usize, RuntimeError> {
     if object == 0 {
-        recoverable_error!(ErrorCode::ObjectZero, "Request for the address of object 0")
+        Ok(0)
     } else {
         let table = zmachine.header_word(HeaderField::ObjectTable)? as usize;
         let (offset, size) = match zmachine.version() {
@@ -23,7 +22,7 @@ fn object_address(zmachine: &ZMachine, object: usize) -> Result<usize, RuntimeEr
 
 fn relative(zmachine: &ZMachine, object: usize, offset: usize) -> Result<usize, RuntimeError> {
     if object == 0 {
-        recoverable_error!(ErrorCode::ObjectZero, "Request for a relative of object 0")
+        Ok(0)
     } else {
         let object_address = object_address(zmachine, object)?;
 

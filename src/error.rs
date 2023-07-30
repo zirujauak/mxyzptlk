@@ -34,7 +34,6 @@ pub enum ErrorCode {
     NoFrame,
     NoReadInterrupt,
     NoSoundInterrupt,
-    ObjectZero,
     ObjectTreeState,
     PropertySize,
     Quetzal,
