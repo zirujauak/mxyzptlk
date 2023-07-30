@@ -370,19 +370,27 @@ impl State {
 
     fn routine_header(&self, address: usize) -> Result<(usize, Vec<u16>), RuntimeError> {
         let variable_count = self.memory.read_byte(address)? as usize;
-        let (initial_pc, local_variables) = if self.version < 5 {
-            let mut l = Vec::new();
-            for i in 0..variable_count {
-                let a = address + 1 + (i * 2);
-                l.push(self.memory.read_word(a)?);
-            }
-
-            (address + 1 + (variable_count * 2), l)
+        if variable_count > 15 {
+            fatal_error!(
+                ErrorCode::InvalidRoutine,
+                "Routines can have at most 15 local variables: {}",
+                variable_count
+            )
         } else {
-            (address + 1, vec![0; variable_count])
-        };
+            let (initial_pc, local_variables) = if self.version < 5 {
+                let mut l = Vec::new();
+                for i in 0..variable_count {
+                    let a = address + 1 + (i * 2);
+                    l.push(self.memory.read_word(a)?);
+                }
 
-        Ok((initial_pc, local_variables))
+                (address + 1 + (variable_count * 2), l)
+            } else {
+                (address + 1, vec![0; variable_count])
+            };
+
+            Ok((initial_pc, local_variables))
+        }
     }
 
     pub fn string_literal(&self, address: usize) -> Result<Vec<u16>, RuntimeError> {

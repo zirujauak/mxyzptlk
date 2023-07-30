@@ -27,6 +27,7 @@ pub enum ErrorCode {
     InvalidObjectProperty,
     InvalidObjectPropertySize,
     InvalidOutputStream,
+    InvalidRoutine,
     InvalidShift,
     InvalidSoundEffect,
     InvalidWindow,
