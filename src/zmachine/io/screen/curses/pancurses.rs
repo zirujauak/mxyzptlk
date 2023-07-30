@@ -157,10 +157,11 @@ impl Terminal for PCTerminal {
 
     fn scroll(&mut self, row: u32) {
         self.window.mv(row as i32 - 1, 0);
-        self.window.deleteln();
-        let curs = self.window.get_max_yx();
-        self.window.mv(curs.0 - 1, 0);
-        self.window.deleteln();
+        self.window.insdelln(-1);
+        // self.window.deleteln();
+        // let curs = self.window.get_max_yx();
+        // self.window.mv(curs.0 - 1, 0);
+        // self.window.deleteln();
         self.window.refresh();
     }
 
@@ -218,6 +219,7 @@ impl Terminal for PCTerminal {
         errwin.addstr(prompt_str);
         errwin.refresh();
         errwin.nodelay(false);
+        pancurses::flushinp();
         loop {
             if let Some(ch) = errwin.getch() {
                 errwin.delwin();
