@@ -1081,8 +1081,6 @@ mod tests {
         let mut map = test_map(3);
         mock_dictionary(&mut map);
         let mut zmachine = mock_zmachine(map);
-        // G00 is used to print the status line
-        assert!(zmachine.set_variable(0x10, 1).is_ok());
         let i = mock_instruction(
             0x400,
             vec![
