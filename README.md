@@ -120,7 +120,7 @@ When logging is enabled, execution will dump quite a bit of output to various `.
 
 Each log message includes the instruction counter, making is relatively easy to cross-reference data from different log files.  
 
-The logs are split across several files are as follows:
+The logs are split across several files as follows:
 * `instruction.log` - instruction execution
 * `resource.log` - resource file
 * `screen.log` - user-input (keyboard/mouse) and screen output
