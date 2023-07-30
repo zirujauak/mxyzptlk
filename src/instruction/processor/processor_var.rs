@@ -1,8 +1,9 @@
 use crate::{
     error::{ErrorCode, RuntimeError},
+    fatal_error,
     instruction::{processor::store_result, Instruction},
     object::property,
-    text,
+    recoverable_error, text,
     zmachine::{io::screen::Interrupt, state::header::HeaderField, ZMachine},
 };
 
@@ -184,10 +185,10 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
             debug!(target: "app::input", "Read interrupt firing");
             return zmachine.call_read_interrupt(routine, instruction.address());
         } else {
-            return Err(RuntimeError::new(
-                ErrorCode::System,
-                "Read returned no terminator, but there is no interrupt to run".to_string(),
-            ));
+            return fatal_error!(
+                ErrorCode::ReadNoTerminator,
+                "Read returned no terminator, but there is no interrupt to run"
+            );
         }
     }
 
@@ -443,10 +444,11 @@ pub fn sound_effect(
                 }
                 3 | 4 => zmachine.stop_sound()?,
                 _ => {
-                    return Err(RuntimeError::new(
-                        ErrorCode::System,
-                        format!("Invalid SOUND_EFFECT effect {}", effect),
-                    ))
+                    return recoverable_error!(
+                        ErrorCode::InvalidSoundEffect,
+                        "Invalid sound effect {}",
+                        effect,
+                    )
                 }
             }
         }
@@ -461,10 +463,11 @@ pub fn read_char(
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if !operands.is_empty() && operands[0] != 1 {
-        return Err(RuntimeError::new(
-            ErrorCode::Instruction,
-            format!("READ_CHAR argument 1 must be 1, was {}", operands[0]),
-        ));
+        return fatal_error!(
+            ErrorCode::InvalidInstruction,
+            "READ_CHAR first argument must be 1, was {}",
+            operands[0]
+        );
     }
 
     if let Some(v) = zmachine.read_interrupt_result() {
@@ -498,10 +501,10 @@ pub fn read_char(
                     Interrupt::Sound => zmachine.call_sound_interrupt(instruction.address()),
                 }
             } else {
-                Err(RuntimeError::new(
-                    ErrorCode::System,
-                    "read_key return no character or interrupt".to_string(),
-                ))
+                fatal_error!(
+                    ErrorCode::ReadNothing,
+                    "read_key return no character or interrupt"
+                )
             }
         }
     }

@@ -1,5 +1,6 @@
 use crate::{
     error::{ErrorCode, RuntimeError},
+    fatal_error,
     instruction::Instruction,
     object::{self, property},
     text,
@@ -112,10 +113,10 @@ pub fn remove_obj(
                 }
 
                 if sibling == 0 {
-                    return Err(RuntimeError::new(
-                        ErrorCode::ObjectTreeState,
-                        "Unable to find previous sibling of removed object".to_string(),
-                    ));
+                    return fatal_error!(
+                        ErrorCode::InvalidObjectTree,
+                        "Unable to find previous sibling of removed object that is not the first child"
+                    );
                 }
 
                 let o = object::sibling(zmachine, object)?;
@@ -429,7 +430,7 @@ mod tests {
             store(0x402, 0x80),
         );
         assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
-        assert_ok_eq!(zmachine.variable(0x80), 0x00);
+        assert_ok_eq!(zmachine.variable(0x80), 0);
     }
 
     #[test]

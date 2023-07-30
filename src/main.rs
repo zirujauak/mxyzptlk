@@ -194,13 +194,7 @@ fn main() {
 
     trace!(target: "app::trace", "Begin execution");
     if let Err(r) = zmachine.run() {
-        let error: Vec<_> = format!("\r{}\rPress any key to exit", r)
-            .as_bytes()
-            .iter()
-            .map(|x| *x as u16)
-            .collect();
-        let _ = zmachine.print(&error);
-        let _ = zmachine.read_key(0);
+        let _ = zmachine.print_str(format!("\r{}\r", r));
         let _ = zmachine.quit();
         panic!("{}", r)
     }

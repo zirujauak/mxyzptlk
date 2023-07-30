@@ -9,6 +9,7 @@ use sndfile::{
 use tempfile::NamedTempFile;
 
 use crate::error::{ErrorCode, RuntimeError};
+use crate::recoverable_error;
 
 fn tempfile(data: Option<&Vec<u8>>) -> Result<(NamedTempFile, File), RuntimeError> {
     match NamedTempFile::new() {
@@ -17,24 +18,23 @@ fn tempfile(data: Option<&Vec<u8>>) -> Result<(NamedTempFile, File), RuntimeErro
                 if let Some(d) = data {
                     match tempfile.write_all(d) {
                         Ok(_) => Ok((tempfile, file)),
-                        Err(e) => Err(RuntimeError::new(
-                            ErrorCode::System,
-                            format!("Error writing to tempfile: {}", e),
-                        )),
+                        Err(e) => {
+                            recoverable_error!(
+                                ErrorCode::SoundConversion,
+                                "Error writing to tempfile: {}",
+                                e
+                            )
+                        }
                     }
                 } else {
                     Ok((tempfile, file))
                 }
             }
-            Err(e) => Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Error opening tempfile: {}", e),
-            )),
+            Err(e) => {
+                recoverable_error!(ErrorCode::SoundConversion, "Error opening tempfile: {}", e)
+            }
         },
-        Err(e) => Err(RuntimeError::new(
-            ErrorCode::System,
-            format!("Error creating tempfile: {}", e),
-        )),
+        Err(e) => recoverable_error!(ErrorCode::SoundConversion, "Error creating tempfile: {}", e),
     }
 }
 
@@ -64,32 +64,37 @@ pub fn convert_aiff(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
                                 let mut x: Vec<u8> = Vec::new();
                                 match destfile.read_to_end(&mut x) {
                                     Ok(_) => Ok(x),
-                                    Err(e) => Err(RuntimeError::new(
-                                        ErrorCode::System,
-                                        format!("Error reading converted sound data: {}", e),
-                                    )),
+                                    Err(e) => recoverable_error!(
+                                        ErrorCode::SoundConversion,
+                                        "Error reading converted sound data: {}",
+                                        e
+                                    ),
                                 }
                             }
-                            Err(_) => Err(RuntimeError::new(
-                                ErrorCode::System,
-                                "sndfile: Error writing convered sound data:".to_string(),
-                            )),
+                            Err(_) => recoverable_error!(
+                                ErrorCode::SoundConversion,
+                                "sndfile: Error writing convered sound data:"
+                            ),
                         },
-                        Err(_) => Err(RuntimeError::new(
-                            ErrorCode::System,
-                            "sndfile: Error reading source sound data:".to_string(),
-                        )),
+                        Err(_) => recoverable_error!(
+                            ErrorCode::SoundConversion,
+                            "sndfile: Error reading source sound data:"
+                        ),
                     }
                 }
-                Err(e) => Err(RuntimeError::new(
-                    ErrorCode::System,
-                    format!("Error opening output tempfile: {:?}", e),
-                )),
+                Err(e) => {
+                    recoverable_error!(
+                        ErrorCode::SoundConversion,
+                        "Error opening output tempfile: {:?}",
+                        e
+                    )
+                }
             }
         }
-        Err(e) => Err(RuntimeError::new(
-            ErrorCode::System,
-            format!("Error loading AIFF file: {:?}", e),
-        )),
+        Err(e) => recoverable_error!(
+            ErrorCode::SoundConversion,
+            "Error loading AIFF file: {:?}",
+            e
+        ),
     }
 }

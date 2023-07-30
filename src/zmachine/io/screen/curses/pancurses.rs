@@ -26,6 +26,7 @@ impl PCTerminal {
         pancurses::cbreak();
         pancurses::start_color();
         pancurses::mousemask(ALL_MOUSE_EVENTS, None);
+        pancurses::set_title("mxyzptlk - a rusty z-machine interpreter");
 
         window.keypad(true);
         window.clear();
@@ -98,6 +99,10 @@ impl PCTerminal {
 }
 
 impl Terminal for PCTerminal {
+    fn type_name(&self) -> &str {
+        "PCTerminal"
+    }
+
     fn size(&self) -> (u32, u32) {
         let (rows, columns) = self.window.get_max_yx();
         (rows as u32, columns as u32)
@@ -153,11 +158,12 @@ impl Terminal for PCTerminal {
 
     fn scroll(&mut self, row: u32) {
         self.window.mv(row as i32 - 1, 0);
-        self.window.deleteln();
-        let curs = self.window.get_max_yx();
-        for i in 0..curs.1 {
-            self.window.mvaddch(curs.0 - 1, i, ' ');
-        }
+        self.window.insdelln(-1);
+        // self.window.deleteln();
+        // let curs = self.window.get_max_yx();
+        // self.window.mv(curs.0 - 1, 0);
+        // self.window.deleteln();
+        self.window.refresh();
     }
 
     fn backspace(&mut self, at: (u32, u32)) {
@@ -190,5 +196,43 @@ impl Terminal for PCTerminal {
     fn set_colors(&mut self, colors: (Color, Color)) {
         let cp = cp(self.as_color(colors.0), self.as_color(colors.1));
         self.window.color_set(cp);
+    }
+
+    fn error(&mut self, instruction: &str, message: &str, recoverable: bool) -> bool {
+        let (rows, cols) = self.window.get_max_yx();
+        let height = 7;
+        let prompt_str = "Press 'c' to continue or any other key to exit";
+        let width = usize::max(
+            prompt_str.len(),
+            usize::max(instruction.len(), message.len()),
+        ) as i32
+            + 8;
+        let err_row = (rows - height) / 2;
+        let err_col = (cols - width) / 2;
+
+        let errwin = pancurses::newwin(height, width, err_row, err_col);
+        errwin.draw_box(0, 0);
+        errwin.mv(1, 2);
+        errwin.addstr(message);
+        errwin.mv(3, 2);
+        errwin.addstr(instruction);
+        errwin.mv(5, 2);
+        errwin.addstr(prompt_str);
+        errwin.refresh();
+        errwin.nodelay(false);
+        pancurses::flushinp();
+        loop {
+            if let Some(ch) = errwin.getch() {
+                errwin.delwin();
+                self.window.touch();
+                self.window.refresh();
+
+                if recoverable && (ch == Input::Character('c') || ch == Input::Character('C')) {
+                    return true;
+                }
+
+                return false;
+            }
+        }
     }
 }

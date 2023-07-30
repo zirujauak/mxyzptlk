@@ -11,6 +11,10 @@ pub fn new_player() -> Result<Box<dyn Player>, RuntimeError> {
 }
 
 impl Player for TestPlayer {
+    fn type_name(&self) -> &str {
+        "TestPlayer"
+    }
+
     fn is_playing(&mut self) -> bool {
         self.playing
     }

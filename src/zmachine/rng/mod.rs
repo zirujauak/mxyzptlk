@@ -9,6 +9,7 @@ pub enum Mode {
 }
 
 pub trait ZRng {
+    fn type_name(&self) -> &str;
     fn seed(&mut self, seed: u16);
     fn predictable(&mut self, seed: u16);
     fn random(&mut self, range: u16) -> u16;
@@ -16,6 +17,6 @@ pub trait ZRng {
 
 impl fmt::Debug for dyn ZRng {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", "ZRng")
+        write!(f, "{}", self.type_name())
     }
 }

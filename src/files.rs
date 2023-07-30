@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use crate::error::{ErrorCode, RuntimeError};
+use crate::{
+    error::{ErrorCode, RuntimeError},
+    recoverable_error,
+};
 
 fn string_to_vec_u16(s: String) -> Vec<u16> {
     s.chars().map(|c| c as u16).collect()
@@ -16,7 +19,7 @@ pub fn first_available(base: &str, suffix: &str) -> Result<Vec<u16>, RuntimeErro
                     return Ok(string_to_vec_u16(filename));
                 }
             }
-            Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+            Err(e) => return recoverable_error!(ErrorCode::FileError, "{}", e),
         }
 
         n += 1;
@@ -42,28 +45,34 @@ pub fn last_existing(base: &str, suffix: &str) -> Result<Vec<u16>, RuntimeError>
                     }
                 }
             }
-            Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+            Err(e) => return recoverable_error!(ErrorCode::FileError, "{}", e),
         }
 
         n += 1;
     }
 }
 
+fn check_config(name: &str) -> bool {
+    match Path::new(name).try_exists() {
+        Ok(b) => b,
+        Err(e) => {
+            info!(target: "app::trace", "Error checking existence of {}: {}", name, e);
+            false
+        }
+    }
+}
+
 pub fn config_file(name: &str) -> Option<String> {
-    if let Some(home) = dirs::home_dir() {
+    if check_config(name) {
+        // Check the CWD first
+        Some(name.to_string())
+    } else if let Some(home) = dirs::home_dir() {
+        // And then check ~/.mxyzptlk/{name} if not found
         let filename = format!("{}/.mxyzptlk/{}", home.to_str().unwrap(), name);
-        match Path::new(&filename).try_exists() {
-            Ok(b) => {
-                if b {
-                    Some(filename.to_string())
-                } else {
-                    None
-                }
-            }
-            Err(e) => {
-                info!(target: "app::trace", "Error checking existence of {}: {}", filename, e);
-                None
-            }
+        if check_config(&filename) {
+            Some(filename)
+        } else {
+            None
         }
     } else {
         None

@@ -2,6 +2,7 @@ pub mod io;
 mod rng;
 pub mod state;
 
+use std::collections::HashSet;
 use std::fs;
 use std::fs::File;
 use std::io::Read;
@@ -19,6 +20,7 @@ use crate::instruction::decoder;
 use crate::instruction::processor;
 use crate::instruction::StoreResult;
 use crate::object::property;
+use crate::recoverable_error;
 use crate::sound::Manager;
 use crate::text;
 use crate::zmachine::io::screen::Interrupt;
@@ -34,6 +36,14 @@ use self::state::header::HeaderField;
 use self::state::memory::Memory;
 use self::state::State;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ErrorHandling {
+    ContinueWarnAlways,
+    ContinueWarnOnce,
+    Ignore,
+    Abort,
+}
+
 #[derive(Debug)]
 pub struct ZMachine {
     name: String,
@@ -44,6 +54,8 @@ pub struct ZMachine {
     input_interrupt: Option<u16>,
     input_interrupt_print: bool,
     sound_manager: Option<Manager>,
+    errors: HashSet<ErrorCode>,
+    error_handling: ErrorHandling,
 }
 
 impl ZMachine {
@@ -64,6 +76,7 @@ impl ZMachine {
 
         let rng = ChaChaRng::new();
 
+        let error_handling = config.error_handling();
         let io = IO::new(version, config)?;
 
         let mut state = State::new(memory)?;
@@ -84,6 +97,8 @@ impl ZMachine {
             input_interrupt: None,
             input_interrupt_print: false,
             sound_manager,
+            errors: HashSet::new(),
+            error_handling,
         })
     }
 
@@ -351,10 +366,11 @@ impl ZMachine {
                     if !self.io.is_stream_2_open() {
                         if let Err(e) = self.start_stream_2() {
                             error!(target: "app::stream", "Error starting stream 2: {}", e);
-                            return Err(RuntimeError::new(
-                                ErrorCode::System,
-                                format!("Error creating transcript file: {}", e),
-                            ));
+                            return recoverable_error!(
+                                ErrorCode::Transcript,
+                                "Error creating transcript file: {}",
+                                e
+                            );
                         }
                     }
                     // Set the transcript bit
@@ -375,10 +391,11 @@ impl ZMachine {
                 self.io
                     .disable_output_stream(&mut self.state, i16::abs(stream) as u8)
             }
-            _ => Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Output stream {} is not valid: [-4..4]", stream),
-            )),
+            _ => recoverable_error!(
+                ErrorCode::InvalidOutputStream,
+                "Output stream {} is not valid: [-4..4]",
+                stream
+            ),
         }
     }
 
@@ -656,10 +673,11 @@ impl ZMachine {
         let filename = match String::from_utf16(&f) {
             Ok(s) => s.trim().to_string(),
             Err(e) => {
-                return Err(RuntimeError::new(
-                    ErrorCode::System,
-                    format!("Error parsing user input: {}", e),
-                ))
+                return recoverable_error!(
+                    ErrorCode::InvalidInput,
+                    "Error parsing user input: {}",
+                    e
+                )
             }
         };
 
@@ -667,18 +685,21 @@ impl ZMachine {
             match Path::new(&filename).try_exists() {
                 Ok(b) => match b {
                     true => {
-                        return Err(RuntimeError::new(
-                            ErrorCode::System,
-                            format!("'{}' already exists.", filename),
-                        ))
+                        return recoverable_error!(
+                            ErrorCode::FileExists,
+                            "'{}' already exists.",
+                            filename
+                        )
                     }
                     false => {}
                 },
                 Err(e) => {
-                    return Err(RuntimeError::new(
-                        ErrorCode::System,
-                        format!("Error checking if '{}' exists: {}", filename, e),
-                    ))
+                    return recoverable_error!(
+                        ErrorCode::Interpreter,
+                        "Error checking if '{}' exists: {}",
+                        filename,
+                        e
+                    )
                 }
             }
         }
@@ -686,18 +707,19 @@ impl ZMachine {
         match Regex::new(r"^((.*\.z\d)|(.*\.blb)|(.*\.blorb))$") {
             Ok(r) => {
                 if r.is_match(&filename) {
-                    Err(RuntimeError::new(
-                        ErrorCode::System,
-                        "Filenames ending in '.z#' are not allowed".to_string(),
-                    ))
+                    recoverable_error!(
+                        ErrorCode::InvalidFilename,
+                        "Filenames ending in '.z#', '.blb', or '.blorb' are not allowed"
+                    )
                 } else {
                     Ok(filename)
                 }
             }
-            Err(e) => Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("Interal error with regex checking filename: {}", e),
-            )),
+            Err(e) => recoverable_error!(
+                ErrorCode::Interpreter,
+                "Interal error with regex checking filename: {}",
+                e
+            ),
         }
     }
 
@@ -715,7 +737,7 @@ impl ZMachine {
                 .open(filename.trim())
             {
                 Ok(f) => Ok(f),
-                Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+                Err(e) => recoverable_error!(ErrorCode::FileError, "{}", e),
             },
             Err(e) => {
                 self.print_str(format!("Error creating file: {}\r", e))?;
@@ -735,11 +757,11 @@ impl ZMachine {
 
         match file.write_all(data) {
             Ok(_) => (),
-            Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+            Err(e) => return recoverable_error!(ErrorCode::FileError, "{}", e),
         };
         match file.flush() {
             Ok(_) => Ok(()),
-            Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+            Err(e) => recoverable_error!(ErrorCode::FileError, "{}", e),
         }
     }
 
@@ -749,12 +771,9 @@ impl ZMachine {
         match File::open(filename.trim()) {
             Ok(mut file) => match file.read_to_end(&mut data) {
                 Ok(_) => Ok(data),
-                Err(e) => Err(RuntimeError::new(ErrorCode::System, format!("{}", e))),
+                Err(e) => recoverable_error!(ErrorCode::FileError, "{}", e),
             },
-            Err(e) => Err(RuntimeError::new(
-                ErrorCode::System,
-                format!("{}: {}", filename, e),
-            )),
+            Err(e) => recoverable_error!(ErrorCode::FileError, "{}: {}", filename, e),
         }
     }
 
@@ -838,22 +857,54 @@ impl ZMachine {
             log_mdc::insert("instruction_count", format!("{:8x}", n));
             let pc = self.state.pc()?;
             let instruction = decoder::decode_instruction(self, pc)?;
-            let pc = processor::dispatch(self, &instruction)?;
-            if pc == 0 {
-                return Ok(());
-            }
+            match processor::dispatch(self, &instruction) {
+                Ok(pc) => {
+                    if pc == 0 {
+                        return Ok(());
+                    }
 
-            if self.state.sound_interrupt().is_some() {
-                if let Some(sounds) = self.sound_manager.as_mut() {
-                    if !sounds.is_playing() {
-                        let pc = self.state.call_sound_interrupt(pc)?;
-                        self.state.set_pc(pc)?;
+                    if self.state.sound_interrupt().is_some() {
+                        if let Some(sounds) = self.sound_manager.as_mut() {
+                            if !sounds.is_playing() {
+                                let pc = self.state.call_sound_interrupt(pc)?;
+                                self.state.set_pc(pc)?;
+                            } else {
+                                self.state.set_pc(pc)?;
+                            }
+                        }
                     } else {
                         self.state.set_pc(pc)?;
                     }
                 }
-            } else {
-                self.state.set_pc(pc)?;
+                Err(e) => {
+                    // If the error is fatal or error handling is abort
+                    if !e.is_recoverable() || self.error_handling == ErrorHandling::Abort {
+                        return Err(e);
+                    // Error is not fatal
+                    // If error handling is ignore
+                    } else if self.error_handling == ErrorHandling::Ignore {
+                        self.state.set_pc(instruction.next_address())?;
+                    // If error handling is warn always or the code hasn't been seen yet
+                    } else if self.error_handling == ErrorHandling::ContinueWarnAlways
+                        || !self.errors.contains(&e.code())
+                    {
+                        self.errors.insert(e.code());
+                        if self.io.error(
+                            &format!("[{}]: {}", n, instruction),
+                            e.message(),
+                            e.is_recoverable(),
+                        ) {
+                            self.state.set_pc(instruction.next_address())?;
+                        } else {
+                            // Print instruction details before returning an error
+                            self.print_str(format!("\r[{}]: {}", n, instruction))?;
+                            return Err(e);
+                        }
+                    // Error handling is warn once and the code has been seen before
+                    } else {
+                        self.state.set_pc(instruction.next_address())?
+                    }
+                }
             }
             n += 1;
         }
@@ -1508,7 +1559,12 @@ mod tests {
         map[0x1D] = 0x78;
         mock_routine(&mut map, 0x600, &[]);
         let m = Memory::new(map.clone());
-        let mut zmachine = assert_ok!(ZMachine::new(m, Config::new(3, 6, false), None, "test"));
+        let mut zmachine = assert_ok!(ZMachine::new(
+            m,
+            Config::new(3, 6, false, ErrorHandling::Ignore),
+            None,
+            "test"
+        ));
         // Turn on transcripting ... it should survive the restore
         assert!(header::set_flag2(&mut zmachine.state, Flags2::Transcripting).is_ok());
 
@@ -1578,7 +1634,12 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut zmachine = assert_ok!(ZMachine::new(m, Config::new(3, 6, false), None, "test"));
+        let mut zmachine = assert_ok!(ZMachine::new(
+            m,
+            Config::new(3, 6, false, ErrorHandling::Ignore),
+            None,
+            "test"
+        ));
         // Just test save/restore ... there are state.rs tests for the innards
         assert!(zmachine.save_undo(0x9867).is_ok());
         let pc = assert_ok!(zmachine.restore_undo());
@@ -1603,7 +1664,12 @@ mod tests {
         map[0x1D] = 0x78;
 
         let m = Memory::new(map.clone());
-        let mut zmachine = assert_ok!(ZMachine::new(m, Config::new(3, 6, false), None, "test"));
+        let mut zmachine = assert_ok!(ZMachine::new(
+            m,
+            Config::new(3, 6, false, ErrorHandling::Ignore),
+            None,
+            "test"
+        ));
         // Set a predictable RNG that will always return 1
         zmachine.rng.predictable(1);
         assert!(zmachine.rng.random(1000) == 1 && zmachine.random(1000) == 1);

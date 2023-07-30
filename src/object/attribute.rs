@@ -1,4 +1,4 @@
-use crate::{error::*, zmachine::ZMachine};
+use crate::{error::*, recoverable_error, zmachine::ZMachine};
 
 use super::object_address;
 
@@ -16,8 +16,12 @@ pub fn value(zmachine: &ZMachine, object: usize, attribute: u8) -> Result<bool, 
         let value = zmachine.read_byte(address)?;
         Ok(value & mask == mask)
     } else {
-        warn!(target: "app::object", "Request to set invalid attribute {} on object {}", attribute, object);
-        Ok(false)
+        recoverable_error!(
+            ErrorCode::InvalidObjectAttribute,
+            "Test of invalid attribute {} on object {}",
+            attribute,
+            object
+        )
     }
 }
 
@@ -35,8 +39,12 @@ pub fn set(zmachine: &mut ZMachine, object: usize, attribute: u8) -> Result<(), 
         let attribute_byte = zmachine.read_byte(address)?;
         zmachine.write_byte(address, attribute_byte | mask)
     } else {
-        warn!(target: "app::object", "Request to set invalid attribute {} on object {}", attribute, object);
-        Ok(())
+        recoverable_error!(
+            ErrorCode::InvalidObjectAttribute,
+            "Set of invalid attribute {} on object {}",
+            attribute,
+            object
+        )
     }
 }
 
@@ -54,7 +62,11 @@ pub fn clear(zmachine: &mut ZMachine, object: usize, attribute: u8) -> Result<()
         let attribute_byte = zmachine.read_byte(address)?;
         zmachine.write_byte(address, attribute_byte & !mask)
     } else {
-        warn!(target: "app::object", "Request to set invalid attribute {} on object {}", attribute, object);
-        Ok(())
+        recoverable_error!(
+            ErrorCode::InvalidObjectAttribute,
+            "Clear of invalid attribute {} on object {}",
+            attribute,
+            object
+        )
     }
 }

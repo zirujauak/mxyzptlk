@@ -1,5 +1,7 @@
 use std::io::Write;
 
+use crate::recoverable_error;
+
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use tempfile::NamedTempFile;
 
@@ -39,6 +41,10 @@ fn normalize_volume(volume: u8) -> f32 {
 }
 
 impl Player for RodioPlayer {
+    fn type_name(&self) -> &str {
+        "RodioPlayer"
+    }
+
     fn is_playing(&mut self) -> bool {
         if let Some(sink) = self.get_sink().as_mut() {
             !sink.empty()
@@ -49,45 +55,49 @@ impl Player for RodioPlayer {
 
     fn play_sound(&mut self, sound: &[u8], volume: u8, repeats: u8) -> Result<(), RuntimeError> {
         match NamedTempFile::new() {
-            Ok(mut write) => match write.reopen() {
-                Ok(read) => match write.write_all(sound) {
-                    Ok(_) => {
-                        match Decoder::new(read) {
-                            Ok(source) => {
-                                match self.get_sink() {
-                                    Some(sink) => {
-                                        sink.set_volume(normalize_volume(volume));
-                                        // V5
-                                        if repeats == 0 {
-                                            sink.append(source.repeat_infinite())
-                                        } else {
-                                            for _ in 0..repeats {
-                                                let source = match write.reopen() {
+            Ok(mut write) => {
+                match write.reopen() {
+                    Ok(read) => match write.write_all(sound) {
+                        Ok(_) => {
+                            match Decoder::new(read) {
+                                Ok(source) => {
+                                    match self.get_sink() {
+                                        Some(sink) => {
+                                            sink.set_volume(normalize_volume(volume));
+                                            // V5
+                                            if repeats == 0 {
+                                                sink.append(source.repeat_infinite())
+                                            } else {
+                                                for _ in 0..repeats {
+                                                    let source = match write.reopen() {
                                                     Ok(f) => match Decoder::new(f) {
                                                         Ok(source) => source,
-                                                        Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("Error creating source for sound: {}", e))),
+                                                        Err(e) => return recoverable_error!(ErrorCode::SoundPlayback, "Error creating source for sound: {}", e),
                                                     },
-                                                    Err(e) => return Err(RuntimeError::new(ErrorCode::System, format!("Error reopening tempfile for sound: {}", e))),
+                                                    Err(e) => return recoverable_error!(ErrorCode::SoundPlayback, "Error reopening tempfile for sound: {}", e),
                                                 };
-                                                sink.append(source);
+                                                    sink.append(source);
+                                                }
                                             }
-                                        }
 
-                                        sink.play();
+                                            sink.play();
+                                        }
+                                        None => error!(target: "app::sound", "rodio: No sink"),
                                     }
-                                    None => error!(target: "app::sound", "rodio: No sink"),
+                                }
+
+                                Err(e) => {
+                                    error!(target: "app::sound", "rodio: Error decoding sound: {}", e)
                                 }
                             }
-
-                            Err(e) => {
-                                error!(target: "app::sound", "rodio: Error decoding sound: {}", e)
-                            }
                         }
-                    }
+                        Err(e) => {
+                            error!(target: "app::sound", "rodio: Error writing tempfile: {}", e)
+                        }
+                    },
                     Err(e) => error!(target: "app::sound", "rodio: Error writing tempfile: {}", e),
-                },
-                Err(e) => error!(target: "app::sound", "rodio: Error writing tempfile: {}", e),
-            },
+                }
+            }
             Err(e) => error!(target: "app::sound", "rodio: Error opening tempfile: {}", e),
         }
         Ok(())
@@ -128,19 +138,21 @@ impl RodioPlayer {
                     }),
                     Err(e) => {
                         error!(target: "app::sound", "rodio: Error initializing sink: {}", e);
-                        Err(RuntimeError::new(
-                            ErrorCode::System,
-                            format!("Error initializing sink: {}", e),
-                        ))
+                        recoverable_error!(
+                            ErrorCode::SoundPlayback,
+                            "Error initializing sink: {}",
+                            e
+                        )
                     }
                 }
             }
             Err(e) => {
                 error!(target: "app::sound", "rodio: Error opening sound output stream: {}", e);
-                Err(RuntimeError::new(
-                    ErrorCode::System,
-                    format!("Error initializing output stream: {}", e),
-                ))
+                recoverable_error!(
+                    ErrorCode::SoundPlayback,
+                    "Error initializing output stream: {}",
+                    e
+                )
             }
         }
     }

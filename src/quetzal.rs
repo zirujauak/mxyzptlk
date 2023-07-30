@@ -2,7 +2,10 @@ use std::fmt;
 
 use iff::Chunk;
 
-use crate::error::{ErrorCode, RuntimeError};
+use crate::{
+    error::{ErrorCode, RuntimeError},
+    recoverable_error,
+};
 
 #[derive(Clone, Debug)]
 pub struct IFhd {
@@ -306,24 +309,15 @@ impl TryFrom<Chunk> for Quetzal {
     fn try_from(value: Chunk) -> Result<Self, Self::Error> {
         let ifhd_chunk = value.find_chunk("IFhd", "");
         if ifhd_chunk.is_none() {
-            return Err(RuntimeError::new(
-                ErrorCode::System,
-                "No IFhd chunk".to_string(),
-            ));
+            return recoverable_error!(ErrorCode::Quetzal, "No IFhd chunk");
         }
         let mem_chunk = value.find_first_chunk(vec![("CMem", ""), ("UMem", "")]);
         if mem_chunk.is_none() {
-            return Err(RuntimeError::new(
-                ErrorCode::System,
-                "No CMem or UMem chunk".to_string(),
-            ));
+            return recoverable_error!(ErrorCode::Quetzal, "No CMem or UMem chunk");
         }
         let stks_chunk = value.find_chunk("Stks", "");
         if stks_chunk.is_none() {
-            return Err(RuntimeError::new(
-                ErrorCode::System,
-                "No Stks chunk".to_string(),
-            ));
+            return recoverable_error!(ErrorCode::Quetzal, "No Stks chunk",);
         }
 
         Ok(Quetzal::new(

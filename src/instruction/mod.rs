@@ -358,6 +358,7 @@ impl Opcode {
 
 #[derive(Debug)]
 pub struct Instruction {
+    bytes: Vec<u8>,
     address: usize,
     opcode: Opcode,
     operands: Vec<Operand>,
@@ -368,11 +369,11 @@ pub struct Instruction {
 
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "${:05x} ", self.address())?;
-        match self.opcode().form() {
-            OpcodeForm::Ext => write!(f, "be {:02x}", self.opcode().opcode())?,
-            _ => write!(f, "{:02x}", self.opcode().opcode())?,
+        write!(f, "${:05x}: ", self.address())?;
+        for b in &self.bytes {
+            write!(f, "{:02x} ", b)?;
         }
+
         write!(f, " {}", self.opcode())?;
 
         for o in self.operands() {
@@ -393,6 +394,7 @@ impl fmt::Display for Instruction {
 
 impl Instruction {
     pub fn new(
+        bytes: &[u8],
         address: usize,
         opcode: Opcode,
         operands: Vec<Operand>,
@@ -401,6 +403,7 @@ impl Instruction {
         next_address: usize,
     ) -> Instruction {
         Instruction {
+            bytes: bytes.to_vec(),
             address,
             opcode,
             operands,

@@ -91,6 +91,7 @@ impl Sound {
 }
 
 pub trait Player {
+    fn type_name(&self) -> &str;
     fn is_playing(&mut self) -> bool;
     fn play_sound(&mut self, sound: &[u8], volume: u8, repeats: u8) -> Result<(), RuntimeError>;
     fn stop_sound(&mut self);
@@ -99,7 +100,7 @@ pub trait Player {
 
 impl fmt::Debug for dyn Player {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", "Player")
+        write!(f, "{}", self.type_name())
     }
 }
 #[derive(Debug)]

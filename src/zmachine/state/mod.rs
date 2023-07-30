@@ -2,7 +2,9 @@ use std::{collections::VecDeque, fmt};
 
 use crate::{
     error::{ErrorCode, RuntimeError},
+    fatal_error,
     quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
+    recoverable_error,
 };
 
 use self::{
@@ -164,10 +166,7 @@ impl State {
         if let Some(frame) = self.frames.last() {
             Ok(frame)
         } else {
-            Err(RuntimeError::new(
-                ErrorCode::StackUnderflow,
-                "No runtime frame".to_string(),
-            ))
+            fatal_error!(ErrorCode::NoFrame, "No runtime frame")
         }
     }
 
@@ -175,10 +174,7 @@ impl State {
         if let Some(frame) = self.frames.last_mut() {
             Ok(frame)
         } else {
-            Err(RuntimeError::new(
-                ErrorCode::StackUnderflow,
-                "No runtime frame".to_string(),
-            ))
+            fatal_error!(ErrorCode::NoFrame, "No runtime frame")
         }
     }
 
@@ -260,10 +256,11 @@ impl State {
         if address < 0x10000 {
             self.memory.read_byte(address)
         } else {
-            Err(RuntimeError::new(
-                ErrorCode::IllegalAccess,
-                format!("Byte address {:#06x} is in high memory", address),
-            ))
+            fatal_error!(
+                ErrorCode::IllegalMemoryAccess,
+                "Read from byte address in high memory: {:#06x}",
+                address
+            )
         }
     }
 
@@ -271,10 +268,11 @@ impl State {
         if address < 0xFFFF {
             self.memory.read_word(address)
         } else {
-            Err(RuntimeError::new(
-                ErrorCode::IllegalAccess,
-                format!("Word address {:#06x} is in high memory", address),
-            ))
+            fatal_error!(
+                ErrorCode::IllegalMemoryAccess,
+                "Read from word address in hight memory: {:#06x}",
+                address
+            )
         }
     }
 
@@ -282,13 +280,12 @@ impl State {
         if address < self.static_mark {
             self.memory.write_byte(address, value)
         } else {
-            Err(RuntimeError::new(
-                ErrorCode::IllegalAccess,
-                format!(
-                    "Byte address {:#04x} is above the end of dynamic memory ({:#04x})",
-                    address, self.static_mark
-                ),
-            ))
+            fatal_error!(
+                ErrorCode::IllegalMemoryAccess,
+                "Write to byte address above dynamic memory {:04x}: {:04x}",
+                self.static_mark - 1,
+                address,
+            )
         }
     }
 
@@ -297,13 +294,12 @@ impl State {
             self.memory.write_word(address, value)?;
             Ok(())
         } else {
-            Err(RuntimeError::new(
-                ErrorCode::IllegalAccess,
-                format!(
-                    "Word address {:#04x} is above the end of dynamic memory ({:#04x})",
-                    address, self.static_mark
-                ),
-            ))
+            fatal_error!(
+                ErrorCode::IllegalMemoryAccess,
+                "Write to word address above dynamic memory {:04x}: {:04x}",
+                self.static_mark - 1,
+                address,
+            )
         }
     }
 
@@ -374,19 +370,27 @@ impl State {
 
     fn routine_header(&self, address: usize) -> Result<(usize, Vec<u16>), RuntimeError> {
         let variable_count = self.memory.read_byte(address)? as usize;
-        let (initial_pc, local_variables) = if self.version < 5 {
-            let mut l = Vec::new();
-            for i in 0..variable_count {
-                let a = address + 1 + (i * 2);
-                l.push(self.memory.read_word(a)?);
-            }
-
-            (address + 1 + (variable_count * 2), l)
+        if variable_count > 15 {
+            fatal_error!(
+                ErrorCode::InvalidRoutine,
+                "Routines can have at most 15 local variables: {}",
+                variable_count
+            )
         } else {
-            (address + 1, vec![0; variable_count])
-        };
+            let (initial_pc, local_variables) = if self.version < 5 {
+                let mut l = Vec::new();
+                for i in 0..variable_count {
+                    let a = address + 1 + (i * 2);
+                    l.push(self.memory.read_word(a)?);
+                }
 
-        Ok((initial_pc, local_variables))
+                (address + 1 + (variable_count * 2), l)
+            } else {
+                (address + 1, vec![0; variable_count])
+            };
+
+            Ok((initial_pc, local_variables))
+        }
     }
 
     pub fn string_literal(&self, address: usize) -> Result<Vec<u16>, RuntimeError> {
@@ -412,10 +416,11 @@ impl State {
                     .read_word(HeaderField::RoutinesOffset as usize)? as usize
                     * 8)),
             8 => Ok(address as usize * 8),
-            _ => Err(RuntimeError::new(
+            _ => fatal_error!(
                 ErrorCode::UnsupportedVersion,
-                format!("Unsupported version: {}", self.version),
-            )),
+                "Unsupported version: {}",
+                self.version
+            ),
         }
     }
 
@@ -427,10 +432,11 @@ impl State {
                 + (self.memory.read_word(HeaderField::StringsOffset as usize)? as usize * 8)),
             8 => Ok(address as usize * 8),
             // TODO: error
-            _ => Err(RuntimeError::new(
+            _ => fatal_error!(
                 ErrorCode::UnsupportedVersion,
-                format!("Unsupported version: {}", self.version),
-            )),
+                "Unsupported version: {}",
+                self.version
+            ),
         }
     }
 
@@ -480,10 +486,10 @@ impl State {
             self.current_frame_mut()?.set_input_interrupt(true);
             Ok(initial_pc)
         } else {
-            Err(RuntimeError::new(
-                ErrorCode::System,
-                "No read interrupt pending".to_string(),
-            ))
+            fatal_error!(
+                ErrorCode::NoReadInterrupt,
+                "Read interrupt routine called, but there is no pending read interrupt"
+            )
         }
     }
 
@@ -523,10 +529,10 @@ impl State {
             self.clear_sound_interrupt();
             Ok(initial_pc)
         } else {
-            Err(RuntimeError::new(
-                ErrorCode::System,
-                "No pending interrupt".to_string(),
-            ))
+            fatal_error!(
+                ErrorCode::NoSoundInterrupt,
+                "Sound interrupt routine called, but there is no pending sound interrupt"
+            )
         }
     }
 
@@ -545,10 +551,10 @@ impl State {
 
             Ok(self.current_frame()?.pc())
         } else {
-            Err(RuntimeError::new(
-                ErrorCode::System,
-                "No frame to return to".to_string(),
-            ))
+            fatal_error!(
+                ErrorCode::ReturnNoCaller,
+                "Return from routine with nowhere to return to"
+            )
         }
     }
 
@@ -614,10 +620,10 @@ impl State {
         let ifhd = IFhd::try_from((&*self, 0))?;
         if &ifhd != quetzal.ifhd() {
             error!(target: "app::quetzal", "Save file was created from a different story file");
-            Err(RuntimeError::new(
+            recoverable_error!(
                 ErrorCode::Restore,
-                "Save file was created from a different story file".to_string(),
-            ))
+                "Save file was created from a different story file"
+            )
         } else {
             self.restore_state(quetzal)
         }
@@ -640,10 +646,7 @@ impl State {
             self.restore_state(quetzal)
         } else {
             warn!(target: "app::quetzal", "No saved state for undo");
-            Err(RuntimeError::new(
-                ErrorCode::Restore,
-                "Undo stack is empty".to_string(),
-            ))
+            recoverable_error!(ErrorCode::UndoNoState, "Undo stack is empty")
         }
     }
 

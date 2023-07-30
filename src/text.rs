@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 
 use crate::{
     error::*,
+    fatal_error,
     zmachine::{state::header::HeaderField, ZMachine},
 };
 
@@ -103,10 +104,10 @@ pub fn from_vec(
                         if !is_abbreviation {
                             abbrev = b
                         } else {
-                            return Err(RuntimeError::new(
-                                ErrorCode::System,
-                                "Abbreviations can't nest".to_string(),
-                            ));
+                            return fatal_error!(
+                                ErrorCode::InvalidAbbreviation,
+                                "Abbreviations can't nest",
+                            );
                         }
                     }
                     4 => alphabet_shift = 1,
