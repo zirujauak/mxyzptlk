@@ -120,7 +120,7 @@ fn main() {
         // Reset the terminal because curses may not exit cleanly
         if cfg!(target_os = "macos") {
             let _ = std::process::Command::new("reset").status();
-            let _ = std::process::Command::new("tput").arg("rmcup");
+            let _ = std::process::Command::new("tput").arg("rmcup").status();
         } else if cfg!(target_os = "linux") {
             let _ = std::process::Command::new("reset").status();
         }
@@ -193,10 +193,14 @@ fn main() {
         ZMachine::new(memory, config, sound_manager, &name).expect("Error creating state");
 
     trace!("Begining execution");
+
+    // If execution ended due to an error, print the error and quit
     if let Err(r) = zmachine.run() {
         let _ = zmachine.print_str(format!("\r{}\r", r));
         let _ = zmachine.quit();
     }
+
+    // Clean up the terminal
     if cfg!(target_os = "macos") {
         let _ = std::process::Command::new("/usr/bin/reset").status();
         let _ = std::process::Command::new("/usr/bin/tput")
