@@ -33,7 +33,7 @@ The current release is `1.0.0-beta.2`
 
 4. Optionally, copy the `log4rs.yml` and `config.yml` files to a `.mxyzptlk/` directory in your "home" directory (varies by platform, `/home/{username}` on Linux/MacOS, generally `C:\Users\{username}` on Windows).  The default configuration does not enable logging, so unless you want to change the default color scheme (white on black) or enable logging, these files are not required.
 
-### `libsndfile`
+#### `libsndfile`
 
 The generally available Blorb files all have AIFF sound resources.  AIFF sounds aren't supported by any of the Rust audio crates that I've been able to find.  To get around this limitation, `libsndfile` is used to convert the AIFF sounds to another format (currently FLAC) that can be played by [`rodio`](https://docs.rs/rodio/latest/rodio/).
 
@@ -59,7 +59,7 @@ It's worth pointing out that sound-enabled games will run normally with a non-li
 ### Games
 
 #### File types
-`mxyzptlk` supports both "raw" zcode files (.z#) and Blorb files with an `Exec` entry in `RIdx` that points at the start of a `ZCOD` chunk.  Attempting to run a Blorb file without an `Exec` index will result in an error.  Wrapping code into a Blorb is convenient for file management, but not strictly necessary.
+`mxyzptlk` supports both "raw" zcode files (typically files that end in `.z#`) and Blorb files (`.blb` or `.blorb`, usually) with an `Exec` entry in the `RIdx` chunk that points at the start of a `ZCOD` chunk.  Attempting to run a Blorb file without an `Exec` index will result in an error.  Wrapping code into a Blorb is convenient for file management, but not strictly necessary.
 
 #### Where do I get games?
 There are many places to get game files (legally or not), but I've listed my two favorite _legal_ sources:
@@ -95,20 +95,20 @@ Any errors creating, opening, reading, or writing to files are reported by the i
 
 *\*If creation of the transcript file fails, the game code may print the transcript heading, but transcripting will _not_ be enabled and not text is written to disk.  Attempting to start scripting a second time _will_ prompt for a filename again*
 
-#### **A Note About Error Handling
-Error may occur during gameplay.  Some games (Infocom's `Sherlock`, in particular) may intentionally do things like manipulate invalid object attributes, or reference object '0'.  There may be bugs in games (or `mxyzptlk`) that result in more serious errors, such as a stack underflow or divide by zero.
+#### **A Note About Error Handling**
+Errors may occur during gameplay.  Some games (Infocom's `Sherlock`, in particular) may unintentionally do things that aren't allowd (like manipulate an invalid attribute - look at you, `Sherlock`).  There may be bugs in games (or `mxyzptlk` itself) that result in more serious errors, such as a stack underflow or divide by zero.
 
 There are two "types" of errors: error which _might_ be recoverable and those which are definitely not.  
 
-For recoverable errors, behavior is defined by the `error_handling` setting in the configuration:
+For "recoverable" errors, behavior is defined by the `error_handling` setting in the configuration:
 * `continue_warn_always` - display a notice every time an error occurs and prompt the user to continue or quit.
 * `continue_warn_once` - display a notice the first time a particular error code is encountered and prompt the user to continue or quit.  If continue is chosen, any further occurrences of the error code are ignored.
-* `ignore` - silently ignore any recoverable errors and continue
+* `ignore` - silently ignore any recoverable errors and continue.
 * `abort` - treat recoverable errors as fatal error.
 
 The default configuration will `ignore` recoverable errors, which is what most users will want to happen.  Game developers, however, will probably want to continue or abort on any error.  Error messaging includes the instruction counter, which may be cross-referenced with logs (which developers will probably want to enable) that may be used to diagnose and hopefully correct the problem.
 
-"Recovering" from an error involves running the next instruction in the program.  Except for the ART_SHIFT and LOG_SHIFT instructions, no store or branch is followed and this could leave the program in an unpredictable or unplayable state.
+"Recovering" from an error is implemente by running the next instruction in the program.  Except for the ART_SHIFT and LOG_SHIFT instructions, no store or branch is followed which may leave the program in an unpredictable or unplayable state.  Caveat actor.
 
 ### Configuration
 
