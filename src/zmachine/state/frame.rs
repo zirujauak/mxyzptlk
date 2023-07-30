@@ -116,7 +116,7 @@ impl Frame {
             info!(target: "app::stack", "Pop {:04x} [{}]", v, self.stack.len());
             Ok(v)
         } else {
-            fatal_error!(ErrorCode::StackUnderflow, "Poppped an empty stack")
+            fatal_error!(ErrorCode::StackUnderflow, "Popped an empty stack")
         }
     }
 
@@ -149,7 +149,7 @@ impl Frame {
         } else {
             fatal_error!(
                 ErrorCode::InvalidLocalVariable,
-                "Read for local variable {} out of range ({})",
+                "Read from invalid local variable {} out of range: {}",
                 variable,
                 self.local_variables.len()
             )
@@ -164,7 +164,7 @@ impl Frame {
         } else {
             fatal_error!(
                 ErrorCode::InvalidLocalVariable,
-                "Peek for local variable {} out of range ({})",
+                "Peek from local variable {} out of range: {}",
                 variable,
                 self.local_variables.len()
             )
@@ -180,7 +180,7 @@ impl Frame {
         } else {
             fatal_error!(
                 ErrorCode::InvalidLocalVariable,
-                "Write to local variable {} out of range ({})",
+                "Write to local variable {} out of range: {}",
                 variable,
                 self.local_variables.len()
             )
@@ -202,7 +202,7 @@ impl Frame {
         } else {
             fatal_error!(
                 ErrorCode::InvalidLocalVariable,
-                "Write to local variable {} out of range ({})",
+                "Write to local variable {} out of range: {}",
                 variable,
                 self.local_variables.len()
             )

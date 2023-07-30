@@ -99,7 +99,7 @@ impl PCTerminal {
 
 impl Terminal for PCTerminal {
     fn type_name(&self) -> &str {
-        &"PCTerminal"
+        "PCTerminal"
     }
 
     fn size(&self) -> (u32, u32) {
@@ -194,5 +194,48 @@ impl Terminal for PCTerminal {
     fn set_colors(&mut self, colors: (Color, Color)) {
         let cp = cp(self.as_color(colors.0), self.as_color(colors.1));
         self.window.color_set(cp);
+    }
+
+    fn error(&mut self, instruction: &str, message: &str, recoverable: bool) -> bool {
+        let (rows, cols) = self.window.get_max_yx();
+        let height = 7;
+        let prompt_str = "Press 'c' to continue or any other key to exit";
+        let width = usize::max(
+            prompt_str.len(),
+            usize::max(instruction.len(), message.len()),
+        ) as i32
+            + 8;
+        let err_row = (rows - height) / 2;
+        let err_col = (cols - width) / 2;
+
+        let errwin = pancurses::newwin(height, width, err_row, err_col);
+        errwin.draw_box(0, 0);
+        errwin.mv(1, 2);
+        errwin.addstr(message);
+        errwin.mv(3, 2);
+        errwin.addstr(instruction);
+        errwin.mv(5, 2);
+        errwin.addstr(prompt_str);
+        // if recoverable {
+        //     errwin.addstr("Press 'C' to continue, or any other key to exit");
+        // } else {
+        //     errwin.addstr("Press any key to exit");
+        // }
+        errwin.refresh();
+        errwin.nodelay(false);
+        loop {
+            if let Some(ch) = errwin.getch() {
+                info!(target: "app::trace", "{:?}", ch);
+                errwin.delwin();
+                self.window.touch();
+                self.window.refresh();
+
+                if recoverable && (ch == Input::Character('c') || ch == Input::Character('C')) {
+                    return true;
+                }
+
+                return false;
+            }
+        }
     }
 }

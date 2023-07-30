@@ -93,16 +93,13 @@ pub fn test_attr(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    let condition =
-        operands[0] > 0 && attribute::value(zmachine, operands[0] as usize, operands[1] as u8)?;
+    let condition = attribute::value(zmachine, operands[0] as usize, operands[1] as u8)?;
     branch(zmachine, instruction, condition)
 }
 
 pub fn set_attr(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    if operands[0] > 0 {
-        attribute::set(zmachine, operands[0] as usize, operands[1] as u8)?;
-    }
+    attribute::set(zmachine, operands[0] as usize, operands[1] as u8)?;
 
     Ok(instruction.next_address())
 }
@@ -112,9 +109,7 @@ pub fn clear_attr(
     instruction: &Instruction,
 ) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    if operands[0] > 0 {
-        attribute::clear(zmachine, operands[0] as usize, operands[1] as u8)?;
-    }
+    attribute::clear(zmachine, operands[0] as usize, operands[1] as u8)?;
 
     Ok(instruction.next_address())
 }
@@ -151,7 +146,7 @@ pub fn insert_obj(
 
                     if sibling == 0 {
                         return fatal_error!(
-                            ErrorCode::ObjectTreeState,
+                            ErrorCode::InvalidObjectTree,
                             "Unable to find previous sibling of object {} in parent {}",
                             object,
                             old_parent
@@ -277,7 +272,7 @@ pub fn div(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, 
         // Divide by zero
         if *w == 0 {
             return fatal_error!(
-                ErrorCode::System,
+                ErrorCode::DivideByZero,
                 "Divide by zero: {}, {:?}",
                 instruction,
                 operands
@@ -297,7 +292,7 @@ pub fn modulus(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usi
     for w in operands[1..].iter() {
         if *w == 0 {
             return fatal_error!(
-                ErrorCode::System,
+                ErrorCode::DivideByZero,
                 "Divide by zero: {}, {:?}",
                 instruction,
                 operands
@@ -827,7 +822,7 @@ mod tests {
             0x404,
             branch(0x403, true, 0x40a),
         );
-        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x404);
+        assert!(dispatch(&mut zmachine, &i).is_err());
     }
 
     #[test]
@@ -872,7 +867,7 @@ mod tests {
     }
 
     #[test]
-    fn test_set_attr_v4_48() {
+    fn test_set_attr_v4_invalid() {
         let mut map = test_map(4);
         // Set attributes 0, 4, 9, 14, 19, 24, 29, 34, 39, 44
         mock_attributes(&mut map, 1, &[0x88, 0x42, 0x10, 0x84, 0x21, 0x08]);
@@ -886,9 +881,7 @@ mod tests {
             opcode_2op(4, 11),
             0x404,
         );
-        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x404);
-        assert!(attribute::value(&zmachine, 1, 46).is_ok_and(|x| !x));
-        assert!(attribute::value(&zmachine, 1, 47).is_ok_and(|x| !x));
+        assert!(dispatch(&mut zmachine, &i).is_err());
     }
 
     #[test]
@@ -935,7 +928,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_attr_v4_48() {
+    fn test_clear_attr_v4_invalid() {
         let mut map = test_map(4);
         // Set attributes 0, 4, 9, 14, 19, 24, 29, 34, 39, 44, and 47
         mock_attributes(&mut map, 1, &[0x88, 0x42, 0x10, 0x84, 0x21, 0x09]);
@@ -949,11 +942,7 @@ mod tests {
             opcode_2op(4, 12),
             0x404,
         );
-        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x404);
-        assert!(attribute::value(&zmachine, 1, 44).is_ok_and(|x| x));
-        assert!(attribute::value(&zmachine, 1, 45).is_ok_and(|x| !x));
-        assert!(attribute::value(&zmachine, 1, 46).is_ok_and(|x| !x));
-        assert!(attribute::value(&zmachine, 1, 47).is_ok_and(|x| x));
+        assert!(dispatch(&mut zmachine, &i).is_err());
     }
 
     #[test]

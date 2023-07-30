@@ -95,6 +95,21 @@ Any errors creating, opening, reading, or writing to files are reported by the i
 
 *\*If creation of the transcript file fails, the game code may print the transcript heading, but transcripting will _not_ be enabled and not text is written to disk.  Attempting to start scripting a second time _will_ prompt for a filename again*
 
+#### **A Note About Error Handling
+Error may occur during gameplay.  Some games (Infocom's `Sherlock`, in particular) may intentionally do things like manipulate invalid object attributes, or reference object '0'.  There may be bugs in games (or `mxyzptlk`) that result in more serious errors, such as a stack underflow or divide by zero.
+
+There are two "types" of errors: error which _might_ be recoverable and those which are definitely not.  
+
+For recoverable errors, behavior is defined by the `error_handling` setting in the configuration:
+* `continue_warn_always` - display a notice every time an error occurs and prompt the user to continue or quit.
+* `continue_warn_once` - display a notice the first time a particular error code is encountered and prompt the user to continue or quit.  If continue is chosen, any further occurrences of the error code are ignored.
+* `ignore` - silently ignore any recoverable errors and continue
+* `abort` - treat recoverable errors as fatal error.
+
+The default configuration will `ignore` recoverable errors, which is what most users will want to happen.  Game developers, however, will probably want to continue or abort on any error.  Error messaging includes the instruction counter, which may be cross-referenced with logs (which developers will probably want to enable) that may be used to diagnose and hopefully correct the problem.
+
+"Recovering" from an error involves running the next instruction in the program.  Except for the ART_SHIFT and LOG_SHIFT instructions, no store or branch is followed and this could leave the program in an unpredictable or unplayable state.
+
 ### Configuration
 
 As referenced in the installation instructions, the `config.yml` as shipped contains the default configuration.  If you're happy with the default color screen (white foreground on black background) and don't need logs for debugging a zcode file or fixing bugs in the interpreter, then you probably don't need this file.  However, if you wish to change the default color scheme, terminal library, or enable logging, you'll need to ensure a copy of this file is either present in the `.mxyzptlk/` directory in "home" directory (which varies by platform).

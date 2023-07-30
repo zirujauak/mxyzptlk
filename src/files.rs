@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::{
     error::{ErrorCode, RuntimeError},
-    fatal_error,
+    recoverable_error,
 };
 
 fn string_to_vec_u16(s: String) -> Vec<u16> {
@@ -19,7 +19,7 @@ pub fn first_available(base: &str, suffix: &str) -> Result<Vec<u16>, RuntimeErro
                     return Ok(string_to_vec_u16(filename));
                 }
             }
-            Err(e) => return fatal_error!(ErrorCode::System, "{}", e),
+            Err(e) => return recoverable_error!(ErrorCode::FileError, "{}", e),
         }
 
         n += 1;
@@ -45,7 +45,7 @@ pub fn last_existing(base: &str, suffix: &str) -> Result<Vec<u16>, RuntimeError>
                     }
                 }
             }
-            Err(e) => return fatal_error!(ErrorCode::System, "{}", e),
+            Err(e) => return recoverable_error!(ErrorCode::FileError, "{}", e),
         }
 
         n += 1;

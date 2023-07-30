@@ -1,3 +1,5 @@
+use crate::recoverable_error;
+
 use super::*;
 
 pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
@@ -61,8 +63,10 @@ pub fn log_shift(
     } else if places == 0 {
         value
     } else {
-        error!(target: "app::instruction", "Invalid places for LOG_SHIFT {:04x} {} [-15..15]", value, places);
-        0
+        // Store a 0 here before returning an error so the user may
+        // opt to recover
+        store_result(zmachine, instruction, 0)?;
+        return recoverable_error!(ErrorCode::InvalidShift, "Invalid shift bits {}", places);
     };
 
     store_result(zmachine, instruction, new_value)?;
@@ -83,8 +87,14 @@ pub fn art_shift(
     } else if places == 0 {
         value
     } else {
-        error!(target: "app::instruction", "Invalid places for ART_SHIFT {:04x} {} [-15..15]", value, places);
-        0
+        // Store a 0 or -1 here before returning an error so the user may
+        // opt to recover
+        store_result(
+            zmachine,
+            instruction,
+            if value < 0 && places < 0 { 0xFFFF } else { 0 },
+        )?;
+        return recoverable_error!(ErrorCode::InvalidShift, "Invalid shift bits {}", places);
     };
 
     store_result(zmachine, instruction, new_value as u16)?;
@@ -322,7 +332,7 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert!(dispatch(&mut zmachine, &i).is_err());
         assert_ok_eq!(zmachine.variable(0x81), 0);
     }
 
@@ -342,7 +352,7 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert!(dispatch(&mut zmachine, &i).is_err());
         assert_ok_eq!(zmachine.variable(0x81), 0);
     }
 
@@ -422,7 +432,7 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
+        assert!(dispatch(&mut zmachine, &i).is_err());
         assert_ok_eq!(zmachine.variable(0x81), 0);
     }
 
@@ -442,8 +452,8 @@ mod tests {
             store(0x486, 0x81),
         );
 
-        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x487);
-        assert_ok_eq!(zmachine.variable(0x81), 0);
+        assert!(dispatch(&mut zmachine, &i).is_err());
+        assert_ok_eq!(zmachine.variable(0x81), 0xFFFF);
     }
 
     #[test]

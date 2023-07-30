@@ -4,6 +4,7 @@ use crate::{
     error::{ErrorCode, RuntimeError},
     fatal_error,
     quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
+    recoverable_error,
 };
 
 use self::{
@@ -165,7 +166,7 @@ impl State {
         if let Some(frame) = self.frames.last() {
             Ok(frame)
         } else {
-            fatal_error!(ErrorCode::StackUnderflow, "No runtime frame")
+            fatal_error!(ErrorCode::NoFrame, "No runtime frame")
         }
     }
 
@@ -173,7 +174,7 @@ impl State {
         if let Some(frame) = self.frames.last_mut() {
             Ok(frame)
         } else {
-            fatal_error!(ErrorCode::StackUnderflow, "No runtime frame")
+            fatal_error!(ErrorCode::NoFrame, "No runtime frame")
         }
     }
 
@@ -256,8 +257,8 @@ impl State {
             self.memory.read_byte(address)
         } else {
             fatal_error!(
-                ErrorCode::IllegalAccess,
-                "Byte address {:#06x} is in high memory",
+                ErrorCode::IllegalMemoryAccess,
+                "Read from byte address in high memory: {:#06x}",
                 address
             )
         }
@@ -268,8 +269,8 @@ impl State {
             self.memory.read_word(address)
         } else {
             fatal_error!(
-                ErrorCode::IllegalAccess,
-                "Word address {:#06x} is in high memory",
+                ErrorCode::IllegalMemoryAccess,
+                "Read from word address in hight memory: {:#06x}",
                 address
             )
         }
@@ -280,10 +281,10 @@ impl State {
             self.memory.write_byte(address, value)
         } else {
             fatal_error!(
-                ErrorCode::IllegalAccess,
-                "Byte address {:#04x} is above the end of dynamic memory ({:#04x})",
+                ErrorCode::IllegalMemoryAccess,
+                "Write to byte address above dynamic memory {:04x}: {:04x}",
+                self.static_mark - 1,
                 address,
-                self.static_mark
             )
         }
     }
@@ -294,10 +295,10 @@ impl State {
             Ok(())
         } else {
             fatal_error!(
-                ErrorCode::IllegalAccess,
-                "Word address {:#04x} is above the end of dynamic memory ({:#04x})",
+                ErrorCode::IllegalMemoryAccess,
+                "Write to word address above dynamic memory {:04x}: {:04x}",
+                self.static_mark - 1,
                 address,
-                self.static_mark
             )
         }
     }
@@ -477,7 +478,10 @@ impl State {
             self.current_frame_mut()?.set_input_interrupt(true);
             Ok(initial_pc)
         } else {
-            fatal_error!(ErrorCode::System, "No read interrupt pending")
+            fatal_error!(
+                ErrorCode::NoReadInterrupt,
+                "Read interrupt routine called, but there is no pending read interrupt"
+            )
         }
     }
 
@@ -517,7 +521,10 @@ impl State {
             self.clear_sound_interrupt();
             Ok(initial_pc)
         } else {
-            fatal_error!(ErrorCode::System, "No pending interrupt")
+            fatal_error!(
+                ErrorCode::NoSoundInterrupt,
+                "Sound interrupt routine called, but there is no pending sound interrupt"
+            )
         }
     }
 
@@ -536,7 +543,10 @@ impl State {
 
             Ok(self.current_frame()?.pc())
         } else {
-            fatal_error!(ErrorCode::System, "No frame to return to")
+            fatal_error!(
+                ErrorCode::ReturnNoCaller,
+                "Return from routine with nowhere to return to"
+            )
         }
     }
 
@@ -602,7 +612,7 @@ impl State {
         let ifhd = IFhd::try_from((&*self, 0))?;
         if &ifhd != quetzal.ifhd() {
             error!(target: "app::quetzal", "Save file was created from a different story file");
-            fatal_error!(
+            recoverable_error!(
                 ErrorCode::Restore,
                 "Save file was created from a different story file"
             )
@@ -628,7 +638,7 @@ impl State {
             self.restore_state(quetzal)
         } else {
             warn!(target: "app::quetzal", "No saved state for undo");
-            fatal_error!(ErrorCode::Restore, "Undo stack is empty")
+            recoverable_error!(ErrorCode::UndoNoState, "Undo stack is empty")
         }
     }
 

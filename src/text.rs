@@ -104,7 +104,10 @@ pub fn from_vec(
                         if !is_abbreviation {
                             abbrev = b
                         } else {
-                            return fatal_error!(ErrorCode::System, "Abbreviations can't nest",);
+                            return fatal_error!(
+                                ErrorCode::InvalidAbbreviation,
+                                "Abbreviations can't nest",
+                            );
                         }
                     }
                     4 => alphabet_shift = 1,

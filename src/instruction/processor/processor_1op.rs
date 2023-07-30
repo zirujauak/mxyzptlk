@@ -114,8 +114,8 @@ pub fn remove_obj(
 
                 if sibling == 0 {
                     return fatal_error!(
-                        ErrorCode::ObjectTreeState,
-                        "Unable to find previous sibling of removed object"
+                        ErrorCode::InvalidObjectTree,
+                        "Unable to find previous sibling of removed object that is not the first child"
                     );
                 }
 
@@ -332,8 +332,7 @@ mod tests {
             branch(0x401, true, 0x40a),
             store(0x402, 0x80),
         );
-        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
-        assert_ok_eq!(zmachine.variable(0x80), 0);
+        assert!(dispatch(&mut zmachine, &i).is_err());
     }
 
     #[test]
@@ -429,8 +428,7 @@ mod tests {
             branch(0x401, true, 0x40a),
             store(0x402, 0x80),
         );
-        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
-        assert_ok_eq!(zmachine.variable(0x80), 0x00);
+        assert!(dispatch(&mut zmachine, &i).is_err());
     }
 
     #[test]
@@ -504,8 +502,7 @@ mod tests {
             0x403,
             store(0x402, 0x80),
         );
-        assert_ok_eq!(dispatch(&mut zmachine, &i), 0x403);
-        assert_ok_eq!(zmachine.variable(0x80), 0);
+        assert!(dispatch(&mut zmachine, &i).is_err());
     }
 
     #[test]

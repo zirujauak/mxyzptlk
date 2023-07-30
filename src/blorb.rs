@@ -4,7 +4,7 @@ use iff::Chunk;
 
 use crate::{
     error::{ErrorCode, RuntimeError},
-    fatal_error,
+    fatal_error, recoverable_error,
 };
 
 #[derive(Clone, Debug)]
@@ -56,14 +56,14 @@ impl TryFrom<&Chunk> for IFhd {
 
     fn try_from(value: &Chunk) -> Result<Self, Self::Error> {
         if value.id() != "IFhd" {
-            fatal_error!(
-                ErrorCode::System,
+            recoverable_error!(
+                ErrorCode::IFFInvalidChunkId,
                 "Chunk ID is not 'IFhd': '{}'",
                 value.id(),
             )
         } else if value.length() < 13 {
-            fatal_error!(
-                ErrorCode::System,
+            recoverable_error!(
+                ErrorCode::IFhdChunkLength,
                 "Chunk data should be (at least) 13 bytes: {}",
                 value.length()
             )
@@ -117,8 +117,8 @@ impl TryFrom<&[u8]> for Index {
     type Error = RuntimeError;
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() != 12 {
-            fatal_error!(
-                ErrorCode::System,
+            recoverable_error!(
+                ErrorCode::BlorbRIdxEntrySize,
                 "Index entry should be 12 bytes: {}",
                 value.len()
             )
@@ -151,13 +151,17 @@ impl TryFrom<&Chunk> for RIdx {
 
     fn try_from(value: &Chunk) -> Result<Self, Self::Error> {
         if value.id() != "RIdx" {
-            fatal_error!(ErrorCode::System, "Chunk is not 'RIdx': '{}'", value.id())
+            recoverable_error!(
+                ErrorCode::IFFInvalidChunkId,
+                "Chunk is not 'RIdx': '{}'",
+                value.id()
+            )
         } else {
             let data = value.data();
             let count = iff::vec_as_unsigned(&data[0..4]);
             if data.len() != 4 + (count * 12) {
-                fatal_error!(
-                    ErrorCode::System,
+                recoverable_error!(
+                    ErrorCode::IFhdChunkLength,
                     "Chunk data size should be {} for {} entries: {}",
                     4 + (count * 12),
                     count,
@@ -201,8 +205,8 @@ impl TryFrom<&[u8]> for Entry {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() != 8 {
-            fatal_error!(
-                ErrorCode::System,
+            recoverable_error!(
+                ErrorCode::BlorbLoopEntrySize,
                 "Entry data should be 8 bytes: {}",
                 value.len()
             )
@@ -234,14 +238,14 @@ impl TryFrom<&Chunk> for Loop {
 
     fn try_from(value: &Chunk) -> Result<Self, Self::Error> {
         if value.id() != "Loop" {
-            fatal_error!(
-                ErrorCode::System,
+            recoverable_error!(
+                ErrorCode::IFFInvalidChunkId,
                 "Chunk id is not 'Loop': '{}'",
                 value.id()
             )
         } else if value.length() % 8 != 0 {
-            fatal_error!(
-                ErrorCode::System,
+            recoverable_error!(
+                ErrorCode::IFhdChunkLength,
                 "Chunk data length should be a multiple of 8: '{}'",
                 value.length()
             )
@@ -311,8 +315,8 @@ impl TryFrom<&Chunk> for Blorb {
 
     fn try_from(value: &Chunk) -> Result<Self, Self::Error> {
         if value.id() != "FORM" || value.sub_id() != "IFRS" {
-            fatal_error!(
-                ErrorCode::System,
+            recoverable_error!(
+                ErrorCode::IFFInvalidChunkId,
                 "Expected 'FORM'/'IFRS': '{}'/'{}'",
                 value.id(),
                 value.sub_id()
@@ -336,7 +340,7 @@ impl TryFrom<&Chunk> for Blorb {
 
             let ridx_chunk = value.find_chunk("RIdx", "");
             if ridx_chunk.is_none() {
-                return fatal_error!(ErrorCode::System, "No RIdx chunk");
+                return fatal_error!(ErrorCode::BlorbMissingChunk, "No RIdx chunk");
             }
             let ridx = RIdx::try_from(ridx_chunk.unwrap())?;
 
@@ -412,7 +416,7 @@ impl TryFrom<&mut File> for Blorb {
     fn try_from(value: &mut File) -> Result<Self, Self::Error> {
         match Chunk::try_from(value) {
             Ok(c) => Blorb::try_from(&c),
-            Err(e) => fatal_error!(ErrorCode::System, "Error opening file: {}", e),
+            Err(e) => recoverable_error!(ErrorCode::FileError, "Error opening file: {}", e),
         }
     }
 }

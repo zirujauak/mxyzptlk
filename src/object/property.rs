@@ -162,8 +162,8 @@ pub fn property(zmachine: &ZMachine, object: usize, property: u8) -> Result<u16,
             1 => Ok(zmachine.read_byte(property_data_address)? as u16),
             2 => zmachine.read_word(property_data_address),
             _ => fatal_error!(
-                ErrorCode::PropertySize,
-                "Read of property {} on object {} has size {}",
+                ErrorCode::InvalidObjectPropertySize,
+                "Read of property {} on object {} should have size 1 or 2, was {}",
                 property,
                 object,
                 property_size
@@ -208,8 +208,8 @@ pub fn set_property(
     let property_address = address(zmachine, object, property)?;
     if property_address == 0 {
         fatal_error!(
-            ErrorCode::ObjectTreeState,
-            "Can't get properyt address for property 0"
+            ErrorCode::InvalidObjectProperty,
+            "Can't get property address for property 0"
         )
     } else {
         let property_size = size(zmachine, property_address)?;

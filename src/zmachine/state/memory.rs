@@ -38,7 +38,7 @@ impl TryFrom<&mut File> for Memory {
         let mut d = Vec::new();
         match value.read_to_end(&mut d) {
             Ok(_) => Ok(Memory::new(d)),
-            Err(e) => fatal_error!(ErrorCode::System, "Error reading file: {}", e),
+            Err(e) => fatal_error!(ErrorCode::InvalidFile, "Error reading file: {}", e),
         }
     }
 }
@@ -184,7 +184,7 @@ impl Memory {
         if data.len() != self.dynamic.len() {
             fatal_error!(
                 ErrorCode::Restore,
-                "Dynamic memory size doesn't match: {:04x} != {:04x}",
+                "Restore dynamic memory size doesn't match: {:04x} != {:04x}",
                 self.dynamic.len(),
                 data.len()
             )

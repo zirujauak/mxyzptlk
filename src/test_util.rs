@@ -241,7 +241,7 @@ pub fn mock_instruction(
     opcode: Opcode,
     next_address: usize,
 ) -> Instruction {
-    Instruction::new(address, opcode, operands, None, None, next_address)
+    Instruction::new(&[], address, opcode, operands, None, None, next_address)
 }
 
 pub fn branch(byte_address: usize, condition: bool, branch_address: usize) -> Branch {
@@ -255,7 +255,15 @@ pub fn mock_branch_instruction(
     next_address: usize,
     branch: Branch,
 ) -> Instruction {
-    Instruction::new(address, opcode, operands, None, Some(branch), next_address)
+    Instruction::new(
+        &[],
+        address,
+        opcode,
+        operands,
+        None,
+        Some(branch),
+        next_address,
+    )
 }
 
 pub fn store(byte_address: usize, variable: u8) -> StoreResult {
@@ -269,7 +277,15 @@ pub fn mock_store_instruction(
     next_address: usize,
     result: StoreResult,
 ) -> Instruction {
-    Instruction::new(address, opcode, operands, Some(result), None, next_address)
+    Instruction::new(
+        &[],
+        address,
+        opcode,
+        operands,
+        Some(result),
+        None,
+        next_address,
+    )
 }
 
 pub fn mock_branch_store_instruction(
@@ -281,6 +297,7 @@ pub fn mock_branch_store_instruction(
     result: StoreResult,
 ) -> Instruction {
     Instruction::new(
+        &[],
         address,
         opcode,
         operands,
@@ -291,6 +308,7 @@ pub fn mock_branch_store_instruction(
 }
 pub fn mock_branch(condition: bool, branch_address: usize, next_address: usize) -> Instruction {
     Instruction::new(
+        &[],
         0,
         Opcode::new(5, 1, 1, OpcodeForm::Var, OperandCount::_VAR),
         vec![],
@@ -303,6 +321,7 @@ pub fn mock_branch(condition: bool, branch_address: usize, next_address: usize) 
 pub fn mock_store_result(result: Option<u8>, next_address: usize) -> Instruction {
     let r = result.map(|x| StoreResult::new(0, x));
     Instruction::new(
+        &[],
         0,
         Opcode::new(5, 1, 1, OpcodeForm::Var, OperandCount::_VAR),
         vec![],

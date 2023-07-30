@@ -274,14 +274,16 @@ pub fn decode_instruction(
     address: usize,
 ) -> Result<Instruction, RuntimeError> {
     let version = zmachine.version();
-    let bytes = zmachine.instruction(address);
+    let mut bytes = zmachine.instruction(address);
     let (offset, opcode) = opcode(&bytes, version, 0)?;
     let (offset, operand_types) = operand_types(&bytes, &opcode, offset)?;
     let (offset, operands) = operands(&bytes, &operand_types, offset)?;
     let (offset, store) = result_variable(address + offset, &bytes, &opcode, offset)?;
     let (offset, branch) = branch(address, &bytes, &opcode, offset)?;
 
+    bytes.truncate(offset);
     Ok(Instruction::new(
+        &bytes,
         address,
         opcode,
         operands,

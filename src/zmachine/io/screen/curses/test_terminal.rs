@@ -110,4 +110,8 @@ impl Terminal for TestTerminal {
     fn output_stream(&mut self, mask: u8, table: Option<usize>) {
         set_output_stream(mask, table);
     }
+
+    fn error(&mut self, _instruction: &str, _message: &str, _recoverable: bool) -> bool {
+        todo!()
+    }
 }

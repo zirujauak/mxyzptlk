@@ -3,7 +3,7 @@ mod curses;
 use core::fmt;
 
 use crate::config::Config;
-use crate::{error::*, fatal_error};
+use crate::{error::*, recoverable_error};
 
 #[cfg(not(test))]
 use curses::pancurses::new_terminal;
@@ -139,7 +139,7 @@ fn map_color(color: u8) -> Result<Color, RuntimeError> {
         7 => Ok(Color::Magenta),
         8 => Ok(Color::Cyan),
         9 => Ok(Color::White),
-        _ => fatal_error!(ErrorCode::InvalidColor, "Invalid color {}", color),
+        _ => recoverable_error!(ErrorCode::InvalidColor, "Invalid color {}", color),
     }
 }
 
@@ -306,7 +306,7 @@ impl Screen {
             7 => Ok(Color::Magenta),
             8 => Ok(Color::Cyan),
             9 => Ok(Color::White),
-            _ => fatal_error!(ErrorCode::InvalidColor, "Invalid color {}", color),
+            _ => recoverable_error!(ErrorCode::InvalidColor, "Invalid color {}", color),
         }
     }
 
@@ -355,7 +355,7 @@ impl Screen {
             self.cursor_1 = Some((self.top, 1));
             Ok(())
         } else {
-            fatal_error!(ErrorCode::InvalidWindow, "Invalid window {}", window)
+            recoverable_error!(ErrorCode::InvalidWindow, "Invalid window {}", window)
         }
     }
 
@@ -454,7 +454,7 @@ impl Screen {
                 self.lines_since_input = 0;
                 Ok(())
             }
-            _ => fatal_error!(
+            _ => recoverable_error!(
                 ErrorCode::InvalidWindow,
                 "ERASE_WINDOW invalid window {}",
                 window
@@ -673,6 +673,10 @@ impl Screen {
     pub fn quit(&mut self) {
         self.terminal.quit();
     }
+
+    pub fn error(&mut self, instruction: &str, message: &str, recoverable: bool) -> bool {
+        self.terminal.error(instruction, message, recoverable)
+    }
 }
 
 pub trait Terminal {
@@ -704,6 +708,7 @@ pub trait Terminal {
     fn set_style(&mut self, _style: u8) {}
     fn buffer_mode(&mut self, _mode: u16) {}
     fn output_stream(&mut self, _stream: u8, _table: Option<usize>) {}
+    fn error(&mut self, instruction: &str, message: &str, recoverable: bool) -> bool;
 }
 
 impl fmt::Debug for dyn Terminal {

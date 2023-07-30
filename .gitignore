@@ -26,3 +26,6 @@ Cargo.lock
 
 /sound/
 /games/
+
+# Temporary
+/utilities/

@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use crate::fatal_error;
+use crate::recoverable_error;
 
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use tempfile::NamedTempFile;
@@ -41,6 +41,10 @@ fn normalize_volume(volume: u8) -> f32 {
 }
 
 impl Player for RodioPlayer {
+    fn type_name(&self) -> &str {
+        "RodioPlayer"
+    }
+
     fn is_playing(&mut self) -> bool {
         if let Some(sink) = self.get_sink().as_mut() {
             !sink.empty()
@@ -68,9 +72,9 @@ impl Player for RodioPlayer {
                                                     let source = match write.reopen() {
                                                     Ok(f) => match Decoder::new(f) {
                                                         Ok(source) => source,
-                                                        Err(e) => return fatal_error!(ErrorCode::System, "Error creating source for sound: {}", e),
+                                                        Err(e) => return recoverable_error!(ErrorCode::SoundPlayback, "Error creating source for sound: {}", e),
                                                     },
-                                                    Err(e) => return fatal_error!(ErrorCode::System, "Error reopening tempfile for sound: {}", e),
+                                                    Err(e) => return recoverable_error!(ErrorCode::SoundPlayback, "Error reopening tempfile for sound: {}", e),
                                                 };
                                                     sink.append(source);
                                                 }
@@ -134,13 +138,21 @@ impl RodioPlayer {
                     }),
                     Err(e) => {
                         error!(target: "app::sound", "rodio: Error initializing sink: {}", e);
-                        fatal_error!(ErrorCode::System, "Error initializing sink: {}", e)
+                        recoverable_error!(
+                            ErrorCode::SoundPlayback,
+                            "Error initializing sink: {}",
+                            e
+                        )
                     }
                 }
             }
             Err(e) => {
                 error!(target: "app::sound", "rodio: Error opening sound output stream: {}", e);
-                fatal_error!(ErrorCode::System, "Error initializing output stream: {}", e)
+                recoverable_error!(
+                    ErrorCode::SoundPlayback,
+                    "Error initializing output stream: {}",
+                    e
+                )
             }
         }
     }

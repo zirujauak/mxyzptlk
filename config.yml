@@ -11,3 +11,9 @@ foreground: 8
 background: 2
 # Logging - "enabled" or "disabled"
 logging: disabled
+# Recoverable(ish) error handling, which is useful for debugging
+#  continue_warn_always - warn every time and allow user to continue
+#  continue_warn_once - warn once per error code and allow user to continue
+#  ignore - attempt to continue without any notice (default)
+#  abort - abort execution with an error message
+error_handling: ignore

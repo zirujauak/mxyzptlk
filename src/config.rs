@@ -3,7 +3,8 @@ use std::fs::File;
 
 use crate::{
     error::{ErrorCode, RuntimeError},
-    fatal_error,
+    recoverable_error,
+    zmachine::ErrorHandling,
 };
 
 #[derive(Debug)]
@@ -11,6 +12,7 @@ pub struct Config {
     foreground: u8,
     background: u8,
     logging: bool,
+    error_handling: ErrorHandling,
 }
 
 impl Default for Config {
@@ -19,6 +21,7 @@ impl Default for Config {
             foreground: 9,
             background: 2,
             logging: false,
+            error_handling: ErrorHandling::ContinueWarnOnce,
         }
     }
 }
@@ -41,20 +44,35 @@ impl TryFrom<File> for Config {
                     Some(t) => t == "enabled",
                     None => false,
                 };
-
-                Ok(Config::new(foreground, background, logging))
+                let error_handling = match data["error_handling"].as_str() {
+                    Some(t) => match t {
+                        "continue_warn_always" => ErrorHandling::ContinueWarnAlways,
+                        "continue_warn_once" => ErrorHandling::ContinueWarnOnce,
+                        "ignore" => ErrorHandling::Ignore,
+                        "abort" => ErrorHandling::Abort,
+                        _ => ErrorHandling::ContinueWarnOnce,
+                    },
+                    None => ErrorHandling::ContinueWarnOnce,
+                };
+                Ok(Config::new(foreground, background, logging, error_handling))
             }
-            Err(e) => fatal_error!(ErrorCode::System, "{}", e),
+            Err(e) => recoverable_error!(ErrorCode::ConfigError, "{}", e),
         }
     }
 }
 
 impl Config {
-    pub fn new(foreground: u8, background: u8, logging: bool) -> Self {
+    pub fn new(
+        foreground: u8,
+        background: u8,
+        logging: bool,
+        error_handling: ErrorHandling,
+    ) -> Self {
         Config {
             foreground,
             background,
             logging,
+            error_handling,
         }
     }
 
@@ -68,5 +86,9 @@ impl Config {
 
     pub fn logging(&self) -> bool {
         self.logging
+    }
+
+    pub fn error_handling(&self) -> ErrorHandling {
+        self.error_handling
     }
 }

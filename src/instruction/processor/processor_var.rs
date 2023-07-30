@@ -3,7 +3,7 @@ use crate::{
     fatal_error,
     instruction::{processor::store_result, Instruction},
     object::property,
-    text,
+    recoverable_error, text,
     zmachine::{io::screen::Interrupt, state::header::HeaderField, ZMachine},
 };
 
@@ -186,7 +186,7 @@ pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
             return zmachine.call_read_interrupt(routine, instruction.address());
         } else {
             return fatal_error!(
-                ErrorCode::System,
+                ErrorCode::ReadNoTerminator,
                 "Read returned no terminator, but there is no interrupt to run"
             );
         }
@@ -444,9 +444,9 @@ pub fn sound_effect(
                 }
                 3 | 4 => zmachine.stop_sound()?,
                 _ => {
-                    return fatal_error!(
-                        ErrorCode::System,
-                        "Invalid SOUND_EFFECT effect {}",
+                    return recoverable_error!(
+                        ErrorCode::InvalidSoundEffect,
+                        "Invalid sound effect {}",
                         effect,
                     )
                 }
@@ -464,8 +464,8 @@ pub fn read_char(
     let operands = operand_values(zmachine, instruction)?;
     if !operands.is_empty() && operands[0] != 1 {
         return fatal_error!(
-            ErrorCode::Instruction,
-            "READ_CHAR argument 1 must be 1, was {}",
+            ErrorCode::InvalidInstruction,
+            "READ_CHAR first argument must be 1, was {}",
             operands[0]
         );
     }
@@ -502,7 +502,7 @@ pub fn read_char(
                 }
             } else {
                 fatal_error!(
-                    ErrorCode::System,
+                    ErrorCode::ReadNothing,
                     "read_key return no character or interrupt"
                 )
             }
@@ -1081,6 +1081,8 @@ mod tests {
         let mut map = test_map(3);
         mock_dictionary(&mut map);
         let mut zmachine = mock_zmachine(map);
+        // G00 is used to print the status line
+        assert!(zmachine.set_variable(0x10, 1).is_ok());
         let i = mock_instruction(
             0x400,
             vec![

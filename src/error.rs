@@ -1,33 +1,61 @@
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ErrorCode {
-    Blorb,
+    BlorbMissingChunk,
+    BlorbLoopEntrySize,
+    BlorbRIdxEntrySize,
+    ConfigError,
+    DivideByZero,
+    FileError,
+    FileExists,
     FrameUnderflow,
-    IFF,
-    IllegalAccess,
+    IFFInvalidChunkId,
+    IFhdChunkLength,
+    IllegalMemoryAccess,
     Instruction,
+    Interpreter,
+    InvalidAbbreviation,
     InvalidAddress,
     InvalidColor,
+    InvalidFile,
+    InvalidFilename,
+    InvalidInput,
+    InvalidInstruction,
     InvalidLocalVariable,
+    InvalidObjectAttribute,
+    InvalidObjectTree,
+    InvalidObjectProperty,
+    InvalidObjectPropertySize,
+    InvalidOutputStream,
+    InvalidShift,
+    InvalidSoundEffect,
     InvalidWindow,
+    NoFrame,
+    NoReadInterrupt,
+    NoSoundInterrupt,
+    ObjectZero,
     ObjectTreeState,
     PropertySize,
+    Quetzal,
+    ReadNothing,
+    ReadNoTerminator,
     Restore,
+    ReturnNoCaller,
     Save,
+    Stream3Table,
+    SoundConversion,
+    SoundPlayback,
     StackUnderflow,
     System,
+    Transcript,
+    UndoNoState,
     UnimplementedInstruction,
     UnsupportedVersion,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum ErrorType {
-    Recoverable,
-    Fatal,
-}
 pub struct RuntimeError {
-    error_type: ErrorType,
+    recoverable: bool,
     code: ErrorCode,
     message: String,
 }
@@ -35,7 +63,7 @@ pub struct RuntimeError {
 impl RuntimeError {
     pub fn recoverable(code: ErrorCode, message: String) -> RuntimeError {
         RuntimeError {
-            error_type: ErrorType::Recoverable,
+            recoverable: true,
             code,
             message,
         }
@@ -43,18 +71,22 @@ impl RuntimeError {
 
     pub fn fatal(code: ErrorCode, message: String) -> RuntimeError {
         RuntimeError {
-            error_type: ErrorType::Fatal,
+            recoverable: false,
             code,
             message,
         }
     }
 
-    pub fn is_recoverable(&self) -> bool {
-        self.error_type == ErrorType::Recoverable
+    pub fn code(&self) -> ErrorCode {
+        self.code
     }
 
-    pub fn is_fatal(&self) -> bool {
-        self.error_type == ErrorType::Fatal
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    pub fn is_recoverable(&self) -> bool {
+        self.recoverable
     }
 }
 
@@ -65,12 +97,25 @@ macro_rules! fatal_error {
     };
 }
 
+#[macro_export]
+macro_rules! recoverable_error {
+    ($code:expr, $($arg:tt)*) => {
+        Err(RuntimeError::recoverable($code, format!($($arg)*)))
+    }
+}
+
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:?} [{:?}] {}",
-            self.error_type, self.code, self.message
+            "{} error - [{:?}]: {}",
+            if self.recoverable {
+                "Recoverable"
+            } else {
+                "Fatal"
+            },
+            self.code,
+            self.message
         )
     }
 }
@@ -79,8 +124,14 @@ impl fmt::Debug for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:?} [{:?}] {}",
-            self.error_type, self.code, self.message
+            "{} error - [{:?}]: {}",
+            if self.recoverable {
+                "Recoverable"
+            } else {
+                "Fatal"
+            },
+            self.code,
+            self.message
         )
     }
 }
