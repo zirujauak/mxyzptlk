@@ -56,7 +56,7 @@ fn check_config(name: &str) -> bool {
     match Path::new(name).try_exists() {
         Ok(b) => b,
         Err(e) => {
-            info!(target: "app::trace", "Error checking existence of {}: {}", name, e);
+            error!(target: "app::state", "Error checking existence of {}: {}", name, e);
             false
         }
     }
@@ -89,7 +89,7 @@ pub fn check_existing(filename: &str) -> Option<String> {
             }
         }
         Err(e) => {
-            info!(target: "app::trace", "Error checking existence of {}: {}", filename, e);
+            error!(target: "app::state", "Error checking existence of {}: {}", filename, e);
             None
         }
     }

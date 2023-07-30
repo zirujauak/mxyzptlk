@@ -113,7 +113,7 @@ impl Frame {
 
     pub fn pop(&mut self) -> Result<u16, RuntimeError> {
         if let Some(v) = self.stack.pop() {
-            info!(target: "app::stack", "Pop {:04x} [{}]", v, self.stack.len());
+            debug!(target: "app::state", "Pop {:04x} [{}]", v, self.stack.len());
             Ok(v)
         } else {
             fatal_error!(ErrorCode::StackUnderflow, "Popped an empty stack")
@@ -130,7 +130,7 @@ impl Frame {
 
     pub fn push(&mut self, value: u16) {
         self.stack.push(value);
-        info!(target: "app::stack", "Push {:04x} [{}]", value, self.stack.len());
+        debug!(target: "app::state", "Push {:04x} [{}]", value, self.stack.len());
     }
 
     pub fn result(&self) -> Option<&StoreResult> {

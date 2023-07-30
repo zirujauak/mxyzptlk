@@ -5,7 +5,7 @@ use super::*;
 pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if !operands.is_empty() {
-        error!(target: "app::instruction", "SAVE auxiliary data not implemented yet");
+        info!(target: "app::instruction", "SAVE auxiliary data not implemented yet");
         store_result(zmachine, instruction, 0)?;
     } else {
         // unwrap() should be safe here because this is a store instruction
@@ -24,7 +24,7 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize,
 pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<usize, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if !operands.is_empty() {
-        error!(target: "app::instruction", "RESTORE auxiliary data not implemented yet");
+        info!(target: "app::instruction", "RESTORE auxiliary data not implemented yet");
         store_result(zmachine, instruction, 0)?;
         Ok(instruction.next_address())
     } else {

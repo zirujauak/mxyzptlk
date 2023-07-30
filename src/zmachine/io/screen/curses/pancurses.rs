@@ -19,7 +19,7 @@ pub fn new_terminal() -> Box<dyn Terminal> {
 
 impl PCTerminal {
     pub fn new() -> PCTerminal {
-        info!(target: "app::input", "Initialize pancurses terminal");
+        info!(target: "app::screen", "Initialize pancurses terminal");
         let window = pancurses::initscr();
         pancurses::curs_set(0);
         pancurses::noecho();
@@ -86,12 +86,12 @@ impl PCTerminal {
                     }
                 }
                 Err(e) => {
-                    error!(target: "app::input", "{}", e);
+                    warn!(target: "app::screen", "Error reading mouse event: {}", e);
                     InputEvent::no_input()
                 }
             },
             _ => {
-                info!(target: "app::input", "Input: {:?}", input);
+                info!(target: "app::screen", "Unprocssed input: {:?}", input);
                 InputEvent::no_input()
             }
         }
@@ -186,11 +186,13 @@ impl Terminal for PCTerminal {
     }
 
     fn quit(&mut self) {
-        info!(target: "app::input", "Closing pancurses terminal");
+        info!(target: "app::screen", "Closing pancurses terminal");
+        self.window.keypad(false);
         pancurses::curs_set(2);
+        pancurses::mousemask(0, None);
         pancurses::endwin();
         pancurses::doupdate();
-        pancurses::reset_shell_mode();
+        pancurses::reset_prog_mode();
     }
 
     fn set_colors(&mut self, colors: (Color, Color)) {

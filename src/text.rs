@@ -273,7 +273,7 @@ pub fn encode_text(word: &mut Vec<u16>, words: usize) -> Vec<u16> {
     // Truncate or pad characters
     zchars.resize(words * 3, 5);
 
-    info!(target: "app::input", "LEXICAL ANALYSIS: zchars: {:?}", zchars);
+    debug!(target: "app::state", "LEXICAL ANALYSIS: zchars: {:?}", zchars);
 
     // Encode zchar triplets into encoded ZSCII words
     let mut zwords = Vec::new();
@@ -298,11 +298,11 @@ pub fn from_dictionary(
     let entry_size = zmachine.read_byte(dictionary_address + separator_count + 1)? as usize;
     let entry_count = zmachine.read_word(dictionary_address + separator_count + 2)? as i16;
     let word_count = if zmachine.version() < 4 { 2 } else { 3 };
-    info!(target: "app::input", "LEXICAL ANALYSIS: dictionary @ {:04x}, {} separators, {} entries of size {}", dictionary_address, separator_count, entry_count, entry_size);
+    debug!(target: "app::state", "LEXICAL ANALYSIS: dictionary @ {:04x}, {} separators, {} entries of size {}", dictionary_address, separator_count, entry_count, entry_size);
 
     let mut zchars = word.iter().map(|c| *c as u16).collect::<Vec<u16>>();
     let words = encode_text(&mut zchars, word_count);
-    info!(target: "app::input", "LEXICAL ANALYSIS: encoded text: {:?}", words);
+    debug!(target: "app::state", "LEXICAL ANALYSIS: encoded text: {:?}", words);
 
     if entry_count > 0 {
         search_entry(
@@ -335,7 +335,7 @@ fn find_word(
     let entry = from_dictionary(zmachine, dictionary, word)?;
     let offset = if zmachine.version() < 5 { 1 } else { 2 };
 
-    info!(target: "app::input", "LEXICAL ANALYSIS: {:?} => {:04x}", word, entry);
+    debug!(target: "app::state", "LEXICAL ANALYSIS: {:?} => {:04x}", word, entry);
     let parse_address = parse_buffer + 2 + (4 * parse_index);
     if !flag {
         store_parsed_entry(
@@ -345,7 +345,7 @@ fn find_word(
             parse_address,
             entry as u16,
         )?;
-        info!(target: "app::input", "LEXICAL ANALYSIS: store to parse buffer {:04x}", parse_address);
+        debug!(target: "app::state", "LEXICAL ANALYSIS: store to parse buffer {:04x}", parse_address);
         Ok((parse_index + 1, word_count + 1))
     } else if entry > 0 {
         let e = zmachine.read_word(parse_address)?;
@@ -357,7 +357,7 @@ fn find_word(
                 parse_address,
                 entry as u16,
             )?;
-            info!(target: "app::input", "LEXICAL ANALYSIS: store to parse buffer {:04x}", parse_address);
+            debug!(target: "app::state", "LEXICAL ANALYSIS: store to parse buffer {:04x}", parse_address);
             Ok((parse_index + 1, word_count + 1))
         } else {
             Ok((parse_index + 1, word_count))
@@ -374,7 +374,7 @@ fn store_parsed_entry(
     entry_address: usize,
     entry: u16,
 ) -> Result<(), RuntimeError> {
-    info!(target: "app::input", "LEXICAL_ANALYSIS: dictionary for {:?} => stored to ${:04x}: {:#04x}/{}/{}", word, entry_address, entry, word.len(), word_start);
+    debug!(target: "app::state", "LEXICAL_ANALYSIS: dictionary for {:?} => stored to ${:04x}: {:#04x}/{}/{}", word, entry_address, entry, word.len(), word_start);
     zmachine.write_word(entry_address, entry)?;
     zmachine.write_byte(entry_address + 2, word.len() as u8)?;
     zmachine.write_byte(entry_address + 3, word_start as u8)?;
@@ -388,7 +388,7 @@ pub fn parse_text(
     dictionary: usize,
     flag: bool,
 ) -> Result<(), RuntimeError> {
-    info!(target: "app::input", "LEXICAL ANALYSIS: text @ {:04x}, parse @ {:04x}, dictionary @ {:04x}, skip {}", text_buffer, parse_buffer, dictionary, flag);
+    debug!(target: "app::state", "LEXICAL ANALYSIS: text @ {:04x}, parse @ {:04x}, dictionary @ {:04x}, skip {}", text_buffer, parse_buffer, dictionary, flag);
     let separators = separators(zmachine, dictionary)?;
     let mut word = Vec::new();
     let mut word_start: usize = 0;

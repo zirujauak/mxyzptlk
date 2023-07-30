@@ -118,6 +118,17 @@ As referenced in the installation instructions, the `config.yml` as shipped cont
 
 When logging is enabled, execution will dump quite a bit of output to various `.log` files in the current working directory.  Logging is disabled by default, but can be enabled via the `config.yml` file (see above) and further refined by changing the various `level` values in `log4rs.yml` for different log files.  As with `config.yml`, `log4rs.yml` should be located in the `.mxyzptlk/` directory in the home directory or the current working directory, with any copy in the current working directory taking precedence.
 
+Each log message includes the instruction counter, making is relatively easy to cross-reference data from different log files.  
+
+The logs are split across several files are as follows:
+* `instruction.log` - instruction execution
+* `resource.log` - resource file
+* `screen.log` - user-input (keyboard/mouse) and screen output
+* `sound.log` - sound conversion and playback
+* `state.log` - runtime state
+* `stream.log` - input and output streams
+* `mxyzptlk.log` - all of the above, all at once.
+
 ## Building from source
 
 ### Required libraries

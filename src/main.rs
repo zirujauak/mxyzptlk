@@ -104,26 +104,26 @@ fn main() {
                 log_mdc::insert("instruction_count", format!("{:8x}", 0));
             }
 
-            error!(target: "app::blorb", "Start blorb log for '{}'", full_name);
-            error!(target: "app::frame", "Start frame log for '{}'", full_name);
-            error!(target: "app::input", "Start input log for '{}'", full_name);
-            error!(target: "app::instruction", "Start instruction log for '{}'", full_name);
-            error!(target: "app::memory", "Start memory log for '{}'", full_name);
-            error!(target: "app::object", "Start object log for '{}'", full_name);
-            error!(target: "app::quetzal", "Start quetzal log for '{}'", full_name);
-            error!(target: "app::sound", "Start sound log for '{}'", full_name);
-            error!(target: "app::stack", "Start stack log for '{}'", full_name);
-            error!(target: "app::trace", "Start trace log for '{}'", full_name);
-            error!(target: "app::variable", "Start variable log for '{}'", full_name);
-            info!(target: "app::trace", "{:?}", config);
+            info!(target: "app::instruction", "Start instruction log for '{}'", name);
+            info!(target: "app::resource", "Start resource log for '{}'", name);
+            info!(target: "app::screen", "Start screen log for '{}'", name);
+            info!(target: "app::sound", "Start sound log for '{}'", name);
+            info!(target: "app::state", "Start state log for '{}'", name);
+            info!(target: "app::stream", "Start stream log for '{}'", name);
+            info!(target: "app::state", "Configuration: {:?}", config);
         }
     }
 
     let prev = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
-        trace!(target: "app::trace", "{}", &info);
+        debug!("{}", &info);
         // Reset the terminal because curses may not exit cleanly
-        let _ = std::process::Command::new("reset").status();
+        if cfg!(target_os = "macos") {
+            let _ = std::process::Command::new("reset").status();
+            let _ = std::process::Command::new("tput").arg("rmcup");
+        } else if cfg!(target_os = "linux") {
+            let _ = std::process::Command::new("reset").status();
+        }
         prev(info);
     }));
 
@@ -192,10 +192,17 @@ fn main() {
     let mut zmachine =
         ZMachine::new(memory, config, sound_manager, &name).expect("Error creating state");
 
-    trace!(target: "app::trace", "Begin execution");
+    trace!("Begining execution");
     if let Err(r) = zmachine.run() {
         let _ = zmachine.print_str(format!("\r{}\r", r));
         let _ = zmachine.quit();
-        panic!("{}", r)
+    }
+    if cfg!(target_os = "macos") {
+        let _ = std::process::Command::new("/usr/bin/reset").status();
+        let _ = std::process::Command::new("/usr/bin/tput")
+            .arg("rmcup")
+            .status();
+    } else if cfg!(target_os = "linux") {
+        let _ = std::process::Command::new("/usr/bin/reset").status();
     }
 }

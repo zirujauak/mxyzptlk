@@ -125,7 +125,7 @@ impl From<Blorb> for HashMap<u32, Sound> {
                 if let Some(chunk) = value.sounds().get(&(index.start())) {
                     let s = Sound::from((index.number(), chunk, loops.get(&index.number())));
                     if !s.data().is_empty() {
-                        info!(target: "app::sound", "Sound: {}", s);
+                        debug!(target: "app::sound", "Sound: {}", s);
                         sounds.insert(index.number(), s);
                     }
                 }

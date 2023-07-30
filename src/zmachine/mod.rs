@@ -156,7 +156,7 @@ impl ZMachine {
                 .is_err()
         {
             // Starting the transcript failed, so skip writing to memory
-            warn!(target: "app::memory", "Staring transcript failed, not setting transcript bit");
+            warn!(target: "app::stream", "Staring transcript failed, not setting transcript bit");
             return self.state.write_byte(address, value & 0xFE);
         }
 
@@ -171,7 +171,7 @@ impl ZMachine {
                 .is_err()
         {
             // Starting the transcript failed, so skip writing to memory
-            warn!(target: "app::memory", "Staring transcript failed, not setting transcript bit");
+            warn!(target: "app::stream", "Staring transcript failed, not setting transcript bit");
             return self.state.write_word(0x10, value & 0xFFFE);
         } else if address == 0x11
             && self
@@ -179,7 +179,7 @@ impl ZMachine {
                 .is_err()
         {
             // Starting the transcript failed, so skip writing to memory
-            warn!(target: "app::memory", "Staring transcript failed, not setting transcript bit");
+            warn!(target: "app::stream", "Staring transcript failed, not setting transcript bit");
             return self.state.write_word(0x11, value & 0xFEFF);
         }
 
@@ -243,7 +243,7 @@ impl ZMachine {
         match self.prompt_and_read("Restore from: ", "ifzs") {
             Ok(save_data) => self.state.restore(save_data),
             Err(e) => {
-                error!(target: "app::quetzal", "Error restoring: {}", e);
+                error!(target: "app::state", "Error restoring state: {}", e);
                 Err(e)
             }
         }
@@ -361,7 +361,7 @@ impl ZMachine {
     pub fn output_stream(&mut self, stream: i16, table: Option<usize>) -> Result<(), RuntimeError> {
         match stream {
             1..=4 => {
-                info!(target: "app::stream", "Enabling output stream {}", stream);
+                debug!(target: "app::stream", "Enabling output stream {}", stream);
                 if stream == 2 {
                     if !self.io.is_stream_2_open() {
                         if let Err(e) = self.start_stream_2() {
@@ -382,7 +382,7 @@ impl ZMachine {
                 }
             }
             -4..=-1 => {
-                info!(target: "app::stream", "Disabling output stream {}", i16::abs(stream));
+                debug!(target: "app::stream", "Disabling output stream {}", i16::abs(stream));
                 if stream == -2 {
                     // Unset the transcript bit
                     let f2 = self.state.read_word(0x10)?;
@@ -507,7 +507,7 @@ impl ZMachine {
                 }
             }
             Err(e) => {
-                error!(target: "app::trace", "Error getting current system time: {}", e);
+                error!(target: "app::state", "Error getting current system time: {}", e);
                 0
             }
         }
@@ -517,19 +517,19 @@ impl ZMachine {
         let column = match event.column() {
             Some(col) => col,
             _ => {
-                error!(target: "app::input", "Input event missing mouse column data");
+                error!(target: "app::screen", "Input event missing mouse column data");
                 0
             }
         };
         let row = match event.row() {
             Some(row) => row,
             _ => {
-                error!(target: "app::input", "Input event missing mouse row data");
+                error!(target: "app::screen", "Input event missing mouse row data");
                 0
             }
         };
 
-        debug!(target: "app::input", "Storing mouse coordinates {},{}", column, row);
+        debug!(target: "app::screen", "Storing mouse coordinates ({},{})", column, row);
         header::set_extension(&mut self.state, 1, column)?;
         header::set_extension(&mut self.state, 2, row)?;
 
@@ -550,7 +550,7 @@ impl ZMachine {
             if self.state.sound_interrupt().is_some() {
                 if let Some(sounds) = self.sound_manager.as_mut() {
                     if !sounds.is_playing() {
-                        info!(target: "app::input", "Sound interrupt firing");
+                        debug!(target: "app::screen", "Read interrupted: sound interrupt firing");
                         self.input_interrupt = None;
                         return Ok(InputEvent::from_interrupt(Interrupt::Sound));
                     }
@@ -559,6 +559,7 @@ impl ZMachine {
 
             let now = self.now(None);
             if end > 0 && now > end {
+                debug!(target: "app::screen", "Read interrupted: timed out");
                 return Ok(InputEvent::from_interrupt(Interrupt::ReadTimeout));
             }
 
@@ -592,17 +593,17 @@ impl ZMachine {
 
         let check_sound = self.state.sound_interrupt().is_some();
 
-        info!(target: "app::input", "Sound interrupt {:?}", check_sound);
+        debug!(target: "app::screen", "Pending sound interrupt? {}", check_sound);
 
         loop {
             // If a sound interrupt is set and there is no sound playing,
             // return buffer and clear any pending input_interrupt
             if self.state.sound_interrupt().is_some() {
-                info!(target: "app::frame", "Interrupt pending");
+                debug!(target: "app::screen", "Soundinterrupt pending");
                 if let Some(sounds) = self.sound_manager.as_mut() {
-                    info!(target: "app::frame", "Sound playing? {}", sounds.is_playing());
+                    debug!(target: "app::screen", "Sound playing? {}", sounds.is_playing());
                     if !sounds.is_playing() {
-                        info!(target: "app::frame", "Sound interrupt firing");
+                        debug!(target: "app::screen", "Read interrupted: sound interrupt firing");
                         self.state.clear_read_interrupt();
                         return Ok(input_buffer);
                     }
@@ -611,13 +612,13 @@ impl ZMachine {
 
             let now = self.now(None);
             if end > 0 && now > end {
-                info!(target: "app::input", "read_line timed out");
+                debug!(target: "app::screen", "Read interrupted: timed out");
                 return Ok(input_buffer);
             }
 
             let timeout = if end > 0 { end - now } else { 0 };
 
-            info!(target: "app::input", "Now: {}, End: {}, Timeout: {}", now, end, timeout);
+            trace!(target: "app::screen", "Now: {}, End: {}, Timeout: {}", now, end, timeout);
 
             let e = self.io.read_key(end == 0 && !check_sound);
             match e.zchar() {
