@@ -16,8 +16,10 @@ The current release is `1.0.0-beta.2`
 ## Installation
 1. Download the appropriate release tarball for your system.  Archives are named by platform:
     * `aarch64-apple-darwin` for ARM-based (M1, M2) Macs
-    * `x86_64-apple-darwin` for Intel-based Macs
-    * `x86_64-pc-windows-msvc` for 64-bit X86 Windows
+    * `aarch64-unknown-linux-gnu` for ARM-based (M1, M2) Macs running Asahi Linux
+    * `x86_64-apple-darwin` for 64-bit Intel-based Macs
+    * `x86_64-pc-windows-msvc` for 64-bit Intel Windows
+    * `x86_64-unknown-linux-gnu` for 64-bit Intel Linux
     * ...
 2. Decompress the tar/gzip archive using your favorite decompression tool:
     * Mac/Linux: `tar -xzvf mxyzptlk-{platform}-1.0-beta.1.tar.gz`
