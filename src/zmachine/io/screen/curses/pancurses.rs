@@ -124,7 +124,11 @@ impl Terminal for PCTerminal {
             attributes |= A_BOLD;
         }
         if style.is_style(Style::Italic) {
-            attributes |= A_UNDERLINE;
+            if cfg!(target_os = "macos") {
+                attributes |= A_UNDERLINE;
+            } else {
+                attributes |= A_ITALIC;
+            }
         }
         if style.is_style(Style::Reverse) {
             attributes |= A_REVERSE;
