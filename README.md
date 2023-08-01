@@ -11,7 +11,7 @@ This software is free to use and provided without any warranty, assurance of cor
 
 This interpreter adheres the [standard 1.0](https://inform-fiction.org/zmachine/standards/z1point1/index.html) ZMachine specification, and uses the [Quetzal 1.4](http://inform-fiction.org/zmachine/standards/quetzal/index.html) save file specification, and supports [Blorb 2.04](https://www.eblong.com/zarf/blorb/blorb.html) sound resource files.
 
-The current release is `1.0.0-beta.2`
+The current release is `1.0.0-beta.3`
 
 ## Installation
 1. Download the appropriate release tarball for your system.  Archives are named by platform:

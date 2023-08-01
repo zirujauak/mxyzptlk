@@ -1,3 +1,13 @@
+Version 1.0.0.beta-3 (2023-07-31)
+==========================
+- Final? beta release
+    * Rewritten IFF implementation
+    * Support for Blorb with `Exec` index and `ZCOD` chunk
+    * Recoverable error handling options; logging restructured
+    * Reset terminal properly on Mac/Linux
+    * Removed `easycurses` dependency
+    * Minor bug fixes
+
 Version 1.0.0.beta-2 (2023-07-16)
 ==========================
 - Second beta release
@@ -8,10 +18,8 @@ Version 1.0.0.beta-2 (2023-07-16)
         * Fix minor cosmetic issues with V3 status line
         * Correct handling of terminating characters when reading input
         * Fix predictable random number generation
-
     * Full unit testing; test coverage reporting
 
-\**V7 support is untested.  Version 7 was transitory and rarely used.*Version 1.0.0.beta-1 (2023-07-02)
 ==========================
 - First beta release
 
