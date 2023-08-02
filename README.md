@@ -27,7 +27,7 @@ This software dynamically links the [libsndfile](https://github.com/libsndfile/l
     * Mac/Linux: `tar -xzvf mxyzptlk-{platform}-1.0-beta.1.tar.gz`
     * Windows: [7Zip](https://www.7-zip.org/) or another archiver that supports gzipped tar files.
 
-        Each archive should contain 4 binaries (named `mxyzptlk-{features}` as described below), default configuration files, and assorted documentation.
+        Each archive should contain 2 binaries, default configuration files, and assorted documentation.
 3. Pick a terminal and sound configuration binary and copy it to a local `bin/` directory (`/usr/local/bin` on most Linux and Mac installations) for ease of use.  
 
     The available binaries are named according to supported features:
