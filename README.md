@@ -13,6 +13,8 @@ This interpreter adheres the [standard 1.0](https://inform-fiction.org/zmachine/
 
 The current release is `1.0.0-beta.3`
 
+This software dynamically links the [libsndfile](https://github.com/libsndfile/libsndfile) library in certain configurations, licensed under the [GNU LGPL 2.1](https://github.com/libsndfile/libsndfile/blob/master/COPYING) license.  No source or executable code from this library is intentionally included in any of the release packages hosted in this repository.
+
 ## Installation
 1. Download the appropriate release tarball for your system.  Archives are named by platform:
     * `aarch64-apple-darwin` for ARM-based (M1, M2) Macs
