@@ -1562,7 +1562,7 @@ mod tests {
         let m = Memory::new(map.clone());
         let mut zmachine = assert_ok!(ZMachine::new(
             m,
-            Config::new(3, 6, false, ErrorHandling::Ignore),
+            Config::new(3, 6, false, ErrorHandling::Ignore, 128.0),
             None,
             "test"
         ));
@@ -1637,7 +1637,7 @@ mod tests {
         let m = Memory::new(map.clone());
         let mut zmachine = assert_ok!(ZMachine::new(
             m,
-            Config::new(3, 6, false, ErrorHandling::Ignore),
+            Config::new(3, 6, false, ErrorHandling::Ignore, 128.0),
             None,
             "test"
         ));
@@ -1667,7 +1667,7 @@ mod tests {
         let m = Memory::new(map.clone());
         let mut zmachine = assert_ok!(ZMachine::new(
             m,
-            Config::new(3, 6, false, ErrorHandling::Ignore),
+            Config::new(3, 6, false, ErrorHandling::Ignore, 128.0),
             None,
             "test"
         ));
@@ -2430,7 +2430,7 @@ mod tests {
         let map = test_map(5);
         let m = Memory::new(map);
         let blorb = mock_blorb();
-        let manager = assert_ok!(Manager::new(blorb));
+        let manager = assert_ok!(Manager::new(128.0, blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         zmachine.set_sound_interrupt(0x1234);
         let manager = assert_some!(zmachine.sound_manager.as_mut());
@@ -2557,7 +2557,7 @@ mod tests {
         let map = test_map(5);
         let m = Memory::new(map);
         let blorb = mock_blorb();
-        let manager = assert_ok!(Manager::new(blorb));
+        let manager = assert_ok!(Manager::new(128.0, blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         zmachine.set_sound_interrupt(0x1234);
         let manager = assert_some!(zmachine.sound_manager.as_mut());
@@ -2862,7 +2862,7 @@ mod tests {
         let map = test_map(3);
         let m = Memory::new(map);
         let blorb = mock_blorb();
-        let manager = assert_ok!(Manager::new(blorb));
+        let manager = assert_ok!(Manager::new(128.0, blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(1, 8, 0, None).is_ok());
         assert_eq!(play_sound(), (4, 8, 10));
@@ -2885,7 +2885,7 @@ mod tests {
         sounds.insert(0x400, Chunk::new_chunk(0x400, "OGGV", vec![4, 4, 4, 4]));
         sounds.insert(0x200, Chunk::new_form(0x200, "AIFF", vec![]));
         let blorb = Blorb::new(ridx, None, sounds, Some(sloop), None);
-        let manager = assert_ok!(Manager::new(blorb));
+        let manager = assert_ok!(Manager::new(128.0, blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(1, 8, 0, None).is_ok());
         assert_eq!(play_sound(), (4, 8, 0));
@@ -2897,7 +2897,7 @@ mod tests {
         let map = test_map(5);
         let m = Memory::new(map);
         let blorb = mock_blorb();
-        let manager = assert_ok!(Manager::new(blorb));
+        let manager = assert_ok!(Manager::new(128.0, blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(4, 8, 5, None).is_ok());
         assert_eq!(play_sound(), (4, 8, 5));
@@ -2909,7 +2909,7 @@ mod tests {
         let map = test_map(5);
         let m = Memory::new(map);
         let blorb = mock_blorb();
-        let manager = assert_ok!(Manager::new(blorb));
+        let manager = assert_ok!(Manager::new(128.0, blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(4, 8, 5, Some(0x500)).is_ok());
         assert_some_eq!(zmachine.sound_interrupt(), 0x500);
@@ -2922,7 +2922,7 @@ mod tests {
         let map = test_map(5);
         let m = Memory::new(map);
         let blorb = mock_blorb();
-        let manager = assert_ok!(Manager::new(blorb));
+        let manager = assert_ok!(Manager::new(128.0, blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(4, 8, 5, None).is_ok());
         assert_eq!(play_sound(), (4, 8, 5));
@@ -2948,7 +2948,7 @@ mod tests {
         sounds.insert(0x400, Chunk::new_chunk(0x400, "OGGV", vec![4, 4, 4, 4]));
         sounds.insert(0x200, Chunk::new_form(0x200, "AIFF", vec![]));
         let blorb = Blorb::new(ridx, None, sounds, Some(sloop), None);
-        let manager = assert_ok!(Manager::new(blorb));
+        let manager = assert_ok!(Manager::new(128.0, blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(2, 8, 5, None).is_ok());
         assert_eq!(play_sound(), (0, 0, 0));
@@ -2970,7 +2970,7 @@ mod tests {
         let map = test_map(5);
         let m = Memory::new(map);
         let blorb = mock_blorb();
-        let manager = assert_ok!(Manager::new(blorb));
+        let manager = assert_ok!(Manager::new(128.0, blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(zmachine.play_sound(4, 8, 5, None).is_ok());
         assert_eq!(play_sound(), (4, 8, 5));
@@ -2985,7 +2985,7 @@ mod tests {
         let map = test_map(5);
         let m = Memory::new(map);
         let blorb = mock_blorb();
-        let manager = assert_ok!(Manager::new(blorb));
+        let manager = assert_ok!(Manager::new(128.0, blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(!zmachine.is_sound_playing());
         assert!(zmachine.stop_sound().is_ok());
@@ -3008,7 +3008,7 @@ mod tests {
         let map = test_map(5);
         let m = Memory::new(map);
         let blorb = mock_blorb();
-        let manager = assert_ok!(Manager::new(blorb));
+        let manager = assert_ok!(Manager::new(128.0, blorb));
         let mut zmachine = assert_ok!(ZMachine::new(m, Config::default(), Some(manager), "test"));
         assert!(!zmachine.is_sound_playing());
         assert!(zmachine.play_sound(4, 5, 5, None).is_ok());

@@ -13,6 +13,17 @@ pub struct Config {
     background: u8,
     logging: bool,
     error_handling: ErrorHandling,
+    volume_factor: f32,
+}
+
+fn default_volume_factor() -> f32 {
+    if cfg!(target_os = "linux") {
+        8.0
+    } else if cfg!(target_os = "windows") {
+        12.0
+    } else {
+        128.0
+    }
 }
 
 impl Default for Config {
@@ -22,6 +33,7 @@ impl Default for Config {
             background: 2,
             logging: false,
             error_handling: ErrorHandling::ContinueWarnOnce,
+            volume_factor: default_volume_factor(),
         }
     }
 }
@@ -54,7 +66,17 @@ impl TryFrom<File> for Config {
                     },
                     None => ErrorHandling::ContinueWarnOnce,
                 };
-                Ok(Config::new(foreground, background, logging, error_handling))
+                let volume_factor = match data["volume_factor"].as_f64() {
+                    Some(t) => t as f32,
+                    None => default_volume_factor(),
+                };
+                Ok(Config::new(
+                    foreground,
+                    background,
+                    logging,
+                    error_handling,
+                    volume_factor,
+                ))
             }
             Err(e) => recoverable_error!(ErrorCode::ConfigError, "{}", e),
         }
@@ -67,12 +89,14 @@ impl Config {
         background: u8,
         logging: bool,
         error_handling: ErrorHandling,
+        volume_factor: f32,
     ) -> Self {
         Config {
             foreground,
             background,
             logging,
             error_handling,
+            volume_factor,
         }
     }
 
@@ -90,5 +114,8 @@ impl Config {
 
     pub fn error_handling(&self) -> ErrorHandling {
         self.error_handling
+    }
+    pub fn volume_factor(&self) -> f32 {
+        self.volume_factor
     }
 }
