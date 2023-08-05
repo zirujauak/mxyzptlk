@@ -6,7 +6,7 @@ pub struct TestPlayer {
     playing: bool,
 }
 
-pub fn new_player() -> Result<Box<dyn Player>, RuntimeError> {
+pub fn new_player(_volume_factor: f32) -> Result<Box<dyn Player>, RuntimeError> {
     Ok(Box::new(TestPlayer { playing: false }))
 }
 

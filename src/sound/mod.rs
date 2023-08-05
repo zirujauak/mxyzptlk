@@ -144,15 +144,16 @@ impl Manager {
         sounds.insert(4, Sound::new(1, &[0; 256], Some(&5)));
 
         Ok(Manager {
-            player: Some(new_player()?),
+            player: Some(new_player(128.0)?),
             sounds,
             current_effect: 0,
         })
     }
 
-    pub fn new(blorb: Blorb) -> Result<Manager, RuntimeError> {
+    pub fn new(volume_factor: f32, blorb: Blorb) -> Result<Manager, RuntimeError> {
+        debug!(target: "app::sound", "Initializing sound manager with volume_factor {}", volume_factor);
         Ok(Manager {
-            player: Some(new_player()?),
+            player: Some(new_player(volume_factor)?),
             sounds: HashMap::from(blorb),
             current_effect: 0,
         })
@@ -289,7 +290,7 @@ mod tests {
     #[test]
     fn test_manager_new() {
         let blorb = mock_blorb();
-        let manager = assert_ok!(Manager::new(blorb));
+        let manager = assert_ok!(Manager::new(128.0, blorb));
         assert!(manager.player.is_some());
         assert_eq!(manager.sounds.len(), 2);
         assert_eq!(manager.current_effect(), 0);
@@ -298,7 +299,7 @@ mod tests {
     #[test]
     fn test_play_sound() {
         let blorb = mock_blorb();
-        let mut manager = assert_ok!(Manager::new(blorb));
+        let mut manager = assert_ok!(Manager::new(128.0, blorb));
         assert!(manager.play_sound(1, 8, None).is_ok());
         assert!(manager.is_playing());
         assert!(manager.current_effect() == 1);
@@ -308,7 +309,7 @@ mod tests {
     #[test]
     fn test_play_sound_override_repeats() {
         let blorb = mock_blorb();
-        let mut manager = assert_ok!(Manager::new(blorb));
+        let mut manager = assert_ok!(Manager::new(128.0, blorb));
         assert!(manager.play_sound(1, 8, Some(1)).is_ok());
         assert!(manager.is_playing());
         assert!(manager.current_effect() == 1);
@@ -318,7 +319,7 @@ mod tests {
     #[test]
     fn test_play_sound_invalid_effect() {
         let blorb = mock_blorb();
-        let mut manager = assert_ok!(Manager::new(blorb));
+        let mut manager = assert_ok!(Manager::new(128.0, blorb));
         assert!(manager.play_sound(3, 8, Some(1)).is_ok());
         assert!(!manager.is_playing());
         assert!(manager.current_effect() == 0);
@@ -328,7 +329,7 @@ mod tests {
     #[test]
     fn test_stop_sound() {
         let blorb = mock_blorb();
-        let mut manager = assert_ok!(Manager::new(blorb));
+        let mut manager = assert_ok!(Manager::new(128.0, blorb));
         assert!(manager.play_sound(4, 4, Some(1)).is_ok());
         assert!(manager.is_playing());
         assert_eq!(manager.current_effect(), 4);
@@ -342,7 +343,7 @@ mod tests {
     #[test]
     fn test_stop_sound_not_playing() {
         let blorb = mock_blorb();
-        let mut manager = assert_ok!(Manager::new(blorb));
+        let mut manager = assert_ok!(Manager::new(128.0, blorb));
         manager.stop_sound();
         assert!(!manager.is_playing());
         assert_eq!(manager.current_effect(), 0);
@@ -352,7 +353,7 @@ mod tests {
     #[test]
     fn test_change_volume() {
         let blorb = mock_blorb();
-        let mut manager = assert_ok!(Manager::new(blorb));
+        let mut manager = assert_ok!(Manager::new(128.0, blorb));
         assert!(manager.play_sound(4, 4, Some(1)).is_ok());
         assert!(manager.is_playing());
         assert_eq!(manager.current_effect(), 4);
@@ -366,7 +367,7 @@ mod tests {
     #[test]
     fn test_change_volume_not_playing() {
         let blorb = mock_blorb();
-        let mut manager = assert_ok!(Manager::new(blorb));
+        let mut manager = assert_ok!(Manager::new(128.0, blorb));
         manager.change_volume(8);
         assert!(!manager.is_playing());
         assert_eq!(manager.current_effect(), 0);

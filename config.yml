@@ -17,3 +17,11 @@ logging: disabled
 #  ignore - attempt to continue without any notice (default)
 #  abort - abort execution with an error message
 error_handling: ignore
+# Volume scaling default value is based on limited platform testing as follows:
+#  macos: 128.0
+#  linux (KDE plasma + pipewire): 8.0
+#  windows: 12.0
+# If sound playback is too quiet or too loud, uncomment the line below and change
+# it to something slightly higher or lower than the platform default, then adjust
+# as needed.
+# volume_factor: 128.0

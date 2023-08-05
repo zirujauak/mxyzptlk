@@ -29,7 +29,11 @@ use sound::Manager;
 use zmachine::state::memory::Memory;
 use zmachine::ZMachine;
 
-fn initialize_sound_engine(memory: &Memory, blorb: Option<Blorb>) -> Option<Manager> {
+fn initialize_sound_engine(
+    memory: &Memory,
+    volume_factor: f32,
+    blorb: Option<Blorb>,
+) -> Option<Manager> {
     if let Some(blorb) = blorb {
         if let Some(ifhd) = blorb.ifhd() {
             // TODO: Refactor this when adding Exec chunk support
@@ -52,7 +56,7 @@ fn initialize_sound_engine(memory: &Memory, blorb: Option<Blorb>) -> Option<Mana
                 return None;
             }
         }
-        match Manager::new(blorb) {
+        match Manager::new(volume_factor, blorb) {
             Ok(m) => Some(m),
             Err(e) => {
                 info!(target: "app::sound", "Error initializing sound manager: {}", e);
@@ -188,7 +192,7 @@ fn main() {
     };
 
     let memory = Memory::new(zcode);
-    let sound_manager = initialize_sound_engine(&memory, blorb);
+    let sound_manager = initialize_sound_engine(&memory, config.volume_factor(), blorb);
     let mut zmachine =
         ZMachine::new(memory, config, sound_manager, &name).expect("Error creating state");
 
