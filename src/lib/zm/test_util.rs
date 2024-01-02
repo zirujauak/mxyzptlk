@@ -13,7 +13,7 @@ use crate::{
     },
     sound::Manager,
     zmachine::{
-        state::{memory::Memory, State},
+        memory::Memory,
         ZMachine,
     },
 };

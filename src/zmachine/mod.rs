@@ -917,7 +917,7 @@ mod tests {
 
     use std::collections::HashMap;
 
-    use iff::Chunk;
+    use crate::iff::Chunk;
 
     use crate::{
         assert_ok, assert_ok_eq, assert_print, assert_some, assert_some_eq,
