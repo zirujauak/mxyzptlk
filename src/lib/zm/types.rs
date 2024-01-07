@@ -40,6 +40,41 @@ pub struct InputEvent {
 }
 
 impl InputEvent {
+    pub fn no_input() -> InputEvent {
+        InputEvent {
+            zchar: None,
+            row: None,
+            column: None,
+            //interrupt: None,
+        }
+    }
+
+    pub fn from_char(zchar: u16) -> InputEvent {
+        InputEvent {
+            zchar: Some(zchar),
+            row: None,
+            column: None,
+            //interrupt: None,
+        }
+    }
+
+    pub fn from_mouse(zchar: u16, row: u16, column: u16) -> InputEvent {
+        InputEvent {
+            zchar: Some(zchar),
+            row: Some(row),
+            column: Some(column),
+            //interrupt: None,
+        }
+    }
+    // pub fn from_interrupt(interrupt: Interrupt) -> InputEvent {
+    //     InputEvent {
+    //         zchar: None,
+    //         row: None,
+    //         column: None,
+    //         //interrupt: Some(interrupt),
+    //     }
+    // }
+
     pub fn zchar(&self) -> Option<u16> {
         self.zchar
     }
@@ -290,7 +325,7 @@ impl DirectiveRequest {
             ..Default::default()
         }
     }
-    
+
     pub fn split_window(split: u16) -> DirectiveRequest {
         DirectiveRequest {
             split,

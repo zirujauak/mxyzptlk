@@ -6,14 +6,14 @@ use crate::{
     object::property,
     quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
     recoverable_error, text,
-    types::StoreResult,
+    types::StoreResult, config::Config,
 };
 
 use self::{
     frame::Frame,
     header::{Flags1v3, Flags1v4, Flags2, HeaderField},
     memory::Memory,
-    rng::ZRng,
+    rng::{ZRng, chacha_rng::ChaChaRng},
 };
 
 mod frame;
@@ -163,6 +163,29 @@ impl TryFrom<&ZMachine> for Stks {
 }
 
 impl ZMachine {
+    pub fn new(zcode: Vec<u8>, config: Config, name: &str, rows: u8, columns: u8) -> Result<ZMachine, RuntimeError> {
+        let memory = Memory::new(zcode);
+        let version = header::field_byte(&memory, HeaderField::Version)?;
+        let rng = ChaChaRng::new();
+        let error_handling = config.error_handling();
+        let mut zm = ZMachine {
+            name: name.to_string(),
+            version,
+            memory,
+            rng: Box::new(rng),
+            frames: Vec::new(),
+            undo_stack: VecDeque::new(),
+            errors: HashSet::new(),
+            error_handling,
+            output_streams: 0x1,
+            stream_2: None,
+            stream_3: Vec::new(),
+        };
+
+        zm.initialize(rows, columns, (config.foreground(), config.background()), false)?;
+        Ok(zm)
+    }
+
     pub fn version(&self) -> u8 {
         self.version
     }
@@ -554,7 +577,7 @@ impl ZMachine {
     pub fn argument_count(&self) -> Result<u8, RuntimeError> {
         Ok(self.current_frame()?.argument_count())
     }
-    
+
     pub fn throw(&mut self, depth: u16, result: u16) -> Result<usize, RuntimeError> {
         self.frames.truncate(depth as usize);
         self.return_routine(result)

@@ -15,24 +15,27 @@ use zm::sound::Manager;
 use zm::zmachine::ZMachine;
 
 use crate::log::*;
+use crate::screen::Screen;
+
+mod screen;
 
 fn initialize_sound_engine(
-    memory: &Memory,
+    zmachine: &ZMachine,
     volume_factor: f32,
     blorb: Option<Blorb>,
 ) -> Option<Manager> {
     if let Some(blorb) = blorb {
         if let Some(ifhd) = blorb.ifhd() {
             // TODO: Refactor this when adding Exec chunk support
-            let release = memory.read_word(0x02).unwrap();
-            let checksum = memory.read_word(0x1C).unwrap();
+            let release = zmachine.read_word(0x02).unwrap();
+            let checksum = zmachine.read_word(0x1C).unwrap();
             let serial = [
-                memory.read_byte(0x12).unwrap(),
-                memory.read_byte(0x13).unwrap(),
-                memory.read_byte(0x14).unwrap(),
-                memory.read_byte(0x15).unwrap(),
-                memory.read_byte(0x16).unwrap(),
-                memory.read_byte(0x17).unwrap(),
+                zmachine.read_byte(0x12).unwrap(),
+                zmachine.read_byte(0x13).unwrap(),
+                zmachine.read_byte(0x14).unwrap(),
+                zmachine.read_byte(0x15).unwrap(),
+                zmachine.read_byte(0x16).unwrap(),
+                zmachine.read_byte(0x17).unwrap(),
             ]
             .to_vec();
             if release != ifhd.release_number()
@@ -178,10 +181,16 @@ fn main() {
         None => data,
     };
 
-    let memory = Memory::new(zcode);
-    let sound_manager = initialize_sound_engine(&memory, config.volume_factor(), blorb);
+    // let memory = Memory::new(zcode);
+    let screen = match zcode[0] {
+        3 => Screen::new_v3(config),
+        4 => Screen::new_v4(config),
+        5..=8 => Screen::new_v5(config),
+    }.expect("Error creating screen");
+
     let mut zmachine =
-        ZMachine::new(memory, config, sound_manager, &name).expect("Error creating state");
+        ZMachine::new(zcode, config, &name, screen.rows() as u8, screen.columns() as u8).expect("Error creating zmachine");
+    let sound_manager = initialize_sound_engine(&zmachine, config.volume_factor(), blorb);
 
     trace!("Begining execution");
 
