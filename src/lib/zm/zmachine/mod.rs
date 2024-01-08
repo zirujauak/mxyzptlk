@@ -11,7 +11,7 @@ use crate::{
     object::property,
     quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
     recoverable_error, text,
-    types::{DirectiveRequest, InstructionResult, StoreResult, Directive},
+    types::{Directive, DirectiveRequest, InstructionResult, StoreResult},
 };
 
 use self::{

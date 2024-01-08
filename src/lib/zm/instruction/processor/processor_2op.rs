@@ -1,10 +1,13 @@
 use super::*;
 use crate::error::RuntimeError;
 use crate::object::{self, attribute, property};
-use crate::types::{InstructionResult, DirectiveRequest, Directive};
+use crate::types::{Directive, DirectiveRequest, InstructionResult};
 use crate::zmachine::ZMachine;
 
-pub fn je(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn je(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     for i in 1..operands.len() {
         if operands[0] as i16 == operands[i] as i16 {
@@ -15,7 +18,10 @@ pub fn je(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instruct
     branch(zmachine, instruction, false)
 }
 
-pub fn jl(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn jl(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     branch(
         zmachine,
@@ -24,7 +30,10 @@ pub fn jl(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instruct
     )
 }
 
-pub fn jg(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn jg(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     branch(
         zmachine,
@@ -33,7 +42,10 @@ pub fn jg(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instruct
     )
 }
 
-pub fn dec_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn dec_chk(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let val = zmachine.peek_variable(operands[0] as u8)? as i16;
     let new_val = i16::overflowing_sub(val, 1);
@@ -41,7 +53,10 @@ pub fn dec_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Ins
     branch(zmachine, instruction, new_val.0 < operands[1] as i16)
 }
 
-pub fn inc_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn inc_chk(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let val = zmachine.peek_variable(operands[0] as u8)? as i16;
     let new_val = i16::overflowing_add(val, 1);
@@ -49,7 +64,10 @@ pub fn inc_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Ins
     branch(zmachine, instruction, new_val.0 > operands[1] as i16)
 }
 
-pub fn jin(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn jin(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     branch(
         zmachine,
@@ -58,7 +76,10 @@ pub fn jin(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instruc
     )
 }
 
-pub fn test(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn test(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     branch(
         zmachine,
@@ -67,7 +88,10 @@ pub fn test(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instru
     )
 }
 
-pub fn or(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn or(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let mut result = operands[0];
     for w in operands[1..].iter() {
@@ -78,7 +102,10 @@ pub fn or(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instruct
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn and(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn and(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let mut result = operands[0];
     for w in operands[1..].iter() {
@@ -98,7 +125,10 @@ pub fn test_attr(
     branch(zmachine, instruction, condition)
 }
 
-pub fn set_attr(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn set_attr(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     attribute::set(zmachine, operands[0] as usize, operands[1] as u8)?;
 
@@ -115,7 +145,10 @@ pub fn clear_attr(
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn store(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn store(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     zmachine.set_variable_indirect(operands[0] as u8, operands[1])?;
     Ok(InstructionResult::none(instruction.next_address()))
@@ -169,21 +202,30 @@ pub fn insert_obj(
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn loadw(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn loadw(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let address = (operands[0] as isize + (operands[1] as i16 * 2) as isize) as usize;
     store_result(zmachine, instruction, zmachine.read_word(address)?)?;
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn loadb(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn loadb(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let address = (operands[0] as isize + (operands[1] as i16) as isize) as usize;
     store_result(zmachine, instruction, zmachine.read_byte(address)? as u16)?;
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn get_prop(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn get_prop(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
     if operands[0] == 0 {
@@ -229,7 +271,10 @@ pub fn get_next_prop(
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn add(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn add(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
     let mut value = operands[0] as i16;
@@ -241,7 +286,10 @@ pub fn add(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instruc
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn sub(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn sub(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
     let mut value = operands[0] as i16;
@@ -253,7 +301,10 @@ pub fn sub(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instruc
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn mul(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn mul(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
     let mut value = operands[0] as i16;
@@ -265,7 +316,10 @@ pub fn mul(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instruc
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn div(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn div(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
     let mut value = operands[0] as i16;
@@ -286,7 +340,10 @@ pub fn div(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instruc
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn modulus(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn modulus(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
     let mut value = operands[0] as i16;
@@ -306,7 +363,10 @@ pub fn modulus(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Ins
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn call_2s(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn call_2s(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
     let address = zmachine.packed_routine_address(operands[0])?;
@@ -321,7 +381,10 @@ pub fn call_2s(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Ins
     )?))
 }
 
-pub fn call_2n(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn call_2n(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
     let address = zmachine.packed_routine_address(operands[0])?;
@@ -342,11 +405,18 @@ pub fn set_colour(
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     // zmachine.set_colors(operands[0], operands[1])?;
-    Ok(InstructionResult::new(Directive::SetColour, DirectiveRequest::set_colour(operands[0], operands[1]), instruction.next_address))
+    Ok(InstructionResult::new(
+        Directive::SetColour,
+        DirectiveRequest::set_colour(operands[0], operands[1]),
+        instruction.next_address,
+    ))
     // Ok(instruction.next_address())
 }
 
-pub fn throw(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn throw(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
     let result = operands[0];

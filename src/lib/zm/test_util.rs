@@ -8,9 +8,7 @@ use crate::{iff::Chunk, types::StoreResult};
 use crate::{
     blorb::{Blorb, Entry, IFhd, Index, Loop, RIdx},
     config::Config,
-    instruction::{
-        Branch, Instruction, Opcode, OpcodeForm, Operand, OperandCount, OperandType,
-    },
+    instruction::{Branch, Instruction, Opcode, OpcodeForm, Operand, OperandCount, OperandType},
     sound::Manager,
     zmachine::ZMachine,
 };

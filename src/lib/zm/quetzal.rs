@@ -2,7 +2,8 @@ use std::fmt;
 
 use crate::{
     error::{ErrorCode, RuntimeError},
-    recoverable_error, iff::{Chunk, self},
+    iff::{self, Chunk},
+    recoverable_error,
 };
 
 #[derive(Clone, Debug)]

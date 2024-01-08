@@ -783,7 +783,7 @@ pub fn read_char_interrupted(
 }
 pub fn read_char_abort(
     zmachine: &mut ZMachine,
-    instruction: &Instruction
+    instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     store_result(zmachine, instruction, 0)?;
     Ok(InstructionResult::none(instruction.next_address()))

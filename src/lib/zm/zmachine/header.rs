@@ -66,19 +66,33 @@ pub enum Flags2 {
     RequestSoundEffects = 0x0080, // bit 7
 }
 
-pub(in crate::zmachine) fn field_byte(memory: &Memory, field: HeaderField) -> Result<u8, RuntimeError> {
+pub(in crate::zmachine) fn field_byte(
+    memory: &Memory,
+    field: HeaderField,
+) -> Result<u8, RuntimeError> {
     memory.read_byte(field as usize)
 }
 
-pub(in crate::zmachine) fn field_word(memory: &Memory, field: HeaderField) -> Result<u16, RuntimeError> {
+pub(in crate::zmachine) fn field_word(
+    memory: &Memory,
+    field: HeaderField,
+) -> Result<u16, RuntimeError> {
     memory.read_word(field as usize)
 }
 
-pub(in crate::zmachine) fn set_byte(memory: &mut Memory, field: HeaderField, value: u8) -> Result<(), RuntimeError> {
+pub(in crate::zmachine) fn set_byte(
+    memory: &mut Memory,
+    field: HeaderField,
+    value: u8,
+) -> Result<(), RuntimeError> {
     memory.write_byte(field as usize, value)
 }
 
-pub(in crate::zmachine) fn set_word(memory: &mut Memory, field: HeaderField, value: u16) -> Result<(), RuntimeError> {
+pub(in crate::zmachine) fn set_word(
+    memory: &mut Memory,
+    field: HeaderField,
+    value: u16,
+) -> Result<(), RuntimeError> {
     memory.write_word(field as usize, value)
 }
 
@@ -107,7 +121,10 @@ pub(in crate::zmachine) fn set_flag1(memory: &mut Memory, flag: u8) -> Result<()
     memory.write_byte(HeaderField::Flags1 as usize, new)
 }
 
-pub(in crate::zmachine) fn set_flag2(memory: &mut Memory, flag: Flags2) -> Result<(), RuntimeError> {
+pub(in crate::zmachine) fn set_flag2(
+    memory: &mut Memory,
+    flag: Flags2,
+) -> Result<(), RuntimeError> {
     let f = format!("{:?}", flag);
     let flags = field_word(memory, HeaderField::Flags2)?;
     let new = flags | flag as u16;
@@ -122,7 +139,10 @@ pub(in crate::zmachine) fn clear_flag1(memory: &mut Memory, flag: u8) -> Result<
     memory.write_byte(HeaderField::Flags1 as usize, new)
 }
 
-pub(in crate::zmachine) fn clear_flag2(memory: &mut Memory, flag: Flags2) -> Result<(), RuntimeError> {
+pub(in crate::zmachine) fn clear_flag2(
+    memory: &mut Memory,
+    flag: Flags2,
+) -> Result<(), RuntimeError> {
     let f = format!("{:?}", flag);
     let flags = field_word(memory, HeaderField::Flags2)?;
     let new = flags & !(flag as u16);

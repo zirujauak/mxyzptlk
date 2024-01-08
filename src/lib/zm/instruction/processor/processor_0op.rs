@@ -1,6 +1,6 @@
 use crate::error::{ErrorCode, RuntimeError};
 use crate::instruction::{decoder, Instruction};
-use crate::types::{InstructionResult, Directive, DirectiveRequest};
+use crate::types::{Directive, DirectiveRequest, InstructionResult};
 use crate::zmachine::header::HeaderField;
 use crate::zmachine::ZMachine;
 use crate::{fatal_error, text};
@@ -8,19 +8,32 @@ use crate::{fatal_error, text};
 use super::branch;
 use super::store_result;
 
-pub fn rtrue(zmachine: &mut ZMachine, _instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn rtrue(
+    zmachine: &mut ZMachine,
+    _instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     zmachine.return_routine(1)
 }
 
-pub fn rfalse(zmachine: &mut ZMachine, _instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn rfalse(
+    zmachine: &mut ZMachine,
+    _instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     zmachine.return_routine(0)
     // zmachine.return_routine(0)
 }
 
-pub fn print(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn print(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let ztext = zmachine.string_literal(instruction.address() + 1)?;
     let text = text::from_vec(zmachine, &ztext, false)?;
-    Ok(InstructionResult::new(Directive::Print, DirectiveRequest::print(&text), instruction.next_address + (ztext.len() * 2)))
+    Ok(InstructionResult::new(
+        Directive::Print,
+        DirectiveRequest::print(&text),
+        instruction.next_address + (ztext.len() * 2),
+    ))
 }
 
 pub fn print_ret(
@@ -30,14 +43,21 @@ pub fn print_ret(
     let ztext = zmachine.string_literal(instruction.address + 1)?;
     let text = text::from_vec(zmachine, &ztext, false)?;
 
-    Ok(InstructionResult::new(Directive::PrintRet, DirectiveRequest::print(&text), zmachine.return_routine(1)?.next_instruction()))
+    Ok(InstructionResult::new(
+        Directive::PrintRet,
+        DirectiveRequest::print(&text),
+        zmachine.return_routine(1)?.next_instruction(),
+    ))
     // zmachine.print(&text)?;
     // zmachine.new_line()?;
 
     // zmachine.return_routine(1)
 }
 
-pub fn nop(_zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn nop(
+    _zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
@@ -54,7 +74,10 @@ fn save_result(
     }
 }
 
-pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn save(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let pc = if zmachine.version() == 3 {
         match instruction.branch() {
             Some(b) => b.address(),
@@ -83,7 +106,10 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instru
     }
 }
 
-pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn restore(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     match zmachine.restore() {
         Ok(address) => {
             match address {
@@ -96,7 +122,10 @@ pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Ins
                     } else {
                         // V4 is a store
                         store_result(zmachine, instruction, 2)?;
-                        Ok(InstructionResult::empty(Directive::Restore, i.next_address()))
+                        Ok(InstructionResult::empty(
+                            Directive::Restore,
+                            i.next_address(),
+                        ))
                     }
                 }
                 None => {
@@ -122,8 +151,14 @@ pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Ins
     }
 }
 
-pub fn restart(zmachine: &mut ZMachine, _instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
-    Ok(InstructionResult::empty(Directive::Restart, zmachine.restart()?))
+pub fn restart(
+    zmachine: &mut ZMachine,
+    _instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
+    Ok(InstructionResult::empty(
+        Directive::Restart,
+        zmachine.restart()?,
+    ))
     // zmachine.restart()
 }
 
@@ -135,25 +170,40 @@ pub fn ret_popped(
     zmachine.return_routine(value)
 }
 
-pub fn pop(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn pop(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     zmachine.variable(0)?;
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn catch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn catch(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let depth = zmachine.frame_count();
     store_result(zmachine, instruction, depth as u16)?;
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn quit(zmachine: &mut ZMachine, _instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn quit(
+    zmachine: &mut ZMachine,
+    _instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     // zmachine.quit()?;
     Ok(InstructionResult::empty(Directive::Quit, 0))
 }
 
-pub fn new_line(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn new_line(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     // zmachine.new_line()?;
-    Ok(InstructionResult::empty(Directive::NewLine, instruction.next_address()))
+    Ok(InstructionResult::empty(
+        Directive::NewLine,
+        instruction.next_address(),
+    ))
 }
 
 pub fn show_status(
@@ -161,17 +211,27 @@ pub fn show_status(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let (left, right) = zmachine.status_line()?;
-    Ok(InstructionResult::new(Directive::ShowStatus, DirectiveRequest::show_status(&left, &right), instruction.next_address))
+    Ok(InstructionResult::new(
+        Directive::ShowStatus,
+        DirectiveRequest::show_status(&left, &right),
+        instruction.next_address,
+    ))
 }
 
-pub fn verify(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn verify(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let expected = zmachine.header_word(HeaderField::Checksum)?;
     let checksum = zmachine.checksum()?;
 
     branch(zmachine, instruction, expected == checksum)
 }
 
-pub fn piracy(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn piracy(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     branch(zmachine, instruction, true)
 }
 

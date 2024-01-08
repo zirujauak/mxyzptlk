@@ -32,7 +32,6 @@ impl StoreResult {
     }
 }
 
-
 #[derive(Debug, Eq, PartialEq)]
 pub enum Interrupt {
     ReadTimeout,
@@ -44,7 +43,7 @@ pub struct InputEvent {
     zchar: Option<u16>,
     row: Option<u16>,
     column: Option<u16>,
-    interrupt: Option<Interrupt>
+    interrupt: Option<Interrupt>,
 }
 
 impl InputEvent {
@@ -208,7 +207,6 @@ pub struct DirectiveRequest {
     read_next_instruction: usize,
     read_int_routine: usize,
     read_int_result: u16,
-    
 
     // SET_COLOUR
     foreground: u16,
@@ -274,13 +272,21 @@ impl DirectiveRequest {
         DirectiveRequest {
             table: table.to_vec(),
             width,
-            height, 
+            height,
             skip,
             ..Default::default()
         }
     }
 
-    pub fn read(length: u8, terminators: &[u16], timeout: u16, read_int_routine: usize, read_instruction: usize, read_next_instruction: usize, preload: &[u16]) -> DirectiveRequest {
+    pub fn read(
+        length: u8,
+        terminators: &[u16],
+        timeout: u16,
+        read_int_routine: usize,
+        read_instruction: usize,
+        read_next_instruction: usize,
+        preload: &[u16],
+    ) -> DirectiveRequest {
         DirectiveRequest {
             length,
             terminators: terminators.to_vec(),

@@ -1,8 +1,14 @@
-use crate::{recoverable_error, types::{Directive, DirectiveRequest}};
+use crate::{
+    recoverable_error,
+    types::{Directive, DirectiveRequest},
+};
 
 use super::*;
 
-pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn save(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if !operands.is_empty() {
         info!(target: "app::instruction", "SAVE auxiliary data not implemented yet");
@@ -21,7 +27,10 @@ pub fn save(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instru
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn restore(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if !operands.is_empty() {
         info!(target: "app::instruction", "RESTORE auxiliary data not implemented yet");
@@ -43,7 +52,10 @@ pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Ins
             Err(e) => {
                 // zmachine.print_str(format!("Error restoring: {}\r", e))?;
                 store_result(zmachine, instruction, 0)?;
-                Ok(InstructionResult::message(format!("Error restoring: {}\r", e).to_string(), instruction.next_address()))
+                Ok(InstructionResult::message(
+                    format!("Error restoring: {}\r", e).to_string(),
+                    instruction.next_address(),
+                ))
             }
         }
     }
@@ -101,12 +113,23 @@ pub fn art_shift(
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn set_font_pre(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn set_font_pre(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    Ok(InstructionResult::new(Directive::SetFont, DirectiveRequest::set_font(operands[0]), instruction.next_address))
+    Ok(InstructionResult::new(
+        Directive::SetFont,
+        DirectiveRequest::set_font(operands[0]),
+        instruction.next_address,
+    ))
 }
 
-pub fn set_font_post(zmachine: &mut ZMachine, instruction: &Instruction, old_font: u8) -> Result<InstructionResult, RuntimeError> {
+pub fn set_font_post(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+    old_font: u8,
+) -> Result<InstructionResult, RuntimeError> {
     store_result(zmachine, instruction, old_font as u16)?;
     Ok(InstructionResult::none(instruction.next_address()))
 }

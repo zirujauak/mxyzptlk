@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs::File};
 
-use crate::iff::{Chunk, self};
+use crate::iff::{self, Chunk};
 
 use crate::{
     error::{ErrorCode, RuntimeError},

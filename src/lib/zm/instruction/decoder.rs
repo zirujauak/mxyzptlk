@@ -1,8 +1,5 @@
 use super::*;
-use crate::{
-    error::*,
-    zmachine::ZMachine,
-};
+use crate::{error::*, zmachine::ZMachine};
 
 fn operand_type(type_byte: u8, operand_index: u8) -> Option<OperandType> {
     // Types are packed in the byte: 00112233

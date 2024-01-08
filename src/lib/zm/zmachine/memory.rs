@@ -11,11 +11,7 @@ pub struct Memory {
 
 impl fmt::Debug for Memory {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Memory: {} bytes",
-            self.map.len()
-        )
+        write!(f, "Memory: {} bytes", self.map.len())
     }
 }
 
@@ -44,18 +40,13 @@ impl TryFrom<&mut File> for Memory {
 impl Memory {
     pub fn new(map: Vec<u8>) -> Memory {
         let version = map[0];
-        let static_mark = word_value(
-            map[0x0e],
-            map[0x0f],
-        ) as usize;
-        let file_length = word_value(
-            map[0x1a],
-            map[0x1b]
-        ) as usize * match version {
-            3 => 2,
-            4 | 5 => 4,
-            _ => 8,
-        };
+        let static_mark = word_value(map[0x0e], map[0x0f]) as usize;
+        let file_length = word_value(map[0x1a], map[0x1b]) as usize
+            * match version {
+                3 => 2,
+                4 | 5 => 4,
+                _ => 8,
+            };
 
         let dynamic = map[0..static_mark].to_vec();
         Memory {

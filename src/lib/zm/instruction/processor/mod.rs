@@ -88,7 +88,10 @@ fn call_fn(
     }
 }
 
-pub fn dispatch(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+pub fn dispatch(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
     debug!(target: "app::instruction", "dispatch: {}", instruction);
     match instruction.opcode().form() {
         OpcodeForm::Ext => match (zmachine.version(), instruction.opcode().instruction()) {
