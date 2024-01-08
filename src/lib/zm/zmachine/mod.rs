@@ -587,15 +587,49 @@ impl ZMachine {
                 result,
                 return_address,
             )?;
-            frame.set_input_interrupt(true);
+            frame.set_read_interrupt(true);
             self.frames.push(frame);
 
             Ok(initial_pc)
         }
     }
 
-    pub fn is_input_interrupt(&self) -> Result<bool, RuntimeError> {
-        Ok(self.current_frame()?.input_interrupt())
+    pub fn call_read_char_interrupt(
+        &mut self,
+        address: usize,
+        arguments: &Vec<u16>,
+        result: Option<StoreResult>,
+        return_address: usize,
+    ) -> Result<usize, RuntimeError> {
+        // Call to address 0 results in FALSE
+        if address == 0 {
+            if let Some(r) = result {
+                self.set_variable(r.variable(), 0)?;
+            }
+            Ok(return_address)
+        } else {
+            let (initial_pc, local_variables) = self.routine_header(address)?;
+            let mut frame = Frame::call_routine(
+                address,
+                initial_pc,
+                arguments,
+                local_variables,
+                result,
+                return_address,
+            )?;
+            frame.set_read_char_interrupt(true);
+            self.frames.push(frame);
+
+            Ok(initial_pc)
+        }
+    }
+
+    pub fn is_read_interrupt(&self) -> Result<bool, RuntimeError> {
+        Ok(self.current_frame()?.read_interrupt())
+    }
+
+    pub fn is_read_char_interrupt(&self) -> Result<bool, RuntimeError> {
+        Ok(self.current_frame()?.read_char_interrupt())
     }
 
     pub fn set_redraw_input(&mut self) -> Result<(), RuntimeError> {
@@ -612,11 +646,18 @@ impl ZMachine {
                 self.set_variable(r.variable(), value)?;
             }
 
-            if f.input_interrupt() {
-                debug!(target: "app::screen", "Return from input interrupt");
+            if f.read_interrupt() {
+                debug!(target: "app::screen", "Return from READ interrupt");
                 Ok(InstructionResult::new(
                     Directive::ReadInterruptReturn,
                     DirectiveRequest::read_interrupt_return(value, f.redraw_input()),
+                    f.return_address(),
+                ))
+            } else if f.read_char_interrupt() {
+                debug!(target: "app::screen", "Return from READ_CHAR interrupt");
+                Ok(InstructionResult::new(
+                    Directive::ReadCharInterruptReturn,
+                    DirectiveRequest::read_interrupt_return(value, false),
                     f.return_address(),
                 ))
             } else {

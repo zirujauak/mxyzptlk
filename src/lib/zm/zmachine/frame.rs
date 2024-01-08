@@ -11,7 +11,8 @@ pub struct Frame {
     stack: Vec<u16>,
     result: Option<StoreResult>,
     return_address: usize,
-    input_interrupt: bool,
+    read_interrupt: bool,
+    read_char_interrupt: bool,
     sound_interrupt: bool,
     redraw_input: bool,
 }
@@ -63,7 +64,8 @@ impl Frame {
             stack: stack.to_vec(),
             result,
             return_address,
-            input_interrupt: false,
+            read_interrupt: false,
+            read_char_interrupt: false,
             sound_interrupt: false,
             redraw_input: false,
         }
@@ -97,12 +99,20 @@ impl Frame {
         &self.stack
     }
 
-    pub fn input_interrupt(&self) -> bool {
-        self.input_interrupt
+    pub fn read_interrupt(&self) -> bool {
+        self.read_interrupt
     }
 
-    pub fn set_input_interrupt(&mut self, v: bool) {
-        self.input_interrupt = v;
+    pub fn set_read_interrupt(&mut self, v: bool) {
+        self.read_interrupt = v;
+    }
+
+    pub fn read_char_interrupt(&self) -> bool {
+        self.read_char_interrupt
+    }
+
+    pub fn set_read_char_interrupt(&mut self, v: bool) {
+        self.read_char_interrupt = v;
     }
 
     pub fn sound_interrupt(&self) -> bool {
@@ -344,7 +354,7 @@ mod tests {
         assert_eq!(frame.stack(), &[0x1111, 0x2222]);
         assert!(frame.result().is_none());
         assert_eq!(frame.return_address(), 0x9876);
-        assert!(!frame.input_interrupt());
+        assert!(!frame.read_interrupt());
         assert!(!frame.sound_interrupt());
     }
 
@@ -366,7 +376,7 @@ mod tests {
         assert_eq!(frame.stack(), &[0x1111, 0x2222]);
         assert_some_eq!(frame.result(), &StoreResult::new(0x4321, 0x80));
         assert_eq!(frame.return_address(), 0x9876);
-        assert!(!frame.input_interrupt());
+        assert!(!frame.read_interrupt());
         assert!(!frame.sound_interrupt());
     }
 
@@ -548,7 +558,7 @@ mod tests {
         assert!(frame.result().is_none());
         assert_eq!(frame.return_address(), 0x4321);
         assert!(frame.stack().is_empty());
-        assert!(!frame.input_interrupt());
+        assert!(!frame.read_interrupt());
         assert!(!frame.sound_interrupt());
     }
 
@@ -569,7 +579,7 @@ mod tests {
         assert_some_eq!(frame.result(), &StoreResult::new(0x1001, 0x80));
         assert_eq!(frame.return_address(), 0x4321);
         assert!(frame.stack().is_empty());
-        assert!(!frame.input_interrupt());
+        assert!(!frame.read_interrupt());
         assert!(!frame.sound_interrupt());
     }
 }

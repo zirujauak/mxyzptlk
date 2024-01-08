@@ -277,7 +277,10 @@ fn main() {
                         }
                         Directive::Print => {
                             if zmachine.is_stream_enabled(1) && !zmachine.is_stream_enabled(3) {
-                                if zmachine.is_input_interrupt().expect("Error checking input interrupt") {
+                                if zmachine
+                                    .is_read_interrupt()
+                                    .expect("Error checking input interrupt")
+                                {
                                     zmachine.set_redraw_input();
                                 }
                                 screen.print(request.text());
@@ -288,7 +291,10 @@ fn main() {
                         }
                         Directive::PrintRet => {
                             if zmachine.is_stream_enabled(1) && !zmachine.is_stream_enabled(3) {
-                                if zmachine.is_input_interrupt().expect("Error checking input interrupt") {
+                                if zmachine
+                                    .is_read_interrupt()
+                                    .expect("Error checking input interrupt")
+                                {
                                     zmachine.set_redraw_input();
                                 }
                                 screen.print(request.text());
@@ -317,13 +323,19 @@ fn main() {
                                 .expect("Error reading input");
                             // If no input was returned, or the last character in the buffer is not a terminator,
                             // then the read must have timed out.
-                            if input.is_empty() || !request.terminators().contains(input.last().unwrap()) {
-                                match processor_var::read_interrupted(&mut zmachine, &instruction, &input) {
+                            if input.is_empty()
+                                || !request.terminators().contains(input.last().unwrap())
+                            {
+                                match processor_var::read_interrupted(
+                                    &mut zmachine,
+                                    &instruction,
+                                    &input,
+                                ) {
                                     Ok(r) => {
                                         zmachine
                                             .set_pc(r.next_instruction())
                                             .expect("Error updatng program counter");
-                                    }, 
+                                    }
                                     Err(r) => {
                                         error!("{}", r);
                                         quit(&mut screen)
@@ -343,49 +355,99 @@ fn main() {
                                 }
                             }
                         }
-                        Directive::ReadChar => {
-                            let key = screen
-                                .read_key(request.timeout())
-                                .expect("Error reading key");
-                            match processor_var::read_char_post(&mut zmachine, &instruction, key) {
-                                Ok(r) => {
-                                    zmachine
-                                        .set_pc(r.next_instruction())
-                                        .expect("Error updatng program counter");
-                                }
-                                Err(r) => {
-                                    error!("{}", r);
-                                    quit(&mut screen)
-                                }
-                            }
-                        }
                         Directive::ReadInterruptReturn => {
                             // Terminate input immedicately
                             if request.read_int_result() == 1 {
-                                let instruction = decoder::decode_instruction(&zmachine, request.read_instruction()).expect("Error decoding instruction");
+                                let instruction = decoder::decode_instruction(
+                                    &zmachine,
+                                    request.read_instruction(),
+                                )
+                                .expect("Error decoding instruction");
                                 match processor_var::read_abort(&mut zmachine, &instruction) {
-                                    Ok(r) => {
-                                        zmachine.set_pc(r.next_instruction()).expect("Error updating program_counter")
-                                    },
+                                    Ok(r) => zmachine
+                                        .set_pc(r.next_instruction())
+                                        .expect("Error updating program_counter"),
                                     Err(r) => {
                                         error!("{}", r);
                                         quit(&mut screen)
                                     }
                                 }
                             } else if request.redraw_input() {
-                                let instruction = decoder::decode_instruction(&zmachine, r.next_instruction()).expect("Error docoding instruction");
+                                let instruction =
+                                    decoder::decode_instruction(&zmachine, r.next_instruction())
+                                        .expect("Error docoding instruction");
                                 match processor_var::read_pre(&mut zmachine, &instruction) {
                                     Ok(r) => {
                                         let request = r.request();
                                         screen.print(&request.preload().to_vec());
-                                        zmachine.set_pc(instruction.address()).expect("Error updating program_counter")
-                                        
-                                    }, 
+                                        zmachine
+                                            .set_pc(instruction.address())
+                                            .expect("Error updating program_counter")
+                                    }
                                     Err(r) => {
                                         error!("{}", r);
                                         quit(&mut screen)
                                     }
                                 }
+                            }
+                        }
+                        Directive::ReadChar => {
+                            let key = screen
+                                .read_key(request.timeout())
+                                .expect("Error reading key");
+                            if key.interrupt().is_some() {
+                                match processor_var::read_char_interrupted(
+                                    &mut zmachine,
+                                    &instruction,
+                                ) {
+                                    Ok(r) => {
+                                        zmachine
+                                            .set_pc(r.next_instruction())
+                                            .expect("Error updatng program counter");
+                                    }
+                                    Err(r) => {
+                                        error!("{}", r);
+                                        quit(&mut screen)
+                                    }
+                                }
+                            } else {
+                                match processor_var::read_char_post(
+                                    &mut zmachine,
+                                    &instruction,
+                                    key,
+                                ) {
+                                    Ok(r) => {
+                                        zmachine
+                                            .set_pc(r.next_instruction())
+                                            .expect("Error updatng program counter");
+                                    }
+                                    Err(r) => {
+                                        error!("{}", r);
+                                        quit(&mut screen)
+                                    }
+                                }
+                            }
+                        }
+                        Directive::ReadCharInterruptReturn => {
+                            debug!(target: "app::screen", "{:?}", r);
+                            // Terminate input immedicately
+                            let instruction =
+                                decoder::decode_instruction(&zmachine, r.next_instruction())
+                                    .expect("Error decoding instruction");
+                            if request.read_int_result() == 1 {
+                                match processor_var::read_char_abort(&mut zmachine, &instruction) {
+                                    Ok(r) => zmachine
+                                        .set_pc(r.next_instruction())
+                                        .expect("Error updating program_counter"),
+                                    Err(r) => {
+                                        error!("{}", r);
+                                        quit(&mut screen)
+                                    }
+                                }
+                            } else {
+                                zmachine
+                                    .set_pc(r.next_instruction())
+                                    .expect("Error updating program counter")
                             }
                         }
                         Directive::SetCursor => {

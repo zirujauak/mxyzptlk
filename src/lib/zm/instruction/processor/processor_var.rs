@@ -730,7 +730,6 @@ pub fn sound_effect_pre(
     }
 }
 
-// TBD: pre/(interpreter callout)/post
 pub fn read_char_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -747,7 +746,7 @@ pub fn read_char_pre(
     let timeout = if operands.len() > 1 { operands[1] } else { 0 };
     Ok(InstructionResult::new(
         Directive::ReadChar,
-        DirectiveRequest::read_char(timeout),
+        DirectiveRequest::read_char(timeout, instruction.address),
         instruction.next_address,
     ))
 }
@@ -757,26 +756,37 @@ pub fn read_char_post(
     instruction: &Instruction,
     key: InputEvent,
 ) -> Result<InstructionResult, RuntimeError> {
-    let operands = operand_values(zmachine, instruction)?;
-
     match key.zchar() {
         Some(c) => {
             store_result(zmachine, instruction, c)?;
             Ok(InstructionResult::none(instruction.next_address()))
         }
         None => {
-            // if let Some(i) = key.interrupt() {
-            //     match i {
-            //         Interrupt::ReadTimeout => {
-            //             zmachine.call_read_interrupt(routine, instruction.address())
-            //         }
-            //         Interrupt::Sound => zmachine.call_sound_interrupt(instruction.address()),
-            //     }
-            // } else {
             fatal_error!(ErrorCode::ReadNothing, "read_char returned no key")
-            // }
         }
     }
+}
+
+pub fn read_char_interrupted(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+) -> Result<InstructionResult, RuntimeError> {
+    let operands = operand_values(zmachine, instruction)?;
+    let routine = zmachine.packed_routine_address(operands[2])?;
+
+    Ok(InstructionResult::none(zmachine.call_read_char_interrupt(
+        routine,
+        &Vec::new(),
+        None,
+        instruction.address,
+    )?))
+}
+pub fn read_char_abort(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction
+) -> Result<InstructionResult, RuntimeError> {
+    store_result(zmachine, instruction, 0)?;
+    Ok(InstructionResult::none(instruction.next_address()))
 }
 
 // pub fn read_char(

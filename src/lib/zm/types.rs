@@ -39,29 +39,23 @@ pub enum Interrupt {
     Sound,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct InputEvent {
     zchar: Option<u16>,
     row: Option<u16>,
     column: Option<u16>,
+    interrupt: Option<Interrupt>
 }
 
 impl InputEvent {
     pub fn no_input() -> InputEvent {
-        InputEvent {
-            zchar: None,
-            row: None,
-            column: None,
-            //interrupt: None,
-        }
+        InputEvent::default()
     }
 
     pub fn from_char(zchar: u16) -> InputEvent {
         InputEvent {
             zchar: Some(zchar),
-            row: None,
-            column: None,
-            //interrupt: None,
+            ..Default::default()
         }
     }
 
@@ -70,21 +64,23 @@ impl InputEvent {
             zchar: Some(zchar),
             row: Some(row),
             column: Some(column),
-            //interrupt: None,
+            ..Default::default()
         }
     }
 
     pub fn from_interrupt(interrupt: Interrupt) -> InputEvent {
         InputEvent {
-            zchar: None,
-            row: None,
-            column: None,
-            //interrupt: Some(interrupt),
+            interrupt: Some(interrupt),
+            ..Default::default()
         }
     }
 
     pub fn zchar(&self) -> Option<u16> {
         self.zchar
+    }
+
+    pub fn interrupt(&self) -> Option<&Interrupt> {
+        self.interrupt.as_ref()
     }
 
     pub fn row(&self) -> Option<u16> {
@@ -96,7 +92,7 @@ impl InputEvent {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct InstructionResult {
     directive: Option<Directive>,
     request: DirectiveRequest,
@@ -162,7 +158,7 @@ pub enum Directive {
     NewLine,
     Read,
     ReadChar,
-    ReadInterrupted,
+    ReadCharInterruptReturn,
     ReadInterruptReturn,
     Print,
     PrintRet,
@@ -180,7 +176,7 @@ pub enum Directive {
     SplitWindow,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DirectiveRequest {
     // Message
     message: String,
@@ -297,9 +293,10 @@ impl DirectiveRequest {
         }
     }
 
-    pub fn read_char(timeout: u16) -> DirectiveRequest {
+    pub fn read_char(timeout: u16, read_instruction: usize) -> DirectiveRequest {
         DirectiveRequest {
             timeout,
+            read_instruction,
             ..Default::default()
         }
     }
@@ -400,7 +397,7 @@ impl DirectiveRequest {
     pub fn redraw_input(&self) -> bool {
         self.redraw_input
     }
-    
+
     pub fn read_instruction(&self) -> usize {
         self.read_instruction
     }
