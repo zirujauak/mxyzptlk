@@ -661,15 +661,6 @@ impl ZMachine {
                     f.return_address(),
                 ))
             } else {
-                // TODO: Interrupts
-                // if f.input_interrupt() {
-                //     if self.read_interrupt_pending {
-                //         self.read_interrupt_result = Some(value);
-                //     }
-                // } else if let Some(r) = f.result() {
-                //     self.set_variable(r.variable(), value)?
-                // }
-
                 Ok(InstructionResult::none(self.current_frame()?.pc()))
             }
         } else {
