@@ -15,11 +15,7 @@ pub fn jz(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    Ok(InstructionResult::none(branch(
-        zmachine,
-        instruction,
-        operands[0] == 0,
-    )?))
+    branch(zmachine, instruction, operands[0] == 0)
 }
 
 pub fn get_sibling(
@@ -29,11 +25,7 @@ pub fn get_sibling(
     let operands = operand_values(zmachine, instruction)?;
     let sibling = object::sibling(zmachine, operands[0] as usize)?;
     store_result(zmachine, instruction, sibling as u16)?;
-    Ok(InstructionResult::none(branch(
-        zmachine,
-        instruction,
-        sibling != 0,
-    )?))
+    branch(zmachine, instruction, sibling != 0)
 }
 
 pub fn get_child(
@@ -43,11 +35,7 @@ pub fn get_child(
     let operands = operand_values(zmachine, instruction)?;
     let child = object::child(zmachine, operands[0] as usize)?;
     store_result(zmachine, instruction, child as u16)?;
-    Ok(InstructionResult::none(branch(
-        zmachine,
-        instruction,
-        child != 0,
-    )?))
+    branch(zmachine, instruction, child != 0)
 }
 
 pub fn get_parent(
@@ -184,9 +172,7 @@ pub fn ret(
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
-    Ok(InstructionResult::none(
-        zmachine.return_routine(operands[0])?,
-    ))
+    zmachine.return_routine(operands[0])
 }
 
 pub fn jump(

@@ -9,18 +9,18 @@ use super::branch;
 use super::store_result;
 
 pub fn rtrue(zmachine: &mut ZMachine, _instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
-    Ok(InstructionResult::none(zmachine.return_routine(1)?))
+    zmachine.return_routine(1)
 }
 
 pub fn rfalse(zmachine: &mut ZMachine, _instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
-    Ok(InstructionResult::none(zmachine.return_routine(0)?))
+    zmachine.return_routine(0)
     // zmachine.return_routine(0)
 }
 
 pub fn print(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
     let ztext = zmachine.string_literal(instruction.address() + 1)?;
     let text = text::from_vec(zmachine, &ztext, false)?;
-    Ok(InstructionResult::new(Directive::Print, DirectiveRequest::print(&text), instruction.next_address))
+    Ok(InstructionResult::new(Directive::Print, DirectiveRequest::print(&text), instruction.next_address + (ztext.len() * 2)))
 }
 
 pub fn print_ret(
@@ -30,7 +30,7 @@ pub fn print_ret(
     let ztext = zmachine.string_literal(instruction.address + 1)?;
     let text = text::from_vec(zmachine, &ztext, false)?;
 
-    Ok(InstructionResult::new(Directive::PrintRet, DirectiveRequest::print(&text), zmachine.return_routine(1)?))
+    Ok(InstructionResult::new(Directive::PrintRet, DirectiveRequest::print(&text), zmachine.return_routine(1)?.next_instruction()))
     // zmachine.print(&text)?;
     // zmachine.new_line()?;
 
@@ -47,7 +47,7 @@ fn save_result(
     success: bool,
 ) -> Result<InstructionResult, RuntimeError> {
     if zmachine.version() == 3 {
-        Ok(InstructionResult::none(branch(zmachine, instruction, success)?))
+        branch(zmachine, instruction, success)
     } else {
         store_result(zmachine, instruction, if success { 1 } else { 0 })?;
         Ok(InstructionResult::none(instruction.next_address()))
@@ -92,7 +92,7 @@ pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Ins
                     let i = decoder::decode_instruction(zmachine, a - 1)?;
                     if zmachine.version() == 3 {
                         // V3 is a branch
-                        Ok(InstructionResult::empty(Directive::Restore, branch(zmachine, &i, true)?))
+                        branch(zmachine, &i, true)
                     } else {
                         // V4 is a store
                         store_result(zmachine, instruction, 2)?;
@@ -101,7 +101,7 @@ pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Ins
                 }
                 None => {
                     if zmachine.version() == 3 {
-                        Ok(InstructionResult::none(branch(zmachine, instruction, false)?))
+                        branch(zmachine, instruction, false)
                     } else {
                         store_result(zmachine, instruction, 0)?;
                         Ok(InstructionResult::none(instruction.next_address()))
@@ -112,7 +112,7 @@ pub fn restore(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Ins
         Err(e) => {
             let err = format!("Error reading: {}\r", e);
             if zmachine.version() == 3 {
-                Ok(InstructionResult::message(err, branch(zmachine, instruction, false)?))
+                branch(zmachine, instruction, false)
             } else {
                 store_result(zmachine, instruction, 0)?;
                 Ok(InstructionResult::message(err, instruction.next_address))
@@ -132,7 +132,7 @@ pub fn ret_popped(
     _instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let value = zmachine.variable(0)?;
-    Ok(InstructionResult::none(zmachine.return_routine(value)?))
+    zmachine.return_routine(value)
 }
 
 pub fn pop(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
@@ -168,11 +168,11 @@ pub fn verify(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Inst
     let expected = zmachine.header_word(HeaderField::Checksum)?;
     let checksum = zmachine.checksum()?;
 
-    Ok(InstructionResult::none(branch(zmachine, instruction, expected == checksum)?))
+    branch(zmachine, instruction, expected == checksum)
 }
 
 pub fn piracy(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
-    Ok(InstructionResult::none(branch(zmachine, instruction, true)?))
+    branch(zmachine, instruction, true)
 }
 
 #[cfg(test)]

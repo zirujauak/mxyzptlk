@@ -8,29 +8,29 @@ pub fn je(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instruct
     let operands = operand_values(zmachine, instruction)?;
     for i in 1..operands.len() {
         if operands[0] as i16 == operands[i] as i16 {
-            return Ok(InstructionResult::none(branch(zmachine, instruction, true)?));
+            return branch(zmachine, instruction, true);
         }
     }
 
-    Ok(InstructionResult::none(branch(zmachine, instruction, false)?))
+    branch(zmachine, instruction, false)
 }
 
 pub fn jl(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    Ok(InstructionResult::none(branch(
+    branch(
         zmachine,
         instruction,
         (operands[0] as i16) < (operands[1] as i16),
-    )?))
+    )
 }
 
 pub fn jg(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    Ok(InstructionResult::none(branch(
+    branch(
         zmachine,
         instruction,
         (operands[0] as i16) > (operands[1] as i16),
-    )?))
+    )
 }
 
 pub fn dec_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
@@ -38,7 +38,7 @@ pub fn dec_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Ins
     let val = zmachine.peek_variable(operands[0] as u8)? as i16;
     let new_val = i16::overflowing_sub(val, 1);
     zmachine.set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
-    Ok(InstructionResult::none(branch(zmachine, instruction, new_val.0 < operands[1] as i16)?))
+    branch(zmachine, instruction, new_val.0 < operands[1] as i16)
 }
 
 pub fn inc_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
@@ -46,25 +46,25 @@ pub fn inc_chk(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Ins
     let val = zmachine.peek_variable(operands[0] as u8)? as i16;
     let new_val = i16::overflowing_add(val, 1);
     zmachine.set_variable_indirect(operands[0] as u8, new_val.0 as u16)?;
-    Ok(InstructionResult::none(branch(zmachine, instruction, new_val.0 > operands[1] as i16)?))
+    branch(zmachine, instruction, new_val.0 > operands[1] as i16)
 }
 
 pub fn jin(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    Ok(InstructionResult::none(branch(
+    branch(
         zmachine,
         instruction,
         object::parent(zmachine, operands[0] as usize)? == (operands[1] as usize),
-    )?))
+    )
 }
 
 pub fn test(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    Ok(InstructionResult::none(branch(
+    branch(
         zmachine,
         instruction,
         operands[0] & operands[1] == operands[1],
-    )?))
+    )
 }
 
 pub fn or(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
@@ -95,7 +95,7 @@ pub fn test_attr(
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let condition = attribute::value(zmachine, operands[0] as usize, operands[1] as u8)?;
-    Ok(InstructionResult::none(branch(zmachine, instruction, condition)?))
+    branch(zmachine, instruction, condition)
 }
 
 pub fn set_attr(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
@@ -352,7 +352,7 @@ pub fn throw(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<Instr
     let result = operands[0];
     let depth = operands[1];
 
-    Ok(InstructionResult::none(zmachine.throw(depth, result)?))
+    zmachine.throw(depth, result)
 }
 
 #[cfg(test)]

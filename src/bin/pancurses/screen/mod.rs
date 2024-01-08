@@ -1,8 +1,17 @@
 use core::fmt;
+use std::{
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
-use log::{info, warn, error};
-use pancurses::{Window, Input};
-use zm::{error::{RuntimeError, ErrorCode}, recoverable_error, config::Config, types::InputEvent};
+use log::{debug, error, info, trace, warn};
+use pancurses::{Input, Window};
+use zm::{
+    config::Config,
+    error::{ErrorCode, RuntimeError},
+    recoverable_error,
+    types::{InputEvent, Interrupt},
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Color {
@@ -58,12 +67,6 @@ impl CellStyle {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum Interrupt {
-    ReadTimeout,
-    Sound,
-}
-
 fn map_color(color: u8) -> Result<Color, RuntimeError> {
     match color {
         2 => Ok(Color::Black),
@@ -85,6 +88,7 @@ fn map_colors(foreground: u8, background: u8) -> Result<(Color, Color), RuntimeE
 #[derive(Debug)]
 pub struct Screen {
     version: u8,
+    // Window setup
     rows: u32,
     columns: u32,
     top: u32,
@@ -92,11 +96,14 @@ pub struct Screen {
     window_1_bottom: Option<u32>,
     window_0_top: u32,
     selected_window: u8,
+    // Text styling
+    buffer_mode: u16,
     // foreground, background
     default_colors: (Color, Color),
     current_colors: (Color, Color),
     current_style: CellStyle,
     font: u8,
+    // Cursor
     // row, column with 1,1 as origin
     cursor_0: (u32, u32),
     cursor_1: Option<(u32, u32)>,
@@ -105,7 +112,7 @@ pub struct Screen {
 }
 
 impl Screen {
-    pub fn new_v3(config: Config) -> Result<Screen, RuntimeError> {
+    pub fn new_v3(config: &Config) -> Result<Screen, RuntimeError> {
         let terminal = new_terminal();
 
         let (rows, columns) = terminal.as_ref().size();
@@ -120,6 +127,7 @@ impl Screen {
             window_1_top: None,
             window_1_bottom: None,
             selected_window: 0,
+            buffer_mode: 1,
             default_colors: colors,
             current_colors: colors,
             current_style: CellStyle::new(),
@@ -131,7 +139,7 @@ impl Screen {
         })
     }
 
-    pub fn new_v4(config: Config) -> Result<Screen, RuntimeError> {
+    pub fn new_v4(config: &Config) -> Result<Screen, RuntimeError> {
         let terminal = new_terminal();
 
         let (rows, columns) = terminal.as_ref().size();
@@ -146,6 +154,7 @@ impl Screen {
             window_1_top: None,
             window_1_bottom: None,
             selected_window: 0,
+            buffer_mode: 1,
             default_colors: colors,
             current_colors: colors,
             current_style: CellStyle::new(),
@@ -157,7 +166,7 @@ impl Screen {
         })
     }
 
-    pub fn new_v5(config: Config) -> Result<Screen, RuntimeError> {
+    pub fn new_v5(config: &Config) -> Result<Screen, RuntimeError> {
         let terminal = new_terminal();
 
         let (rows, columns) = terminal.as_ref().size();
@@ -172,6 +181,7 @@ impl Screen {
             window_1_bottom: None,
             window_0_top: 1,
             selected_window: 0,
+            buffer_mode: 1,
             default_colors: colors,
             current_colors: colors,
             current_style: CellStyle::new(),
@@ -432,7 +442,7 @@ impl Screen {
             let reverse = self.current_style.is_style(Style::Reverse);
             self.current_style.set(Style::Reverse as u8);
             self.print(&"[MORE]".chars().map(|c| c as u16).collect());
-            if let Some(c) = self.read_key(true).zchar() {
+            if let Some(c) = self.key(true).zchar() {
                 if c == 0xd {
                     self.lines_since_input = l - 1;
                 } else {
@@ -476,8 +486,22 @@ impl Screen {
     }
 
     pub fn print(&mut self, text: &Vec<u16>) {
-        for c in text {
-            self.print_char(*c);
+        if self.selected_window == 0 && self.buffer_mode == 1 {
+            let words = text.split_inclusive(|c| *c == 0x20);
+            for word in words {
+                if self.columns() - self.cursor().1 < word.len() as u32 {
+                    self.new_line();
+                }
+
+                let w = word.to_vec();
+                for c in w {
+                    self.print_char(c);
+                }
+            }
+        } else {
+            for c in text {
+                self.print_char(*c);
+            }
         }
         self.terminal.flush();
     }
@@ -535,7 +559,7 @@ impl Screen {
         Ok(())
     }
 
-    pub fn read_key(&mut self, wait: bool) -> InputEvent {
+    pub fn key(&mut self, wait: bool) -> InputEvent {
         self.lines_since_input = 0;
         if self.selected_window == 0 {
             self.terminal.move_cursor(self.cursor_0);
@@ -546,6 +570,141 @@ impl Screen {
         }
 
         self.terminal.read_key(wait)
+    }
+
+    fn now(&self, timeout: Option<u16>) -> u128 {
+        match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(t) => {
+                if let Some(d) = timeout {
+                    t.as_millis() + (d * 100) as u128
+                } else {
+                    t.as_millis()
+                }
+            }
+            Err(e) => {
+                error!(target: "app::state", "Error getting current system time: {}", e);
+                0
+            }
+        }
+    }
+
+    pub fn read_key(&mut self, timeout: u16) -> Result<InputEvent, RuntimeError> {
+        let end = if timeout > 0 {
+            self.now(Some(timeout))
+        } else {
+            0
+        };
+
+        loop {
+            let now = self.now(None);
+            if end > 0 && now > end {
+                debug!(target: "app::screen", "Read interrupted: timed out");
+                return Ok(InputEvent::from_interrupt(Interrupt::ReadTimeout));
+            }
+
+            let key = self.key(end == 0);
+            if let Some(c) = key.zchar() {
+                // TBD
+                // if c == 253 || c == 254 {
+                //     self.mouse_data(&key)?;
+                // }
+
+                return Ok(key);
+            }
+
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    pub fn read_line(
+        &mut self,
+        text: &[u16],
+        len: usize,
+        terminators: &[u16],
+        timeout: u16,
+    ) -> Result<Vec<u16>, RuntimeError> {
+        let mut input_buffer = text.to_vec();
+
+        let end = if timeout > 0 {
+            self.now(Some(timeout))
+        } else {
+            0
+        };
+
+        debug!(target: "app::screen", "Read until {}", end);
+
+        loop {
+            let now = self.now(None);
+            if end > 0 && now > end {
+                debug!(target: "app::screen", "Read interrupted: timed out");
+                return Ok(input_buffer);
+            }
+
+            let timeout = if end > 0 { end - now } else { 0 };
+
+            trace!(target: "app::screen", "Now: {}, End: {}, Timeout: {}", now, end, timeout);
+
+            let e = self.key(end == 0);
+            match e.zchar() {
+                Some(key) => {
+                    if terminators.contains(&key)
+                        // Terminator 255 means "any function key"
+                        || (terminators.contains(&255) && ((129..155).contains(&key) || key > 251))
+                    {
+                        // TBD
+                        // if key == 254 || key == 253 {
+                        //     self.mouse_data(&e)?;
+                        // }
+
+                        input_buffer.push(key);
+                        // Only print the terminator if it was the return key
+                        if key == 0x0d {
+                            self.print_char(key);
+                        }
+                        break;
+                    } else if key == 0x08 {
+                        if !input_buffer.is_empty() {
+                            input_buffer.pop();
+                            self.backspace()?;
+                        }
+                    } else if input_buffer.len() < len && (0x20..0x7f).contains(&key) {
+                        input_buffer.push(key);
+                        self.print_char(key);
+                    }
+                }
+                None => thread::sleep(Duration::from_millis(10)),
+            }
+        }
+
+        Ok(input_buffer)
+    }
+
+    pub fn status_line(
+        &mut self,
+        left: &mut Vec<u16>,
+        right: &mut Vec<u16>,
+    ) -> Result<(), RuntimeError> {
+        let width = self.columns() as usize;
+        let available_for_left = width - right.len() - 1;
+        if left.len() > available_for_left {
+            left.truncate(available_for_left - 4);
+            left.push('.' as u16);
+            left.push('.' as u16);
+            left.push('.' as u16);
+        }
+
+        let mut spaces = vec![b' ' as u16; width - left.len() - right.len() - 2];
+        let mut status_line = vec![b' ' as u16];
+        status_line.append(left);
+        status_line.append(&mut spaces);
+        status_line.append(right);
+        status_line.push(b' ' as u16);
+        let mut style = CellStyle::new();
+        style.set(Style::Reverse as u8);
+
+        self.print_at(&status_line, (1, 1), &style);
+        self.reset_cursor();
+        Ok(())
     }
 
     pub fn backspace(&mut self) -> Result<(), RuntimeError> {
@@ -568,7 +727,7 @@ impl Screen {
     }
 
     pub fn buffer_mode(&mut self, mode: u16) {
-        self.terminal.buffer_mode(mode);
+        self.buffer_mode = mode;
     }
 
     pub fn beep(&mut self) {
@@ -641,7 +800,6 @@ pub trait Terminal {
     fn erase_window(&mut self, _window: i8) {}
     fn erase_line(&mut self) {}
     fn set_style(&mut self, _style: u8) {}
-    fn buffer_mode(&mut self, _mode: u16) {}
     fn output_stream(&mut self, _stream: u8, _table: Option<usize>) {}
     fn error(&mut self, instruction: &str, message: &str, recoverable: bool) -> bool;
 }
@@ -911,7 +1069,9 @@ impl PCTerminal {
                 Ok(event) => {
                     if event.bstate & pancurses::BUTTON1_CLICKED == pancurses::BUTTON1_CLICKED {
                         InputEvent::from_mouse(254, event.y as u16 + 1, event.x as u16 + 1)
-                    } else if event.bstate & pancurses::BUTTON1_DOUBLE_CLICKED == pancurses::BUTTON1_DOUBLE_CLICKED {
+                    } else if event.bstate & pancurses::BUTTON1_DOUBLE_CLICKED
+                        == pancurses::BUTTON1_DOUBLE_CLICKED
+                    {
                         InputEvent::from_mouse(253, event.y as u16 + 1, event.x as u16 + 1)
                     } else {
                         InputEvent::no_input()

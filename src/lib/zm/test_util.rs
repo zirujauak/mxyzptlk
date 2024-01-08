@@ -3,19 +3,16 @@ use std::{
     collections::{HashMap, VecDeque},
 };
 
-use crate::iff::Chunk;
+use crate::{iff::Chunk, types::StoreResult};
 
 use crate::{
     blorb::{Blorb, Entry, IFhd, Index, Loop, RIdx},
     config::Config,
     instruction::{
-        Branch, Instruction, Opcode, OpcodeForm, Operand, OperandCount, OperandType, StoreResult,
+        Branch, Instruction, Opcode, OpcodeForm, Operand, OperandCount, OperandType,
     },
     sound::Manager,
-    zmachine::{
-        memory::Memory,
-        ZMachine,
-    },
+    zmachine::ZMachine,
 };
 
 thread_local! {
@@ -216,20 +213,20 @@ pub fn set_variable(map: &mut [u8], variable: u8, value: u16) {
 }
 
 pub fn mock_zmachine(map: Vec<u8>) -> ZMachine {
-    let m = Memory::new(map);
-    let manager = Manager::mock();
-    assert!(manager.is_ok());
-    let z = ZMachine::new(m, Config::default(), Some(manager.unwrap()), "test");
+    // let m = Memory::new(map);
+    // let manager = Manager::mock();
+    // assert!(manager.is_ok());
+    let z = ZMachine::new(map, Config::default(), "test", 24, 80);
     assert!(z.is_ok());
     z.unwrap()
 }
 
-pub fn mock_state(map: Vec<u8>) -> State {
-    let m = Memory::new(map);
-    let s = State::new(m);
-    assert!(s.is_ok());
-    s.unwrap()
-}
+// pub fn mock_state(map: Vec<u8>) -> State {
+//     let m = Memory::new(map);
+//     let s = State::new(m);
+//     assert!(s.is_ok());
+//     s.unwrap()
+// }
 
 pub fn operand(operand_type: OperandType, value: u16) -> Operand {
     Operand::new(operand_type, value)

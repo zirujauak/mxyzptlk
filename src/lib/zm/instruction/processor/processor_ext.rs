@@ -101,13 +101,14 @@ pub fn art_shift(
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn set_font(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
-    // TBD: Interpreter returns old font, which must be stored.
+pub fn set_font_pre(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     Ok(InstructionResult::new(Directive::SetFont, DirectiveRequest::set_font(operands[0]), instruction.next_address))
-    // let result = zmachine.set_font(operands[0])?;
-    // store_result(zmachine, instruction, result)?;
-    // Ok(InstructionResult::none(instruction.next_address()))
+}
+
+pub fn set_font_post(zmachine: &mut ZMachine, instruction: &Instruction, old_font: u8) -> Result<InstructionResult, RuntimeError> {
+    store_result(zmachine, instruction, old_font as u16)?;
+    Ok(InstructionResult::none(instruction.next_address()))
 }
 
 pub fn save_undo(

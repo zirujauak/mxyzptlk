@@ -1,19 +1,24 @@
-use std::{collections::{HashSet, VecDeque}, fs::File};
+use std::{
+    collections::{HashSet, VecDeque},
+    fs::File,
+};
 
 use crate::{
+    config::Config,
     error::{ErrorCode, RuntimeError},
     fatal_error,
+    instruction::{processor, Instruction},
     object::property,
     quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
     recoverable_error, text,
-    types::StoreResult, config::Config,
+    types::{DirectiveRequest, InstructionResult, StoreResult, Directive},
 };
 
 use self::{
     frame::Frame,
     header::{Flags1v3, Flags1v4, Flags2, HeaderField},
     memory::Memory,
-    rng::{ZRng, chacha_rng::ChaChaRng},
+    rng::{chacha_rng::ChaChaRng, ZRng},
 };
 
 mod frame;
@@ -163,7 +168,13 @@ impl TryFrom<&ZMachine> for Stks {
 }
 
 impl ZMachine {
-    pub fn new(zcode: Vec<u8>, config: Config, name: &str, rows: u8, columns: u8) -> Result<ZMachine, RuntimeError> {
+    pub fn new(
+        zcode: Vec<u8>,
+        config: Config,
+        name: &str,
+        rows: u8,
+        columns: u8,
+    ) -> Result<ZMachine, RuntimeError> {
         let memory = Memory::new(zcode);
         let version = header::field_byte(&memory, HeaderField::Version)?;
         let rng = ChaChaRng::new();
@@ -182,7 +193,12 @@ impl ZMachine {
             stream_3: Vec::new(),
         };
 
-        zm.initialize(rows, columns, (config.foreground(), config.background()), false)?;
+        zm.initialize(
+            rows,
+            columns,
+            (config.foreground(), config.background()),
+            false,
+        )?;
         Ok(zm)
     }
 
@@ -548,7 +564,46 @@ impl ZMachine {
         }
     }
 
-    pub fn return_routine(&mut self, value: u16) -> Result<usize, RuntimeError> {
+    pub fn call_read_interrupt(
+        &mut self,
+        address: usize,
+        arguments: &Vec<u16>,
+        result: Option<StoreResult>,
+        return_address: usize,
+    ) -> Result<usize, RuntimeError> {
+        // Call to address 0 results in FALSE
+        if address == 0 {
+            if let Some(r) = result {
+                self.set_variable(r.variable(), 0)?;
+            }
+            Ok(return_address)
+        } else {
+            let (initial_pc, local_variables) = self.routine_header(address)?;
+            let mut frame = Frame::call_routine(
+                address,
+                initial_pc,
+                arguments,
+                local_variables,
+                result,
+                return_address,
+            )?;
+            frame.set_input_interrupt(true);
+            self.frames.push(frame);
+
+            Ok(initial_pc)
+        }
+    }
+
+    pub fn is_input_interrupt(&self) -> Result<bool, RuntimeError> {
+        Ok(self.current_frame()?.input_interrupt())
+    }
+
+    pub fn set_redraw_input(&mut self) -> Result<(), RuntimeError> {
+        self.current_frame_mut()?.set_redraw_input(true);
+        Ok(())
+    }
+
+    pub fn return_routine(&mut self, value: u16) -> Result<InstructionResult, RuntimeError> {
         if let Some(f) = self.frames.pop() {
             let n = self.current_frame_mut()?;
             n.set_pc(f.return_address());
@@ -556,16 +611,26 @@ impl ZMachine {
             if let Some(r) = f.result() {
                 self.set_variable(r.variable(), value)?;
             }
-            // TODO: Interrupts
-            // if f.input_interrupt() {
-            //     if self.read_interrupt_pending {
-            //         self.read_interrupt_result = Some(value);
-            //     }
-            // } else if let Some(r) = f.result() {
-            //     self.set_variable(r.variable(), value)?
-            // }
 
-            Ok(self.current_frame()?.pc())
+            if f.input_interrupt() {
+                debug!(target: "app::screen", "Return from input interrupt");
+                Ok(InstructionResult::new(
+                    Directive::ReadInterruptReturn,
+                    DirectiveRequest::read_interrupt_return(value, f.redraw_input()),
+                    f.return_address(),
+                ))
+            } else {
+                // TODO: Interrupts
+                // if f.input_interrupt() {
+                //     if self.read_interrupt_pending {
+                //         self.read_interrupt_result = Some(value);
+                //     }
+                // } else if let Some(r) = f.result() {
+                //     self.set_variable(r.variable(), value)?
+                // }
+
+                Ok(InstructionResult::none(self.current_frame()?.pc()))
+            }
         } else {
             fatal_error!(
                 ErrorCode::ReturnNoCaller,
@@ -578,7 +643,7 @@ impl ZMachine {
         Ok(self.current_frame()?.argument_count())
     }
 
-    pub fn throw(&mut self, depth: u16, result: u16) -> Result<usize, RuntimeError> {
+    pub fn throw(&mut self, depth: u16, result: u16) -> Result<InstructionResult, RuntimeError> {
         self.frames.truncate(depth as usize);
         self.return_routine(result)
     }
@@ -697,7 +762,7 @@ impl ZMachine {
         self.stream_2 = Some(file)
     }
 
-    fn is_stream_enabled(&self, stream: u8) -> bool {
+    pub fn is_stream_enabled(&self, stream: u8) -> bool {
         let mask = (1 << (stream - 1)) & 0xF;
         self.output_streams & mask == mask
     }
@@ -738,10 +803,7 @@ impl ZMachine {
         }
     }
 
-    fn disable_output_stream(
-        &mut self,
-        stream: u8,
-    ) -> Result<(), RuntimeError> {
+    fn disable_output_stream(&mut self, stream: u8) -> Result<(), RuntimeError> {
         let mask = (1 << (stream - 1)) & 0xF;
         debug!(target: "app::stream", "Disable output stream {} => {:04b}", stream, self.output_streams);
         match stream {
@@ -754,7 +816,8 @@ impl ZMachine {
                     let len = s.buffer.len();
                     self.memory.write_word(s.address(), len as u16)?;
                     for i in 0..len {
-                        self.memory.write_byte(s.address + 2 + i, s.buffer()[i] as u8)?;
+                        self.memory
+                            .write_byte(s.address + 2 + i, s.buffer()[i] as u8)?;
                     }
                     if self.stream_3.is_empty() {
                         self.output_streams &= !mask;
@@ -777,7 +840,10 @@ impl ZMachine {
     }
 
     fn start_stream_2(&mut self) -> Result<(), RuntimeError> {
-        Err(RuntimeError::recoverable(ErrorCode::UnimplementedInstruction, "Stream 2 not implemented yet".to_string()))
+        Err(RuntimeError::recoverable(
+            ErrorCode::UnimplementedInstruction,
+            "Stream 2 not implemented yet".to_string(),
+        ))
         // let file = self.prompt_and_create("Transcript file name: ", "txt", false)?;
         // self.io.set_stream_2(file);
     }
@@ -820,5 +886,22 @@ impl ZMachine {
                 stream
             ),
         }
+    }
+
+    // Runtime
+    pub fn execute(
+        &mut self,
+        instruction: &Instruction,
+    ) -> Result<InstructionResult, RuntimeError> {
+        processor::dispatch(self, &instruction)
+    }
+
+    pub fn pc(&self) -> Result<usize, RuntimeError> {
+        Ok(self.current_frame()?.pc())
+    }
+
+    pub fn set_pc(&mut self, pc: usize) -> Result<(), RuntimeError> {
+        self.current_frame_mut()?.set_pc(pc);
+        Ok(())
     }
 }

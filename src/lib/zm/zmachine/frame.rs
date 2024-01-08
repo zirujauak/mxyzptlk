@@ -13,6 +13,7 @@ pub struct Frame {
     return_address: usize,
     input_interrupt: bool,
     sound_interrupt: bool,
+    redraw_input: bool,
 }
 
 impl From<&Stk> for Frame {
@@ -64,6 +65,7 @@ impl Frame {
             return_address,
             input_interrupt: false,
             sound_interrupt: false,
+            redraw_input: false,
         }
     }
 
@@ -109,6 +111,14 @@ impl Frame {
 
     pub fn set_sound_interrupt(&mut self, v: bool) {
         self.sound_interrupt = v;
+    }
+
+    pub fn redraw_input(&self) -> bool {
+        self.redraw_input
+    }
+
+    pub fn set_redraw_input(&mut self, redraw_input: bool) {
+        self.redraw_input = redraw_input;
     }
 
     pub fn pop(&mut self) -> Result<u16, RuntimeError> {

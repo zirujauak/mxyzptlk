@@ -7,7 +7,7 @@ mod processor_0op;
 mod processor_1op;
 mod processor_2op;
 mod processor_ext;
-mod processor_var;
+pub mod processor_var;
 
 fn operand_value(zmachine: &mut ZMachine, operand: &Operand) -> Result<u16, RuntimeError> {
     match operand.operand_type() {

@@ -32,6 +32,13 @@ impl StoreResult {
     }
 }
 
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum Interrupt {
+    ReadTimeout,
+    Sound,
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct InputEvent {
     zchar: Option<u16>,
@@ -66,14 +73,15 @@ impl InputEvent {
             //interrupt: None,
         }
     }
-    // pub fn from_interrupt(interrupt: Interrupt) -> InputEvent {
-    //     InputEvent {
-    //         zchar: None,
-    //         row: None,
-    //         column: None,
-    //         //interrupt: Some(interrupt),
-    //     }
-    // }
+
+    pub fn from_interrupt(interrupt: Interrupt) -> InputEvent {
+        InputEvent {
+            zchar: None,
+            row: None,
+            column: None,
+            //interrupt: Some(interrupt),
+        }
+    }
 
     pub fn zchar(&self) -> Option<u16> {
         self.zchar
@@ -91,7 +99,7 @@ impl InputEvent {
 #[derive(Default)]
 pub struct InstructionResult {
     directive: Option<Directive>,
-    request: Option<DirectiveRequest>,
+    request: DirectiveRequest,
     next_instruction: usize,
 }
 
@@ -103,7 +111,7 @@ impl InstructionResult {
     ) -> InstructionResult {
         InstructionResult {
             directive: Some(directive),
-            request: Some(request),
+            request,
             next_instruction,
         }
     }
@@ -126,11 +134,25 @@ impl InstructionResult {
     pub fn message(message: String, next_instruction: usize) -> InstructionResult {
         InstructionResult {
             directive: Some(Directive::Message),
-            request: Some(DirectiveRequest::message(message)),
+            request: DirectiveRequest::message(message),
             next_instruction,
         }
     }
+
+    pub fn directive(&self) -> Option<&Directive> {
+        self.directive.as_ref()
+    }
+
+    pub fn request(&self) -> &DirectiveRequest {
+        &self.request
+    }
+
+    pub fn next_instruction(&self) -> usize {
+        self.next_instruction
+    }
 }
+
+#[derive(Debug, PartialEq)]
 pub enum Directive {
     BufferMode,
     EraseLine,
@@ -140,6 +162,8 @@ pub enum Directive {
     NewLine,
     Read,
     ReadChar,
+    ReadInterrupted,
+    ReadInterruptReturn,
     Print,
     PrintRet,
     PrintTable,
@@ -162,10 +186,10 @@ pub struct DirectiveRequest {
     message: String,
 
     // BUFFER_MODE
-    buffer_mode: u16,
+    mode: u16,
 
     // ERASE_WINDOW
-    erase_window: i16,
+    window_erase: i16,
 
     // PRINT, PRINT_RET
     text: Vec<u16>,
@@ -180,9 +204,15 @@ pub struct DirectiveRequest {
     length: u8,
     terminators: Vec<u16>,
     preload: Vec<u16>,
+    redraw_input: bool,
 
     // READ, READ_CHAR
     timeout: u16,
+    read_instruction: usize,
+    read_next_instruction: usize,
+    read_int_routine: usize,
+    read_int_result: u16,
+    
 
     // SET_COLOUR
     foreground: u16,
@@ -199,7 +229,7 @@ pub struct DirectiveRequest {
     style: u16,
 
     // SET_WINDOW
-    set_window: u16,
+    window_set: u16,
 
     // SHOW_STATUS
     left: Vec<u16>,
@@ -218,14 +248,14 @@ pub struct DirectiveRequest {
 impl DirectiveRequest {
     pub fn buffer_mode(mode: u16) -> DirectiveRequest {
         DirectiveRequest {
-            buffer_mode: mode,
+            mode,
             ..Default::default()
         }
     }
 
     pub fn erase_window(window: i16) -> DirectiveRequest {
         DirectiveRequest {
-            erase_window: window,
+            window_erase: window,
             ..Default::default()
         }
     }
@@ -254,11 +284,14 @@ impl DirectiveRequest {
         }
     }
 
-    pub fn read(length: u8, terminators: &[u16], timeout: u16, preload: &[u16]) -> DirectiveRequest {
+    pub fn read(length: u8, terminators: &[u16], timeout: u16, read_int_routine: usize, read_instruction: usize, read_next_instruction: usize, preload: &[u16]) -> DirectiveRequest {
         DirectiveRequest {
             length,
             terminators: terminators.to_vec(),
             timeout,
+            read_instruction,
+            read_next_instruction,
+            read_int_routine,
             preload: preload.to_vec(),
             ..Default::default()
         }
@@ -267,6 +300,14 @@ impl DirectiveRequest {
     pub fn read_char(timeout: u16) -> DirectiveRequest {
         DirectiveRequest {
             timeout,
+            ..Default::default()
+        }
+    }
+
+    pub fn read_interrupt_return(result: u16, redraw_input: bool) -> DirectiveRequest {
+        DirectiveRequest {
+            read_int_result: result,
+            redraw_input,
             ..Default::default()
         }
     }
@@ -303,7 +344,7 @@ impl DirectiveRequest {
 
     pub fn set_window(window: u16) -> DirectiveRequest {
         DirectiveRequest {
-            set_window: window,
+            window_set: window,
             ..Default::default()
         }
     }
@@ -331,5 +372,84 @@ impl DirectiveRequest {
             split,
             ..Default::default()
         }
+    }
+
+    pub fn mode(&self) -> u16 {
+        self.mode
+    }
+    pub fn text(&self) -> &Vec<u16> {
+        &self.text
+    }
+
+    pub fn length(&self) -> u8 {
+        self.length
+    }
+
+    pub fn preload(&self) -> &[u16] {
+        &self.preload
+    }
+
+    pub fn terminators(&self) -> &[u16] {
+        &self.terminators
+    }
+
+    pub fn timeout(&self) -> u16 {
+        self.timeout
+    }
+
+    pub fn redraw_input(&self) -> bool {
+        self.redraw_input
+    }
+    
+    pub fn read_instruction(&self) -> usize {
+        self.read_instruction
+    }
+
+    pub fn read_next_instruction(&self) -> usize {
+        self.read_next_instruction
+    }
+
+    pub fn read_int_routine(&self) -> usize {
+        self.read_int_routine
+    }
+
+    pub fn read_int_result(&self) -> u16 {
+        self.read_int_result
+    }
+
+    pub fn window_erase(&self) -> i16 {
+        self.window_erase
+    }
+
+    pub fn style(&self) -> u16 {
+        self.style
+    }
+
+    pub fn split(&self) -> u16 {
+        self.split
+    }
+
+    pub fn window_set(&self) -> u16 {
+        self.window_set
+    }
+
+    pub fn row(&self) -> u16 {
+        self.row
+    }
+
+    pub fn column(&self) -> u16 {
+        self.column
+    }
+
+    pub fn foreground(&self) -> u16 {
+        self.foreground
+    }
+
+    pub fn background(&self) -> u16 {
+        self.background
+    }
+
+    pub fn font(&self) -> u16 {
+        self.font
     }
 }
