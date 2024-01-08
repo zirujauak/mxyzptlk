@@ -112,18 +112,20 @@ pub struct Screen {
 }
 
 impl Screen {
-    pub fn new_v3(config: &Config) -> Result<Screen, RuntimeError> {
+    pub fn new(version: u8, config: &Config) -> Result<Screen, RuntimeError> {
         let terminal = new_terminal();
 
         let (rows, columns) = terminal.as_ref().size();
         let colors = map_colors(config.foreground(), config.background())?;
 
+        let top = if version == 3 { 2 } else { 1 };
+        let cursor_0 = if version > 4 { (1, 1) } else { (rows, 1) };
         Ok(Screen {
-            version: 3,
+            version,
             rows,
             columns,
-            top: 2,
-            window_0_top: 2,
+            top,
+            window_0_top: top,
             window_1_top: None,
             window_1_bottom: None,
             selected_window: 0,
@@ -132,67 +134,12 @@ impl Screen {
             current_colors: colors,
             current_style: CellStyle::new(),
             font: 1,
-            cursor_0: (rows, 1),
+            cursor_0,
             cursor_1: None,
             terminal,
             lines_since_input: 0,
         })
     }
-
-    pub fn new_v4(config: &Config) -> Result<Screen, RuntimeError> {
-        let terminal = new_terminal();
-
-        let (rows, columns) = terminal.as_ref().size();
-        let colors = map_colors(config.foreground(), config.background())?;
-
-        Ok(Screen {
-            version: 4,
-            rows,
-            columns,
-            top: 1,
-            window_0_top: 1,
-            window_1_top: None,
-            window_1_bottom: None,
-            selected_window: 0,
-            buffer_mode: 1,
-            default_colors: colors,
-            current_colors: colors,
-            current_style: CellStyle::new(),
-            font: 1,
-            cursor_0: (rows, 1),
-            cursor_1: None,
-            terminal,
-            lines_since_input: 0,
-        })
-    }
-
-    pub fn new_v5(config: &Config) -> Result<Screen, RuntimeError> {
-        let terminal = new_terminal();
-
-        let (rows, columns) = terminal.as_ref().size();
-        let colors = map_colors(config.foreground(), config.background())?;
-
-        Ok(Screen {
-            version: 5,
-            rows,
-            columns,
-            top: 1,
-            window_1_top: None,
-            window_1_bottom: None,
-            window_0_top: 1,
-            selected_window: 0,
-            buffer_mode: 1,
-            default_colors: colors,
-            current_colors: colors,
-            current_style: CellStyle::new(),
-            font: 1,
-            cursor_0: (1, 1),
-            cursor_1: None,
-            terminal,
-            lines_since_input: 0,
-        })
-    }
-
     pub fn rows(&self) -> u32 {
         self.rows
     }
