@@ -130,7 +130,9 @@ pub fn set_attr(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    attribute::set(zmachine, operands[0] as usize, operands[1] as u8)?;
+    if operands[0] > 0 {
+        attribute::set(zmachine, operands[0] as usize, operands[1] as u8)?;
+    }
 
     Ok(InstructionResult::none(instruction.next_address()))
 }
@@ -140,8 +142,9 @@ pub fn clear_attr(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    attribute::clear(zmachine, operands[0] as usize, operands[1] as u8)?;
-
+    if operands[0] > 0 {
+        attribute::clear(zmachine, operands[0] as usize, operands[1] as u8)?;
+    }
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
