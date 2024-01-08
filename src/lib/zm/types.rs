@@ -234,6 +234,7 @@ pub struct DirectiveRequest {
     effect: u16,
     volume: u8,
     repeats: u8,
+    sound_routine: usize,
 
     // SPLIT_WINDOW
     split: u16,
@@ -360,12 +361,13 @@ impl DirectiveRequest {
         }
     }
 
-    pub fn sound_effect(number: u16, effect: u16, volume: u8, repeats: u8) -> DirectiveRequest {
+    pub fn sound_effect(number: u16, effect: u16, volume: u8, repeats: u8, routine: usize) -> DirectiveRequest {
         DirectiveRequest {
             number,
             effect,
             volume,
             repeats,
+            sound_routine: routine,
             ..Default::default()
         }
     }
@@ -480,6 +482,10 @@ impl DirectiveRequest {
         self.repeats
     }
 
+    pub fn sound_routine(&self) -> usize {
+        self.sound_routine
+    }
+    
     pub fn height(&self) -> u16 {
         self.height
     }

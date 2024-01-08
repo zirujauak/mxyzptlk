@@ -104,11 +104,12 @@ impl fmt::Debug for dyn Player {
         write!(f, "{}", self.type_name())
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Manager {
     player: Option<Box<dyn Player>>,
     sounds: HashMap<u32, Sound>,
     current_effect: u32,
+    routine: usize,
 }
 
 impl From<Blorb> for HashMap<u32, Sound> {
@@ -148,6 +149,7 @@ impl Manager {
             player: Some(new_player(128.0)?),
             sounds,
             current_effect: 0,
+            ..Default::default()
         })
     }
 
@@ -156,10 +158,18 @@ impl Manager {
         Ok(Manager {
             player: Some(new_player(volume_factor)?),
             sounds: HashMap::from(blorb),
-            current_effect: 0,
+            ..Default::default()
         })
     }
 
+    pub fn none() -> Result<Manager, RuntimeError> {
+        Ok(Manager {
+            player: None,
+            sounds: HashMap::new(),
+            ..Default::default()
+        })
+    }
+    
     pub fn current_effect(&self) -> u32 {
         self.current_effect
     }
@@ -176,11 +186,20 @@ impl Manager {
         }
     }
 
+    pub fn routine(&self) -> usize {
+        self.routine
+    }
+
+    pub fn clear_routine(&mut self) {
+        self.routine = 0
+    }
+
     pub fn play_sound(
         &mut self,
         effect: u16,
         volume: u8,
         repeats: Option<u8>,
+        routine: usize,
     ) -> Result<(), RuntimeError> {
         debug!(target: "app::sound", "Playing sound effect {}, at volume {}, with repeats {:?}", effect, volume, repeats);
         if let Some(p) = self.player.as_mut() {
@@ -199,6 +218,7 @@ impl Manager {
                     };
 
                     self.current_effect = effect as u32;
+                    self.routine = routine;
                     p.play_sound(&sound.data, volume, r)
                 }
                 None => {

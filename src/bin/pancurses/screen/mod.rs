@@ -10,7 +10,7 @@ use zm::{
     config::Config,
     error::{ErrorCode, RuntimeError},
     recoverable_error,
-    types::{InputEvent, Interrupt},
+    types::{InputEvent, Interrupt}, sound::Manager,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -569,6 +569,7 @@ impl Screen {
         len: usize,
         terminators: &[u16],
         timeout: u16,
+        sound: &mut Manager,
     ) -> Result<Vec<u16>, RuntimeError> {
         let mut input_buffer = text.to_vec();
 
@@ -579,6 +580,7 @@ impl Screen {
         };
 
         debug!(target: "app::screen", "Read until {}", end);
+        debug!(target: "app::screen", "Sound routine: ${:05x}", sound.routine());
 
         loop {
             let now = self.now(None);
@@ -587,11 +589,16 @@ impl Screen {
                 return Ok(input_buffer);
             }
 
+            if sound.routine() > 0 && !sound.is_playing() {
+                debug!(target: "app::screen", "Read interrupted: sound finished");
+                return Ok(input_buffer);
+            }
+
             let timeout = if end > 0 { end - now } else { 0 };
 
             trace!(target: "app::screen", "Now: {}, End: {}, Timeout: {}", now, end, timeout);
 
-            let e = self.key(end == 0);
+            let e = self.key(end == 0 && sound.routine() == 0);
             match e.zchar() {
                 Some(key) => {
                     if terminators.contains(&key)

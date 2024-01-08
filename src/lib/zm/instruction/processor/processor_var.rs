@@ -228,7 +228,11 @@ pub fn read_interrupted(
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     let text_buffer = operands[0] as usize;
-    let routine = zmachine.packed_routine_address(operands[3])?;
+    let routine = if operands.len() > 2 {
+        zmachine.packed_routine_address(operands[3])?
+    } else {
+        0
+    };
 
     if zmachine.version() == 4 {
         for (i, b) in input.iter().enumerate() {
@@ -242,12 +246,16 @@ pub fn read_interrupted(
         }
     }
 
-    Ok(InstructionResult::none(zmachine.call_read_interrupt(
-        routine,
-        &Vec::new(),
-        None,
-        instruction.address,
-    )?))
+    if routine > 0 {
+        Ok(InstructionResult::none(zmachine.call_read_interrupt(
+            routine,
+            &Vec::new(),
+            None,
+            instruction.address,
+        )?))
+    } else {
+        Ok(InstructionResult::none(instruction.address))
+    }
 }
 
 pub fn read_abort(
@@ -683,7 +691,7 @@ pub fn sound_effect_pre(
     match number {
         1 | 2 => Ok(InstructionResult::new(
             Directive::SoundEffect,
-            DirectiveRequest::sound_effect(number, 0, 0, 0),
+            DirectiveRequest::sound_effect(number, 0, 0, 0, 0),
             instruction.next_address,
         )),
         _ => {
@@ -692,7 +700,7 @@ pub fn sound_effect_pre(
                 // Prepare, Stop, Unload
                 1 | 3 | 4 => Ok(InstructionResult::new(
                     Directive::SoundEffect,
-                    DirectiveRequest::sound_effect(number, 0, 0, 0),
+                    DirectiveRequest::sound_effect(number, 0, 0, 0, 0),
                     instruction.next_address,
                 )),
                 // Play
@@ -706,14 +714,14 @@ pub fn sound_effect_pre(
                         (255, 1)
                     };
                     let routine = if operands.len() > 3 {
-                        Some(zmachine.packed_routine_address(operands[3])?)
+                        zmachine.packed_routine_address(operands[3])?
                     } else {
-                        None
+                        0
                     };
 
                     Ok(InstructionResult::new(
                         Directive::SoundEffect,
-                        DirectiveRequest::sound_effect(number, effect, volume, repeats),
+                        DirectiveRequest::sound_effect(number, effect, volume, repeats, routine),
                         instruction.next_address,
                     ))
                 }
@@ -1021,7 +1029,7 @@ pub fn print_table(
         //     zmachine.set_cursor(origin.0 + i as u16, origin.1)?;
         // }
         // let mut text = Vec::new();
-        for j in 0..(width+skip) {
+        for j in 0..(width + skip) {
             let offset = i * (width + skip);
             data.push(zmachine.read_byte(table + offset + j)? as u16);
             // text.push(zmachine.read_byte(table + offset + j)? as u16);
