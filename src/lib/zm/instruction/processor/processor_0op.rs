@@ -110,42 +110,29 @@ pub fn restore(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    match zmachine.restore() {
-        Ok(address) => {
-            match address {
-                Some(a) => {
-                    // TBD payload necessary for interpreter to manage restore state?
-                    let i = decoder::decode_instruction(zmachine, a - 1)?;
-                    if zmachine.version() == 3 {
-                        // V3 is a branch
-                        branch(zmachine, &i, true)
-                    } else {
-                        // V4 is a store
-                        store_result(zmachine, instruction, 2)?;
-                        Ok(InstructionResult::empty(
-                            Directive::Restore,
-                            i.next_address(),
-                        ))
-                    }
-                }
-                None => {
-                    if zmachine.version() == 3 {
-                        branch(zmachine, instruction, false)
-                    } else {
-                        store_result(zmachine, instruction, 0)?;
-                        Ok(InstructionResult::none(instruction.next_address()))
-                    }
-                }
+    let address = zmachine.restore()?;
+    match address {
+        Some(a) => {
+            // TBD payload necessary for interpreter to manage restore state?
+            let i = decoder::decode_instruction(zmachine, a - 1)?;
+            if zmachine.version() == 3 {
+                // V3 is a branch
+                branch(zmachine, &i, true)
+            } else {
+                // V4 is a store
+                store_result(zmachine, instruction, 2)?;
+                Ok(InstructionResult::empty(
+                    Directive::Restore,
+                    i.next_address(),
+                ))
             }
         }
-        Err(e) => {
-            let err = format!("Error reading: {}\r", e);
+        None => {
             if zmachine.version() == 3 {
                 branch(zmachine, instruction, false)
             } else {
                 store_result(zmachine, instruction, 0)?;
-                Ok(InstructionResult::message(err, instruction.next_address))
-                // Ok(instruction.next_address())
+                Ok(InstructionResult::none(instruction.next_address()))
             }
         }
     }
