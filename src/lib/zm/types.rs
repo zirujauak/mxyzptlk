@@ -455,4 +455,44 @@ impl DirectiveRequest {
     pub fn font(&self) -> u16 {
         self.font
     }
+
+    pub fn left(&self) -> &Vec<u16> {
+        &self.left
+    }
+
+    pub fn right(&self) -> &Vec<u16> {
+        &self.right
+    }
+
+    pub fn number(&self) -> u16 {
+        self.number
+    }
+
+    pub fn effect(&self) -> u16 {
+        self.effect
+    }
+
+    pub fn volume(&self) -> u8 {
+        self.volume
+    }
+    
+    pub fn repeats(&self) -> u8 {
+        self.repeats
+    }
+
+    pub fn height(&self) -> u16 {
+        self.height
+    }
+
+    pub fn width(&self) -> u16 {
+        self.width
+    }
+
+    pub fn skip(&self) -> u16 {
+        self.skip
+    }
+
+    pub fn table(&self) -> &Vec<u16>{
+        &self.table
+    }
 }

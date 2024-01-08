@@ -628,23 +628,24 @@ impl Screen {
 
     pub fn status_line(
         &mut self,
-        left: &mut Vec<u16>,
-        right: &mut Vec<u16>,
+        left: &Vec<u16>,
+        right: &Vec<u16>,
     ) -> Result<(), RuntimeError> {
         let width = self.columns() as usize;
         let available_for_left = width - right.len() - 1;
+        let mut l = left.clone();
         if left.len() > available_for_left {
-            left.truncate(available_for_left - 4);
-            left.push('.' as u16);
-            left.push('.' as u16);
-            left.push('.' as u16);
+            l.truncate(available_for_left - 4);
+            l.push('.' as u16);
+            l.push('.' as u16);
+            l.push('.' as u16);
         }
 
-        let mut spaces = vec![b' ' as u16; width - left.len() - right.len() - 2];
+        let mut spaces = vec![b' ' as u16; width - l.len() - right.len() - 2];
         let mut status_line = vec![b' ' as u16];
-        status_line.append(left);
+        status_line.append(&mut l);
         status_line.append(&mut spaces);
-        status_line.append(right);
+        status_line.append(&mut right.clone());
         status_line.push(b' ' as u16);
         let mut style = CellStyle::new();
         style.set(Style::Reverse as u8);

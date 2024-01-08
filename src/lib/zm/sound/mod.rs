@@ -55,6 +55,7 @@ impl From<(u32, &Chunk, Option<&u32>)> for Sound {
         if chunk.id() == "OGGV" {
             Sound::new(number, chunk.data(), repeats)
         } else if chunk.id() == "FORM" && chunk.sub_id() == "AIFF" {
+            debug!(target: "app::sound", "Converting sound {} from AIFF", number);
             match loader::convert_aiff(&Vec::from(chunk)) {
                 Ok(s) => Sound::new(number, &s, repeats),
                 Err(e) => {

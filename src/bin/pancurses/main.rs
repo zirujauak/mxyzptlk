@@ -96,7 +96,7 @@ fn quit(screen: &mut Screen) {
     exit(-1);
 }
 
-fn run(zmachine: &mut ZMachine, screen: &mut Screen) -> Result<(), RuntimeError> {
+fn run(zmachine: &mut ZMachine, screen: &mut Screen, mut sound: Option<Manager>) -> Result<(), RuntimeError> {
     let mut n = 1;
     loop {
         log_mdc::insert("instruction_count", format!("{:8x}", n));
@@ -151,14 +151,33 @@ fn run(zmachine: &mut ZMachine, screen: &mut Screen) -> Result<(), RuntimeError>
                         }
                         zmachine.set_pc(r.next_instruction())?
                     }
+                    Directive::PrintTable => {
+                        let origin = screen.cursor();
+                        let rows = screen.rows();
+                        for i in 0..request.height() as usize {
+                            if origin.0 + i as u32 > rows {
+                                screen.new_line();
+                                screen.move_cursor(rows, origin.1);
+                            } else {
+                                screen.move_cursor(origin.0 + i as u32, origin.1);
+                            }
+                            let mut text = Vec::new();
+                            let offset = i * (request.width() as usize + request.skip() as usize);
+                            for j in 0..request.width() as usize {
+                                text.push(request.table()[offset + j])
+                            }
+                            screen.print(&text);
+                        }
+                        zmachine.set_pc(r.next_instruction())?
+                    }
                     Directive::Quit => {
                         quit(screen);
                         return Ok(());
                     }
                     Directive::Read => {
                         if zmachine.version() == 3 {
-                            let (mut left, mut right) = zmachine.status_line()?;
-                            screen.status_line(&mut left, &mut right)?;
+                            let (left, right) = zmachine.status_line()?;
+                            screen.status_line(&left, &right)?;
                         }
                         let input = screen.read_line(
                             request.preload(),
@@ -247,6 +266,28 @@ fn run(zmachine: &mut ZMachine, screen: &mut Screen) -> Result<(), RuntimeError>
                     }
                     Directive::SetWindow => {
                         screen.select_window(request.window_set() as u8)?;
+                        zmachine.set_pc(r.next_instruction())?
+                    }
+                    Directive::ShowStatus => {
+                        screen.status_line(request.left(), request.right())?;
+                        zmachine.set_pc(r.next_instruction())?
+                    }
+                    Directive::SoundEffect => {
+                        match request.number() {
+                            1 | 2 => screen.beep(),
+                            _ => {
+                                if let Some(m) = sound.as_mut() {
+                                    match request.effect() {
+                                        1 => (),
+                                        2 => {
+                                            m.play_sound(request.number(), request.volume(), Some(request.repeats()))?;
+                                        }
+                                        3 | 4 => m.stop_sound(),
+                                        _ => ()
+                                    }
+                                }
+                            },
+                        }
                         zmachine.set_pc(r.next_instruction())?
                     }
                     Directive::SplitWindow => {
@@ -377,16 +418,16 @@ fn main() {
     let mut screen = Screen::new(zcode[0], &config).expect("Error creating screen");
     let mut zmachine = ZMachine::new(
         zcode,
-        config,
+        &config,
         &name,
         screen.rows() as u8,
         screen.columns() as u8,
     )
     .expect("Error creating zmachine");
-    // let sound_manager = initialize_sound_engine(&zmac        hine, config.volume_factor(), blorb);
+    let mut sound = initialize_sound_engine(&zmachine, config.volume_factor(), blorb);
 
     trace!("Begining execution");
-    if let Err(r) = run(&mut zmachine, &mut screen) {
+    if let Err(r) = run(&mut zmachine, &mut screen, sound) {
         error!("{}", r);
         quit(&mut screen);
     }

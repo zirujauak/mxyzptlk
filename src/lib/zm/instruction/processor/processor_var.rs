@@ -1021,7 +1021,7 @@ pub fn print_table(
         //     zmachine.set_cursor(origin.0 + i as u16, origin.1)?;
         // }
         // let mut text = Vec::new();
-        for j in 0..width {
+        for j in 0..(width+skip) {
             let offset = i * (width + skip);
             data.push(zmachine.read_byte(table + offset + j)? as u16);
             // text.push(zmachine.read_byte(table + offset + j)? as u16);

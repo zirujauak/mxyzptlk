@@ -170,7 +170,7 @@ impl TryFrom<&ZMachine> for Stks {
 impl ZMachine {
     pub fn new(
         zcode: Vec<u8>,
-        config: Config,
+        config: &Config,
         name: &str,
         rows: u8,
         columns: u8,
