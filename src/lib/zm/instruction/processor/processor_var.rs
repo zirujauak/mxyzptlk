@@ -700,7 +700,7 @@ pub fn sound_effect_pre(
                 // Prepare, Stop, Unload
                 1 | 3 | 4 => Ok(InstructionResult::new(
                     Directive::SoundEffect,
-                    DirectiveRequest::sound_effect(number, 0, 0, 0, 0),
+                    DirectiveRequest::sound_effect(number, effect, 0, 0, 0),
                     instruction.next_address,
                 )),
                 // Play

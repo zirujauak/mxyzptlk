@@ -91,6 +91,14 @@ impl InputEvent {
     }
 }
 
+#[derive(Debug)]
+pub enum InstructionModifier {
+    None,
+    Post,
+    Interrupted,
+    Aborted
+}
+
 #[derive(Debug, Default)]
 pub struct InstructionResult {
     directive: Option<Directive>,
@@ -155,16 +163,18 @@ pub enum Directive {
     GetCursor,
     Message,
     NewLine,
-    Read,
-    ReadChar,
-    ReadCharInterruptReturn,
-    ReadInterruptReturn,
     Print,
     PrintRet,
     PrintTable,
     Quit,
+    Read,
+    ReadChar,
+    ReadCharInterruptReturn,
+    ReadInterruptReturn,
     Restart,
     Restore,
+    RestoreComplete,
+    Save,
     SetColour,
     SetCursor,
     SetFont,
@@ -485,7 +495,7 @@ impl DirectiveRequest {
     pub fn sound_routine(&self) -> usize {
         self.sound_routine
     }
-    
+
     pub fn height(&self) -> u16 {
         self.height
     }

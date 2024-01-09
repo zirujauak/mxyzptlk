@@ -12,7 +12,6 @@ use zm::config::Config;
 use zm::error::{ErrorCode, RuntimeError};
 use zm::files;
 use zm::instruction::decoder;
-use zm::instruction::processor::{processor_ext, processor_var};
 use zm::sound::Manager;
 use zm::types::Directive;
 use zm::zmachine::ZMachine;
@@ -96,6 +95,7 @@ fn run(
     sound: &mut Manager,
 ) -> Result<(), RuntimeError> {
     let mut n = 1;
+
     loop {
         log_mdc::insert("instruction_count", format!("{:8x}", n));
         if sound.routine() > 0 && !sound.is_playing() {
@@ -119,13 +119,7 @@ fn run(
                         }
                         Directive::GetCursor => {
                             let (row, column) = screen.cursor();
-                            let pc = processor_var::get_cursor_post(
-                                zmachine,
-                                &instruction,
-                                row as u16,
-                                column as u16,
-                            )?
-                            .next_instruction();
+                            let pc = zmachine.get_cursor(&instruction, row as u16, column as u16)?.next_instruction();
                             zmachine.set_pc(pc)?;
                         }
                         Directive::NewLine => {
@@ -185,22 +179,16 @@ fn run(
                                 request.length() as usize,
                                 request.terminators(),
                                 request.timeout(),
-                                sound,
+                                Some(sound),
                             )?;
                             // If no input was returned, or the last character in the buffer is not a terminator,
                             // then the read must have timed out.
                             if input.is_empty()
                                 || !request.terminators().contains(input.last().unwrap())
                             {
-                                let pc = processor_var::read_interrupted(
-                                    zmachine,
-                                    &instruction,
-                                    &input,
-                                )?
-                                .next_instruction();
-
+                                let pc = zmachine.read_interrupted(&instruction, &input)?.next_instruction();
                                 if sound.routine() > 0 && !sound.is_playing() {
-                                    debug!(target: "app::screen", "Dispatching sound routine");
+                                    debug!(target: "app::screen", "Sound playback finished, dispatching sound routine");
                                     zmachine.call_routine(
                                         sound.routine(),
                                         &Vec::new(),
@@ -212,8 +200,7 @@ fn run(
                                     zmachine.set_pc(pc)?;
                                 }
                             } else {
-                                let pc = processor_var::read_post(zmachine, &instruction, input)?
-                                    .next_instruction();
+                                let pc = zmachine.read_post(&instruction, input)?.next_instruction();
                                 zmachine.set_pc(pc)?;
                             }
                         }
@@ -224,28 +211,19 @@ fn run(
                                     zmachine,
                                     request.read_instruction(),
                                 )?;
-                                let pc = processor_var::read_abort(zmachine, &instruction)?
-                                    .next_instruction();
+                                let pc = zmachine.read_abort(&instruction)?.next_instruction();
                                 zmachine.set_pc(pc)?;
                             } else if request.redraw_input() {
-                                let instruction =
-                                    decoder::decode_instruction(zmachine, r.next_instruction())?;
-                                let pc = processor_var::read_pre(zmachine, &instruction)?
-                                    .next_instruction();
-                                zmachine.set_pc(pc)?;
+                                zmachine.set_pc(r.next_instruction())?
                             }
                         }
                         Directive::ReadChar => {
                             let key = screen.read_key(request.timeout())?;
                             if key.interrupt().is_some() {
-                                let pc =
-                                    processor_var::read_char_interrupted(zmachine, &instruction)?
-                                        .next_instruction();
+                                let pc = zmachine.read_char_interrupted(&instruction)?.next_instruction();
                                 zmachine.set_pc(pc)?;
                             } else {
-                                let pc =
-                                    processor_var::read_char_post(zmachine, &instruction, key)?
-                                        .next_instruction();
+                                let pc = zmachine.read_char_post(&instruction, key)?.next_instruction();
                                 zmachine.set_pc(pc)?;
                             }
                         }
@@ -255,12 +233,18 @@ fn run(
                             let instruction =
                                 decoder::decode_instruction(zmachine, r.next_instruction())?;
                             if request.read_int_result() == 1 {
-                                let pc = processor_var::read_char_abort(zmachine, &instruction)?
-                                    .next_instruction();
+                                let pc = zmachine.read_char_abort(&instruction)?.next_instruction();
                                 zmachine.set_pc(pc)?;
                             } else {
                                 zmachine.set_pc(r.next_instruction())?;
                             }
+                        }
+                        Directive::Restore => {
+                            // Prompt for filename and read data
+                            let data = screen.prompt_and_read("Restore from: ", zmachine.name(), "ifzs")?;
+                            // Restore data
+                            let pc = zmachine.restore_post(&instruction, data)?.next_instruction();
+                            zmachine.set_pc(pc)?
                         }
                         Directive::SetCursor => {
                             screen.move_cursor(request.row() as u32, request.column() as u32);
@@ -272,8 +256,8 @@ fn run(
                         }
                         Directive::SetFont => {
                             let old_font = screen.set_font(request.font() as u8);
-                            processor_ext::set_font_post(zmachine, &instruction, old_font)?;
-                            zmachine.set_pc(r.next_instruction())?
+                            let pc = zmachine.set_font_post(&instruction, old_font)?.next_instruction();
+                            zmachine.set_pc(pc)?
                         }
                         Directive::SetTextStyle => {
                             screen.set_style(request.style() as u8)?;
@@ -288,6 +272,7 @@ fn run(
                             zmachine.set_pc(r.next_instruction())?
                         }
                         Directive::SoundEffect => {
+                            debug!(target: "app::screen", "SoundEffect: {:?}", request);
                             match request.number() {
                                 1 | 2 => screen.beep(),
                                 _ => match request.effect() {

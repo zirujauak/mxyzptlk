@@ -32,34 +32,34 @@ pub fn restore(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    if !operands.is_empty() {
-        info!(target: "app::instruction", "RESTORE auxiliary data not implemented yet");
-        store_result(zmachine, instruction, 0)?;
-        Ok(InstructionResult::none(instruction.next_address()))
-    } else {
-        match zmachine.restore() {
-            Ok(address) => match address {
-                Some(a) => {
-                    let i = decoder::decode_instruction(zmachine, a - 3)?;
-                    store_result(zmachine, &i, 2)?;
-                    Ok(InstructionResult::none(i.next_address()))
-                }
-                None => {
-                    store_result(zmachine, instruction, 0)?;
-                    Ok(InstructionResult::none(instruction.next_address()))
-                }
-            },
-            Err(e) => {
-                // zmachine.print_str(format!("Error restoring: {}\r", e))?;
-                store_result(zmachine, instruction, 0)?;
-                Ok(InstructionResult::message(
-                    format!("Error restoring: {}\r", e).to_string(),
-                    instruction.next_address(),
-                ))
-            }
-        }
-    }
+    // if !operands.is_empty() {
+    //     info!(target: "app::instruction", "RESTORE auxiliary data not implemented yet");
+    //     store_result(zmachine, instruction, 0)?;
+    //     Ok(InstructionResult::none(instruction.next_address()))
+    // } else {
+    //     match zmachine.restore() {
+    //         Ok(address) => match address {
+    //             Some(a) => {
+    //                 let i = decoder::decode_instruction(zmachine, a - 3)?;
+    //                 store_result(zmachine, &i, 2)?;
+    //                 Ok(InstructionResult::none(i.next_address()))
+    //             }
+    //             None => {
+    //                 store_result(zmachine, instruction, 0)?;
+    //                 Ok(InstructionResult::none(instruction.next_address()))
+    //             }
+    //         },
+    //         Err(e) => {
+    // zmachine.print_str(format!("Error restoring: {}\r", e))?;
+    store_result(zmachine, instruction, 0)?;
+    Ok(InstructionResult::message(
+        "V5+ Restore TBD".to_string(),
+        instruction.next_address(),
+    ))
 }
+//         }
+//     }
+// }
 
 pub fn log_shift(
     zmachine: &mut ZMachine,

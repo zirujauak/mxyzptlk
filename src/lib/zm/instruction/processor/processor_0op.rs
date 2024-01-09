@@ -1,9 +1,10 @@
 use crate::error::{ErrorCode, RuntimeError};
 use crate::instruction::{decoder, Instruction};
+use crate::quetzal::{IFhd, Quetzal};
 use crate::types::{Directive, DirectiveRequest, InstructionResult};
 use crate::zmachine::header::HeaderField;
 use crate::zmachine::ZMachine;
-use crate::{fatal_error, text};
+use crate::{fatal_error, recoverable_error, text};
 
 use super::branch;
 use super::store_result;
@@ -106,37 +107,88 @@ pub fn save(
     }
 }
 
-pub fn restore(
-    zmachine: &mut ZMachine,
+pub fn restore_pre(
+    _zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    let address = zmachine.restore()?;
-    match address {
-        Some(a) => {
-            // TBD payload necessary for interpreter to manage restore state?
-            let i = decoder::decode_instruction(zmachine, a - 1)?;
-            if zmachine.version() == 3 {
-                // V3 is a branch
-                branch(zmachine, &i, true)
-            } else {
-                // V4 is a store
-                store_result(zmachine, instruction, 2)?;
-                Ok(InstructionResult::empty(
-                    Directive::Restore,
-                    i.next_address(),
-                ))
-            }
+    // Interpreter will handle prompting for and loading the restore data
+    Ok(InstructionResult::empty(
+        Directive::Restore,
+        instruction.address,
+    ))
+}
+
+pub fn restore_post(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+    save_data: Vec<u8>,
+) -> Result<InstructionResult, RuntimeError> {
+    let quetzal = Quetzal::try_from(save_data)?;
+    let ifhd = IFhd::try_from((&*zmachine, 0))?;
+    if &ifhd != quetzal.ifhd() {
+        error!(target: "app::state", "Restore state was created from a different story file");
+        return recoverable_error!(
+            ErrorCode::Restore,
+            "Save file was created from a different story file"
+        );
+    }
+
+    let r = zmachine.restore_state(quetzal)?;
+    if let Some(address) = r {
+        let i = decoder::decode_instruction(zmachine, address - 1)?;
+        if zmachine.version() == 3 {
+            // V3 is a branch
+            Ok(InstructionResult::empty(
+                Directive::RestoreComplete,
+                branch(zmachine, &i, true)?.next_instruction(),
+            ))
+        } else {
+            // V4 is a store
+            store_result(zmachine, instruction, 2)?;
+            Ok(InstructionResult::empty(
+                Directive::RestoreComplete,
+                i.next_address(),
+            ))
         }
-        None => {
-            if zmachine.version() == 3 {
-                branch(zmachine, instruction, false)
-            } else {
-                store_result(zmachine, instruction, 0)?;
-                Ok(InstructionResult::none(instruction.next_address()))
-            }
-        }
+    } else if zmachine.version() == 3 {
+        branch(zmachine, instruction, false)
+    } else {
+        store_result(zmachine, instruction, 0)?;
+        Ok(InstructionResult::none(instruction.next_address()))
     }
 }
+
+// pub fn restore(
+//     zmachine: &mut ZMachine,
+//     instruction: &Instruction,
+// ) -> Result<InstructionResult, RuntimeError> {
+//     let address = zmachine.restore()?;
+//     match address {
+//         Some(a) => {
+//             // TBD payload necessary for interpreter to manage restore state?
+//             let i = decoder::decode_instruction(zmachine, a - 1)?;
+//             if zmachine.version() == 3 {
+//                 // V3 is a branch
+//                 branch(zmachine, &i, true)
+//             } else {
+//                 // V4 is a store
+//                 store_result(zmachine, instruction, 2)?;
+//                 Ok(InstructionResult::empty(
+//                     Directive::Restore,
+//                     i.next_address(),
+//                 ))
+//             }
+//         }
+//         None => {
+//             if zmachine.version() == 3 {
+//                 branch(zmachine, instruction, false)
+//             } else {
+//                 store_result(zmachine, instruction, 0)?;
+//                 Ok(InstructionResult::none(instruction.next_address()))
+//             }
+//         }
+//     }
+// }
 
 pub fn restart(
     zmachine: &mut ZMachine,
@@ -175,18 +227,16 @@ pub fn catch(
 }
 
 pub fn quit(
-    zmachine: &mut ZMachine,
+    _zmachine: &mut ZMachine,
     _instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    // zmachine.quit()?;
     Ok(InstructionResult::empty(Directive::Quit, 0))
 }
 
 pub fn new_line(
-    zmachine: &mut ZMachine,
+    _zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    // zmachine.new_line()?;
     Ok(InstructionResult::empty(
         Directive::NewLine,
         instruction.next_address(),

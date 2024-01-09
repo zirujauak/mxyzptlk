@@ -43,7 +43,7 @@ impl Player for RodioPlayer {
                                             sink.set_volume(self.normalize_volume(volume));
                                             // V5
                                             if repeats == 0 {
-                                                sink.append(source.repeat_infinite())
+                                                sink.append(source.repeat_infinite());
                                             } else {
                                                 for _ in 0..repeats {
                                                     let source = match write.reopen() {

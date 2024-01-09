@@ -4,7 +4,7 @@ use crate::{error::*, fatal_error};
 
 use super::*;
 
-mod processor_0op;
+pub mod processor_0op;
 mod processor_1op;
 mod processor_2op;
 pub mod processor_ext;
@@ -120,7 +120,7 @@ pub fn dispatch(
                 (_, 0x3) => processor_0op::print_ret(zmachine, instruction),
                 (_, 0x4) => processor_0op::nop(zmachine, instruction),
                 (3, 0x5) | (4, 0x5) => processor_0op::save(zmachine, instruction),
-                (3, 0x6) | (4, 0x6) => processor_0op::restore(zmachine, instruction),
+                (3, 0x6) | (4, 0x6) => processor_0op::restore_pre(zmachine, instruction),
                 (_, 0x7) => processor_0op::restart(zmachine, instruction),
                 (_, 0x8) => processor_0op::ret_popped(zmachine, instruction),
                 (3, 0x9) | (4, 0x9) => processor_0op::pop(zmachine, instruction),

@@ -7,11 +7,11 @@ use crate::{
     config::Config,
     error::{ErrorCode, RuntimeError},
     fatal_error,
-    instruction::{processor, Instruction},
+    instruction::{processor::{self, processor_var, processor_ext, processor_0op}, Instruction},
     object::property,
     quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
     recoverable_error, text,
-    types::{Directive, DirectiveRequest, InstructionResult, StoreResult},
+    types::{Directive, DirectiveRequest, InstructionResult, StoreResult, InputEvent},
 };
 
 use self::{
@@ -206,6 +206,10 @@ impl ZMachine {
         self.version
     }
 
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     pub fn initialize(
         &mut self,
         rows: u8,
@@ -325,62 +329,62 @@ impl ZMachine {
         // Ok(Vec::from(quetzal))
     }
 
-    fn restore_state(&mut self, quetzal: Quetzal) -> Result<Option<usize>, RuntimeError> {
-        // Capture flags 2, default colors, rows, and columns from header
-        let flags2 = header::field_word(&self.memory, HeaderField::Flags2)?;
-        let fg = header::field_byte(&self.memory, HeaderField::DefaultForeground)?;
-        let bg = header::field_byte(&self.memory, HeaderField::DefaultBackground)?;
-        let rows = header::field_byte(&self.memory, HeaderField::ScreenLines)?;
-        let columns = header::field_byte(&self.memory, HeaderField::ScreenColumns)?;
+    // fn restore_state(&mut self, quetzal: Quetzal) -> Result<Option<usize>, RuntimeError> {
+    //     // Capture flags 2, default colors, rows, and columns from header
+    //     let flags2 = header::field_word(&self.memory, HeaderField::Flags2)?;
+    //     let fg = header::field_byte(&self.memory, HeaderField::DefaultForeground)?;
+    //     let bg = header::field_byte(&self.memory, HeaderField::DefaultBackground)?;
+    //     let rows = header::field_byte(&self.memory, HeaderField::ScreenLines)?;
+    //     let columns = header::field_byte(&self.memory, HeaderField::ScreenColumns)?;
 
-        // Overwrite dynamic memory
-        if quetzal.mem().compressed() {
-            self.memory.restore_compressed(quetzal.mem().memory())?
-        } else {
-            self.memory.restore(quetzal.mem().memory())?
-        }
+    //     // Overwrite dynamic memory
+    //     if quetzal.mem().compressed() {
+    //         self.memory.restore_compressed(quetzal.mem().memory())?
+    //     } else {
+    //         self.memory.restore(quetzal.mem().memory())?
+    //     }
 
-        // Reset the frame stack
-        self.frames = Vec::from(quetzal.stks());
+    //     // Reset the frame stack
+    //     self.frames = Vec::from(quetzal.stks());
 
-        // Re-initialize the state, which will set the default colors, rows, and columns
-        // Ignore sound (for now), since it's in Flags2
-        self.initialize(rows, columns, (fg, bg), false)?;
+    //     // Re-initialize the state, which will set the default colors, rows, and columns
+    //     // Ignore sound (for now), since it's in Flags2
+    //     self.initialize(rows, columns, (fg, bg), false)?;
 
-        // Restore flags 2
-        self.write_word(HeaderField::Flags2 as usize, flags2)?;
+    //     // Restore flags 2
+    //     self.write_word(HeaderField::Flags2 as usize, flags2)?;
 
-        Ok(Some(quetzal.ifhd().pc() as usize))
-    }
+    //     Ok(Some(quetzal.ifhd().pc() as usize))
+    // }
 
-    pub fn restore(&mut self) -> Result<Option<usize>, RuntimeError> {
-        Err(RuntimeError::fatal(
-            ErrorCode::UnimplementedInstruction,
-            "Restore TBD".to_string(),
-        ))
-        // match self.prompt_and_read("Restore from: ", "ifzs") {
-        //     Ok(save_data) => {
-        //         let quetzal = Quetzal::try_from(save_data)?;
-        //         debug!(target: "app::state", "Restoring game state");
-        //         // trace!(target: "app::quetzal", "{}", quetzal);
-        //         // &*self is an immutable ref, necessary for try_from
-        //         let ifhd = IFhd::try_from((&*self, 0))?;
-        //         if &ifhd != quetzal.ifhd() {
-        //             error!(target: "app::state", "Restore state was created from a different story file");
-        //             recoverable_error!(
-        //                 ErrorCode::Restore,
-        //                 "Save file was created from a different story file"
-        //             )
-        //         } else {
-        //             self.restore_state(quetzal)
-        //         }
-        //             },
-        //     Err(e) => {
-        //         error!(target: "app::state", "Error restoring state: {}", e);
-        //         Err(e)
-        //     }
-        // }
-    }
+    // pub fn restore(&mut self) -> Result<Option<usize>, RuntimeError> {
+    //     Err(RuntimeError::fatal(
+    //         ErrorCode::UnimplementedInstruction,
+    //         "Restore TBD".to_string(),
+    //     ))
+    //     // match self.prompt_and_read("Restore from: ", "ifzs") {
+    //     //     Ok(save_data) => {
+    //     //         let quetzal = Quetzal::try_from(save_data)?;
+    //     //         debug!(target: "app::state", "Restoring game state");
+    //     //         // trace!(target: "app::quetzal", "{}", quetzal);
+    //     //         // &*self is an immutable ref, necessary for try_from
+    //     //         let ifhd = IFhd::try_from((&*self, 0))?;
+    //     //         if &ifhd != quetzal.ifhd() {
+    //     //             error!(target: "app::state", "Restore state was created from a different story file");
+    //     //             recoverable_error!(
+    //     //                 ErrorCode::Restore,
+    //     //                 "Save file was created from a different story file"
+    //     //             )
+    //     //         } else {
+    //     //             self.restore_state(quetzal)
+    //     //         }
+    //     //             },
+    //     //     Err(e) => {
+    //     //         error!(target: "app::state", "Error restoring state: {}", e);
+    //     //         Err(e)
+    //     //     }
+    //     // }
+    // }
 
     pub fn save_undo(&mut self, pc: usize) -> Result<(), RuntimeError> {
         let quetzal = Quetzal::try_from((&*self, pc))?;
@@ -920,14 +924,83 @@ impl ZMachine {
         }
     }
 
+    // Save/Restore
+    pub fn restore_state(&mut self, quetzal: Quetzal) -> Result<Option<usize>, RuntimeError> {
+        // Capture flags 2, default colors, rows, and columns from header
+        let flags2 = header::field_word(&self.memory, HeaderField::Flags2)?;
+        let fg = header::field_byte(&self.memory, HeaderField::DefaultForeground)?;
+        let bg = header::field_byte(&self.memory, HeaderField::DefaultBackground)?;
+        let rows = header::field_byte(&self.memory, HeaderField::ScreenLines)?;
+        let columns = header::field_byte(&self.memory, HeaderField::ScreenColumns)?;
+
+        // Overwrite dynamic memory
+        if quetzal.mem().compressed() {
+            self.memory.restore_compressed(quetzal.mem().memory())?
+        } else {
+            self.memory.restore(quetzal.mem().memory())?
+        }
+
+        // Reset the frame stack
+        self.frames = Vec::from(quetzal.stks());
+
+        // Re-initialize the state, which will set the default colors, rows, and columns
+        // Ignore sound (for now), since it's in Flags2
+        self.initialize(rows, columns, (fg, bg), false)?;
+
+        // Restore flags 2
+        self.write_word(HeaderField::Flags2 as usize, flags2)?;
+
+        Ok(Some(quetzal.ifhd().pc() as usize))
+    }
+
+    pub fn restore_post(&mut self, instruction: &Instruction, data: Vec<u8>) -> Result<InstructionResult, RuntimeError> {
+        processor_0op::restore_post(self, instruction, data)
+    }
+
     // Runtime
     pub fn execute(
         &mut self,
         instruction: &Instruction,
     ) -> Result<InstructionResult, RuntimeError> {
-        processor::dispatch(self, &instruction)
+        processor::dispatch(self, instruction)
     }
 
+    // Store cursor position 
+    pub fn get_cursor(&mut self, instruction: &Instruction, row: u16, column: u16) -> Result<InstructionResult, RuntimeError> {
+        processor_var::get_cursor_post(self, instruction, row, column)
+    }
+
+    // Process input
+    pub fn read_post(&mut self, instruction: &Instruction, input: Vec<u16>) -> Result<InstructionResult, RuntimeError> {
+        processor_var::read_post(self, instruction, input)
+    }
+
+    // Read timed out
+    pub fn read_interrupted(&mut self, instruction: &Instruction, input: &[u16]) -> Result<InstructionResult, RuntimeError> {
+        processor_var::read_interrupted(self, instruction, input)
+    }
+
+    // Read aborted after interrupt
+    pub fn read_abort(&mut self, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+        processor_var::read_abort(self, instruction)
+    }
+
+    pub fn read_char_post(&mut self, instruction: &Instruction, key: InputEvent) -> Result<InstructionResult, RuntimeError> {
+        processor_var::read_char_post(self, instruction, key)
+    }
+    
+    pub fn read_char_interrupted(&mut self, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+        processor_var::read_char_interrupted(self, instruction)
+    }
+
+    pub fn read_char_abort(&mut self, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+        processor_var::read_char_abort(self, instruction)
+    }
+
+    pub fn set_font_post(&mut self, instruction: &Instruction, old_font: u8) -> Result<InstructionResult, RuntimeError> {
+        processor_ext::set_font_post(self, instruction, old_font)
+    }
+    
     pub fn pc(&self) -> Result<usize, RuntimeError> {
         Ok(self.current_frame()?.pc())
     }

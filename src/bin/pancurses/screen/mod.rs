@@ -1,16 +1,17 @@
 use core::fmt;
 use std::{
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH}, path::Path, fs::File, io::Read,
 };
 
 use log::{debug, error, info, trace, warn};
 use pancurses::{Input, Window};
+use regex::Regex;
 use zm::{
     config::Config,
     error::{ErrorCode, RuntimeError},
     recoverable_error,
-    types::{InputEvent, Interrupt}, sound::Manager,
+    types::{InputEvent, Interrupt}, sound::Manager, files,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -432,6 +433,11 @@ impl Screen {
         }
     }
 
+    pub fn print_str(&mut self, str: &str) {
+        let v:Vec<u16> = str.chars().map(|x| (x as u8) as u16).collect();
+        self.print(&v);
+    }
+
     pub fn print(&mut self, text: &Vec<u16>) {
         if self.selected_window == 0 && self.buffer_mode == 1 {
             let words = text.split_inclusive(|c| *c == 0x20);
@@ -569,7 +575,7 @@ impl Screen {
         len: usize,
         terminators: &[u16],
         timeout: u16,
-        sound: &mut Manager,
+        mut sound: Option<&mut Manager>,
     ) -> Result<Vec<u16>, RuntimeError> {
         let mut input_buffer = text.to_vec();
 
@@ -580,7 +586,6 @@ impl Screen {
         };
 
         debug!(target: "app::screen", "Read until {}", end);
-        debug!(target: "app::screen", "Sound routine: ${:05x}", sound.routine());
 
         loop {
             let now = self.now(None);
@@ -589,16 +594,21 @@ impl Screen {
                 return Ok(input_buffer);
             }
 
-            if sound.routine() > 0 && !sound.is_playing() {
-                debug!(target: "app::screen", "Read interrupted: sound finished");
+            let (routine, playing) = if let Some(ref mut s) = sound.as_deref_mut() {
+                (s.routine() > 0, s.is_playing())
+            } else {
+                (false, false)
+            };
+
+            if routine && !playing {
+                debug!(target: "app::screen", "Read interrupted: sound finished playing");
                 return Ok(input_buffer);
             }
 
             let timeout = if end > 0 { end - now } else { 0 };
-
             trace!(target: "app::screen", "Now: {}, End: {}, Timeout: {}", now, end, timeout);
 
-            let e = self.key(end == 0 && sound.routine() == 0);
+            let e = self.key(end == 0 && !routine);
             match e.zchar() {
                 Some(key) => {
                     if terminators.contains(&key)
@@ -726,6 +736,90 @@ impl Screen {
     pub fn error(&mut self, instruction: &str, message: &str, recoverable: bool) -> bool {
         self.terminal.error(instruction, message, recoverable)
     }
+
+    pub fn prompt_filename(
+        &mut self,
+        prompt: &str,
+        name: &str,
+        suffix: &str,
+        overwrite: bool,
+        first: bool,
+    ) -> Result<String, RuntimeError> {
+        self.print_str(prompt);
+        let n = if first {
+            files::first_available(name, suffix)?
+        } else {
+            files::last_existing(name, suffix)?
+        };
+
+        self.print(&n);
+
+        let f = self.read_line(&n, 32, &['\r' as u16], 0, None)?;
+        let filename = match String::from_utf16(&f) {
+            Ok(s) => s.trim().to_string(),
+            Err(e) => {
+                return recoverable_error!(
+                    ErrorCode::InvalidInput,
+                    "Error parsing user input: {}",
+                    e
+                )
+            }
+        };
+
+        if !overwrite {
+            match Path::new(&filename).try_exists() {
+                Ok(b) => match b {
+                    true => {
+                        return recoverable_error!(
+                            ErrorCode::FileExists,
+                            "'{}' already exists.",
+                            filename
+                        )
+                    }
+                    false => {}
+                },
+                Err(e) => {
+                    return recoverable_error!(
+                        ErrorCode::Interpreter,
+                        "Error checking if '{}' exists: {}",
+                        filename,
+                        e
+                    )
+                }
+            }
+        }
+
+        match Regex::new(r"^((.*\.z\d)|(.*\.blb)|(.*\.blorb))$") {
+            Ok(r) => {
+                if r.is_match(&filename) {
+                    recoverable_error!(
+                        ErrorCode::InvalidFilename,
+                        "Filenames ending in '.z#', '.blb', or '.blorb' are not allowed"
+                    )
+                } else {
+                    Ok(filename)
+                }
+            }
+            Err(e) => recoverable_error!(
+                ErrorCode::Interpreter,
+                "Interal error with regex checking filename: {}",
+                e
+            ),
+        }
+    }
+
+    pub fn prompt_and_read(&mut self, prompt: &str, name: &str, suffix: &str) -> Result<Vec<u8>, RuntimeError> {
+        let filename = self.prompt_filename(prompt, name, suffix, true, false)?;
+        let mut data = Vec::new();
+        match File::open(filename.trim()) {
+            Ok(mut file) => match file.read_to_end(&mut data) {
+                Ok(_) => Ok(data),
+                Err(e) => recoverable_error!(ErrorCode::FileError, "{}", e),
+            },
+            Err(e) => recoverable_error!(ErrorCode::FileError, "{}: {}", filename, e),
+        }
+    }
+
 }
 
 pub trait Terminal {
