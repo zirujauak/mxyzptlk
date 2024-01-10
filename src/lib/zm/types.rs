@@ -96,7 +96,7 @@ pub enum InstructionModifier {
     None,
     Post,
     Interrupted,
-    Aborted
+    Aborted,
 }
 
 #[derive(Debug, Default)]
@@ -218,6 +218,9 @@ pub struct DirectiveRequest {
     read_int_routine: usize,
     read_int_result: u16,
 
+    // SAVE
+    save_data: Vec<u8>,
+
     // SET_COLOUR
     foreground: u16,
     background: u16,
@@ -326,6 +329,13 @@ impl DirectiveRequest {
         }
     }
 
+    pub fn save(save_data: Vec<u8>) -> DirectiveRequest {
+        DirectiveRequest {
+            save_data,
+            ..Default::default()
+        }
+    }
+
     pub fn set_colour(foreground: u16, background: u16) -> DirectiveRequest {
         DirectiveRequest {
             foreground,
@@ -371,7 +381,13 @@ impl DirectiveRequest {
         }
     }
 
-    pub fn sound_effect(number: u16, effect: u16, volume: u8, repeats: u8, routine: usize) -> DirectiveRequest {
+    pub fn sound_effect(
+        number: u16,
+        effect: u16,
+        volume: u8,
+        repeats: u8,
+        routine: usize,
+    ) -> DirectiveRequest {
         DirectiveRequest {
             number,
             effect,
@@ -389,9 +405,14 @@ impl DirectiveRequest {
         }
     }
 
+    pub fn message_str(&self) -> &str {
+        &self.message
+    }
+
     pub fn mode(&self) -> u16 {
         self.mode
     }
+
     pub fn text(&self) -> &Vec<u16> {
         &self.text
     }
@@ -487,7 +508,7 @@ impl DirectiveRequest {
     pub fn volume(&self) -> u8 {
         self.volume
     }
-    
+
     pub fn repeats(&self) -> u8 {
         self.repeats
     }
@@ -508,7 +529,11 @@ impl DirectiveRequest {
         self.skip
     }
 
-    pub fn table(&self) -> &Vec<u16>{
+    pub fn table(&self) -> &Vec<u16> {
         &self.table
+    }
+
+    pub fn save_data(&self) -> &Vec<u8> {
+        &self.save_data
     }
 }

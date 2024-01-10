@@ -96,8 +96,8 @@ pub fn dispatch(
     match instruction.opcode().form() {
         OpcodeForm::Ext => match (zmachine.version(), instruction.opcode().instruction()) {
             // V6 opcodes have been omitted
-            (5, 0x00) | (7, 0x00) | (8, 0x00) => processor_ext::save(zmachine, instruction),
-            (5, 0x01) | (7, 0x01) | (8, 0x01) => processor_ext::restore(zmachine, instruction),
+            (5, 0x00) | (7, 0x00) | (8, 0x00) => processor_ext::save_pre(zmachine, instruction),
+            (5, 0x01) | (7, 0x01) | (8, 0x01) => processor_ext::restore_pre(zmachine, instruction),
             (5, 0x02) | (7, 0x02) | (8, 0x02) => processor_ext::log_shift(zmachine, instruction),
             (5, 0x03) | (7, 0x03) | (8, 0x03) => processor_ext::art_shift(zmachine, instruction),
             (5, 0x04) | (7, 0x04) | (8, 0x04) => processor_ext::set_font_pre(zmachine, instruction),
@@ -119,7 +119,7 @@ pub fn dispatch(
                 (_, 0x2) => processor_0op::print(zmachine, instruction),
                 (_, 0x3) => processor_0op::print_ret(zmachine, instruction),
                 (_, 0x4) => processor_0op::nop(zmachine, instruction),
-                (3, 0x5) | (4, 0x5) => processor_0op::save(zmachine, instruction),
+                (3, 0x5) | (4, 0x5) => processor_0op::save_pre(zmachine, instruction),
                 (3, 0x6) | (4, 0x6) => processor_0op::restore_pre(zmachine, instruction),
                 (_, 0x7) => processor_0op::restart(zmachine, instruction),
                 (_, 0x8) => processor_0op::ret_popped(zmachine, instruction),

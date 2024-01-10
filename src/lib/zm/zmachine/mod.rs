@@ -7,11 +7,14 @@ use crate::{
     config::Config,
     error::{ErrorCode, RuntimeError},
     fatal_error,
-    instruction::{processor::{self, processor_var, processor_ext, processor_0op}, Instruction},
+    instruction::{
+        processor::{self, processor_0op, processor_ext, processor_var},
+        Instruction,
+    },
     object::property,
     quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
     recoverable_error, text,
-    types::{Directive, DirectiveRequest, InstructionResult, StoreResult, InputEvent},
+    types::{Directive, DirectiveRequest, InputEvent, InstructionResult, StoreResult},
 };
 
 use self::{
@@ -924,6 +927,27 @@ impl ZMachine {
         }
     }
 
+    pub fn output(&mut self, text: &[u16]) -> Result<(), RuntimeError> {
+        if self.is_stream_enabled(3) {
+            if let Some(s) = self.stream_3.last_mut() {
+                for c in text {
+                    match *c {
+                        0 => {}
+                        0xa => s.push(0xd),
+                        _ => s.push(*c),
+                    }
+                }
+            } else {
+                return fatal_error!(
+                    ErrorCode::Stream3Table,
+                    "Stream 3 enabled, but no table to write to"
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     // Save/Restore
     pub fn restore_state(&mut self, quetzal: Quetzal) -> Result<Option<usize>, RuntimeError> {
         // Capture flags 2, default colors, rows, and columns from header
@@ -953,8 +977,33 @@ impl ZMachine {
         Ok(Some(quetzal.ifhd().pc() as usize))
     }
 
-    pub fn restore_post(&mut self, instruction: &Instruction, data: Vec<u8>) -> Result<InstructionResult, RuntimeError> {
-        processor_0op::restore_post(self, instruction, data)
+    pub fn restore_post(
+        &mut self,
+        instruction: &Instruction,
+        data: Vec<u8>,
+    ) -> Result<InstructionResult, RuntimeError> {
+        if self.version < 5 {
+            processor_0op::restore_post(self, instruction, data)
+        } else {
+            processor_ext::restore_post(self, instruction, data)
+        }
+    }
+
+    pub fn save_state(&self, pc: usize) -> Result<Vec<u8>, RuntimeError> {
+        let quetzal = Quetzal::try_from((self, pc))?;
+        Ok(Vec::from(quetzal))
+    }
+
+    pub fn save_post(
+        &mut self,
+        instruction: &Instruction,
+        success: bool,
+    ) -> Result<InstructionResult, RuntimeError> {
+        if self.version < 5 {
+            processor_0op::save_post(self, instruction, success)
+        } else {
+            processor_ext::save_post(self, instruction, success)
+        }
     }
 
     // Runtime
@@ -965,42 +1014,72 @@ impl ZMachine {
         processor::dispatch(self, instruction)
     }
 
-    // Store cursor position 
-    pub fn get_cursor(&mut self, instruction: &Instruction, row: u16, column: u16) -> Result<InstructionResult, RuntimeError> {
+    // Store cursor position
+    pub fn get_cursor_post(
+        &mut self,
+        instruction: &Instruction,
+        row: u16,
+        column: u16,
+    ) -> Result<InstructionResult, RuntimeError> {
         processor_var::get_cursor_post(self, instruction, row, column)
     }
 
     // Process input
-    pub fn read_post(&mut self, instruction: &Instruction, input: Vec<u16>) -> Result<InstructionResult, RuntimeError> {
+    pub fn read_post(
+        &mut self,
+        instruction: &Instruction,
+        input: Vec<u16>,
+    ) -> Result<InstructionResult, RuntimeError> {
         processor_var::read_post(self, instruction, input)
     }
 
     // Read timed out
-    pub fn read_interrupted(&mut self, instruction: &Instruction, input: &[u16]) -> Result<InstructionResult, RuntimeError> {
+    pub fn read_interrupted(
+        &mut self,
+        instruction: &Instruction,
+        input: &[u16],
+    ) -> Result<InstructionResult, RuntimeError> {
         processor_var::read_interrupted(self, instruction, input)
     }
 
     // Read aborted after interrupt
-    pub fn read_abort(&mut self, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+    pub fn read_abort(
+        &mut self,
+        instruction: &Instruction,
+    ) -> Result<InstructionResult, RuntimeError> {
         processor_var::read_abort(self, instruction)
     }
 
-    pub fn read_char_post(&mut self, instruction: &Instruction, key: InputEvent) -> Result<InstructionResult, RuntimeError> {
+    pub fn read_char_post(
+        &mut self,
+        instruction: &Instruction,
+        key: InputEvent,
+    ) -> Result<InstructionResult, RuntimeError> {
         processor_var::read_char_post(self, instruction, key)
     }
-    
-    pub fn read_char_interrupted(&mut self, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+
+    pub fn read_char_interrupted(
+        &mut self,
+        instruction: &Instruction,
+    ) -> Result<InstructionResult, RuntimeError> {
         processor_var::read_char_interrupted(self, instruction)
     }
 
-    pub fn read_char_abort(&mut self, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
+    pub fn read_char_abort(
+        &mut self,
+        instruction: &Instruction,
+    ) -> Result<InstructionResult, RuntimeError> {
         processor_var::read_char_abort(self, instruction)
     }
 
-    pub fn set_font_post(&mut self, instruction: &Instruction, old_font: u8) -> Result<InstructionResult, RuntimeError> {
+    pub fn set_font_post(
+        &mut self,
+        instruction: &Instruction,
+        old_font: u8,
+    ) -> Result<InstructionResult, RuntimeError> {
         processor_ext::set_font_post(self, instruction, old_font)
     }
-    
+
     pub fn pc(&self) -> Result<usize, RuntimeError> {
         Ok(self.current_frame()?.pc())
     }

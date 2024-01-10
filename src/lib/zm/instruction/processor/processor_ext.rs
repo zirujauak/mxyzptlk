@@ -1,62 +1,145 @@
 use crate::{
+    quetzal::{IFhd, Quetzal},
     recoverable_error,
     types::{Directive, DirectiveRequest},
 };
 
 use super::*;
 
-pub fn save(
+pub fn save_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if !operands.is_empty() {
-        info!(target: "app::instruction", "SAVE auxiliary data not implemented yet");
+        info!(target: "app::instruction", "SAVE region not implemented yet");
         store_result(zmachine, instruction, 0)?;
+        Ok(InstructionResult::none(instruction.next_address))
+    } else if let Some(r) = instruction.store() {
+        let save_data = zmachine.save_state(r.address())?;
+        Ok(InstructionResult::new(
+            Directive::Save,
+            DirectiveRequest::save(save_data),
+            instruction.address,
+        ))
     } else {
-        // unwrap() should be safe here because this is a store instruction
-        match zmachine.save(instruction.store().unwrap().address()) {
-            Ok(_) => {
-                store_result(zmachine, instruction, 1)?;
-            }
-            Err(_) => {
-                store_result(zmachine, instruction, 0)?;
-            }
-        }
+        return fatal_error!(
+            ErrorCode::InvalidInstruction,
+            "V5 SAVE should be a store instruction"
+        );
     }
+}
+
+pub fn save_post(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+    success: bool,
+) -> Result<InstructionResult, RuntimeError> {
+    let sv = if success { 1 } else { 0 };
+    store_result(zmachine, instruction, sv)?;
     Ok(InstructionResult::none(instruction.next_address()))
 }
 
-pub fn restore(
+// pub fn save(
+//     zmachine: &mut ZMachine,
+//     instruction: &Instruction,
+// ) -> Result<InstructionResult, RuntimeError> {
+//     let operands = operand_values(zmachine, instruction)?;
+//     if !operands.is_empty() {
+//         info!(target: "app::instruction", "SAVE auxiliary data not implemented yet");
+//         store_result(zmachine, instruction, 0)?;
+//     } else {
+//         // unwrap() should be safe here because this is a store instruction
+//         match zmachine.save(instruction.store().unwrap().address()) {
+//             Ok(_) => {
+//                 store_result(zmachine, instruction, 1)?;
+//             }
+//             Err(_) => {
+//                 store_result(zmachine, instruction, 0)?;
+//             }
+//         }
+//     }
+//     Ok(InstructionResult::none(instruction.next_address()))
+// }
+
+pub fn restore_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    let operands = operand_values(zmachine, instruction)?;
-    // if !operands.is_empty() {
-    //     info!(target: "app::instruction", "RESTORE auxiliary data not implemented yet");
-    //     store_result(zmachine, instruction, 0)?;
-    //     Ok(InstructionResult::none(instruction.next_address()))
-    // } else {
-    //     match zmachine.restore() {
-    //         Ok(address) => match address {
-    //             Some(a) => {
-    //                 let i = decoder::decode_instruction(zmachine, a - 3)?;
-    //                 store_result(zmachine, &i, 2)?;
-    //                 Ok(InstructionResult::none(i.next_address()))
-    //             }
-    //             None => {
-    //                 store_result(zmachine, instruction, 0)?;
-    //                 Ok(InstructionResult::none(instruction.next_address()))
-    //             }
-    //         },
-    //         Err(e) => {
-    // zmachine.print_str(format!("Error restoring: {}\r", e))?;
-    store_result(zmachine, instruction, 0)?;
-    Ok(InstructionResult::message(
-        "V5+ Restore TBD".to_string(),
-        instruction.next_address(),
+    Ok(InstructionResult::empty(
+        Directive::Restore,
+        instruction.address,
     ))
 }
+
+pub fn restore_post(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+    save_data: Vec<u8>,
+) -> Result<InstructionResult, RuntimeError> {
+    let quetzal = Quetzal::try_from(save_data)?;
+    let ifhd = IFhd::try_from((&*zmachine, 0))?;
+    if &ifhd != quetzal.ifhd() {
+        error!(target: "app::state", "Restore state was created from a different story file");
+        store_result(zmachine, instruction, 0)?;
+        return Ok(InstructionResult::message(
+            "Restore failed: file belongs to a different zcode program".to_string(),
+            instruction.next_address,
+        ));
+    }
+
+    match zmachine.restore_state(quetzal) {
+        Ok(address) => match address {
+            Some(a) => {
+                let i = decoder::decode_instruction(zmachine, a - 3)?;
+                store_result(zmachine, &i, 2)?;
+                Ok(InstructionResult::none(i.next_address()))
+            }
+            None => Ok(InstructionResult::message(
+                "Restore failed: RESTORE instruction missing store location".to_string(),
+                instruction.next_address,
+            )),
+        },
+        Err(e) => {
+            store_result(zmachine, instruction, 0)?;
+            Ok(InstructionResult::message(
+                format!("Save failed: {}", e),
+                instruction.next_address,
+            ))
+        }
+    }
+}
+
+// pub fn restore(
+//     zmachine: &mut ZMachine,
+//     instruction: &Instruction,
+// ) -> Result<InstructionResult, RuntimeError> {
+//     let operands = operand_values(zmachine, instruction)?;
+//     if !operands.is_empty() {
+//         info!(target: "app::instruction", "RESTORE auxiliary data not implemented yet");
+//         store_result(zmachine, instruction, 0)?;
+//         Ok(InstructionResult::none(instruction.next_address()))
+//     } else {
+//         match zmachine.restore() {
+//             Ok(address) => match address {
+//                 Some(a) => {
+//                     let i = decoder::decode_instruction(zmachine, a - 3)?;
+//                     store_result(zmachine, &i, 2)?;
+//                     Ok(InstructionResult::none(i.next_address()))
+//                 }
+//                 None => {
+//                     store_result(zmachine, instruction, 0)?;
+//                     Ok(InstructionResult::none(instruction.next_address()))
+//                 }
+//             },
+//             Err(e) => {
+//                 zmachine.print_str(format!("Error restoring: {}\r", e))?;
+//                 store_result(zmachine, instruction, 0)?;
+//                 Ok(InstructionResult::message(
+//                     "V5+ Restore TBD".to_string(),
+//                     instruction.next_address(),
+//                 ))
+//             }
 //         }
 //     }
 // }

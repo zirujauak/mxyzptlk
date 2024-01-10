@@ -30,6 +30,7 @@ pub fn print(
 ) -> Result<InstructionResult, RuntimeError> {
     let ztext = zmachine.string_literal(instruction.address() + 1)?;
     let text = text::from_vec(zmachine, &ztext, false)?;
+
     Ok(InstructionResult::new(
         Directive::Print,
         DirectiveRequest::print(&text),
@@ -75,7 +76,7 @@ fn save_result(
     }
 }
 
-pub fn save(
+pub fn save_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
@@ -101,9 +102,56 @@ pub fn save(
         }
     };
 
-    match zmachine.save(pc) {
-        Ok(_) => save_result(zmachine, instruction, true),
-        Err(_) => save_result(zmachine, instruction, false),
+    let save_data = zmachine.save_state(pc)?;
+    Ok(InstructionResult::new(
+        Directive::Save,
+        DirectiveRequest::save(save_data),
+        instruction.address,
+    ))
+}
+
+// pub fn save(
+//     zmachine: &mut ZMachine,
+//     instruction: &Instruction,
+// ) -> Result<InstructionResult, RuntimeError> {
+//     let pc = if zmachine.version() == 3 {
+//         match instruction.branch() {
+//             Some(b) => b.address(),
+//             None => {
+//                 return fatal_error!(
+//                     ErrorCode::InvalidInstruction,
+//                     "V3 SAVE should be a branch instruction"
+//                 )
+//             }
+//         }
+//     } else {
+//         match instruction.store() {
+//             Some(r) => r.address(),
+//             None => {
+//                 return fatal_error!(
+//                     ErrorCode::InvalidInstruction,
+//                     "V4 SAVE should be a store instruction"
+//                 )
+//             }
+//         }
+//     };
+
+//     match zmachine.save(pc) {
+//         Ok(_) => save_result(zmachine, instruction, true),
+//         Err(_) => save_result(zmachine, instruction, false),
+//     }
+// }
+
+pub fn save_post(
+    zmachine: &mut ZMachine,
+    instruction: &Instruction,
+    success: bool,
+) -> Result<InstructionResult, RuntimeError> {
+    if zmachine.version() == 3 {
+        branch(zmachine, instruction, success)
+    } else {
+        store_result(zmachine, instruction, if success { 1 } else { 0 })?;
+        Ok(InstructionResult::none(instruction.next_address()))
     }
 }
 
@@ -198,7 +246,6 @@ pub fn restart(
         Directive::Restart,
         zmachine.restart()?,
     ))
-    // zmachine.restart()
 }
 
 pub fn ret_popped(

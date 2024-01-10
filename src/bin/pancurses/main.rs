@@ -48,7 +48,7 @@ fn initialize_sound_engine(
                 return Manager::none();
             }
         }
-        return Manager::new(volume_factor, blorb);
+        Manager::new(volume_factor, blorb)
     } else {
         Manager::none()
     }
@@ -119,8 +119,14 @@ fn run(
                         }
                         Directive::GetCursor => {
                             let (row, column) = screen.cursor();
-                            let pc = zmachine.get_cursor(&instruction, row as u16, column as u16)?.next_instruction();
+                            let pc = zmachine
+                                .get_cursor_post(&instruction, row as u16, column as u16)?
+                                .next_instruction();
                             zmachine.set_pc(pc)?;
+                        }
+                        Directive::Message => {
+                            screen.print_str(request.message_str());
+                            zmachine.set_pc(r.next_instruction())?
                         }
                         Directive::NewLine => {
                             screen.new_line();
@@ -133,6 +139,7 @@ fn run(
                                 }
                                 screen.print(request.text());
                             }
+                            zmachine.output(request.text())?;
                             zmachine.set_pc(r.next_instruction())?
                         }
                         Directive::PrintRet => {
@@ -143,6 +150,7 @@ fn run(
                                 screen.print(request.text());
                                 screen.new_line();
                             }
+                            zmachine.output(request.text())?;
                             zmachine.set_pc(r.next_instruction())?
                         }
                         Directive::PrintTable => {
@@ -161,6 +169,7 @@ fn run(
                                 for j in 0..request.width() as usize {
                                     text.push(request.table()[offset + j])
                                 }
+                                debug!(target: "app::screen", "PRINT_TABLE: '{}'", text.iter().map(|x| (*x as u8) as char).collect::<String>());
                                 screen.print(&text);
                             }
                             zmachine.set_pc(r.next_instruction())?
@@ -186,7 +195,9 @@ fn run(
                             if input.is_empty()
                                 || !request.terminators().contains(input.last().unwrap())
                             {
-                                let pc = zmachine.read_interrupted(&instruction, &input)?.next_instruction();
+                                let pc = zmachine
+                                    .read_interrupted(&instruction, &input)?
+                                    .next_instruction();
                                 if sound.routine() > 0 && !sound.is_playing() {
                                     debug!(target: "app::screen", "Sound playback finished, dispatching sound routine");
                                     zmachine.call_routine(
@@ -200,7 +211,8 @@ fn run(
                                     zmachine.set_pc(pc)?;
                                 }
                             } else {
-                                let pc = zmachine.read_post(&instruction, input)?.next_instruction();
+                                let pc =
+                                    zmachine.read_post(&instruction, input)?.next_instruction();
                                 zmachine.set_pc(pc)?;
                             }
                         }
@@ -220,10 +232,14 @@ fn run(
                         Directive::ReadChar => {
                             let key = screen.read_key(request.timeout())?;
                             if key.interrupt().is_some() {
-                                let pc = zmachine.read_char_interrupted(&instruction)?.next_instruction();
+                                let pc = zmachine
+                                    .read_char_interrupted(&instruction)?
+                                    .next_instruction();
                                 zmachine.set_pc(pc)?;
                             } else {
-                                let pc = zmachine.read_char_post(&instruction, key)?.next_instruction();
+                                let pc = zmachine
+                                    .read_char_post(&instruction, key)?
+                                    .next_instruction();
                                 zmachine.set_pc(pc)?;
                             }
                         }
@@ -239,13 +255,34 @@ fn run(
                                 zmachine.set_pc(r.next_instruction())?;
                             }
                         }
+                        Directive::Restart => zmachine.set_pc(r.next_instruction())?,
                         Directive::Restore => {
                             // Prompt for filename and read data
-                            let data = screen.prompt_and_read("Restore from: ", zmachine.name(), "ifzs")?;
+                            let data = screen.prompt_and_read(
+                                "Restore from: ",
+                                zmachine.name(),
+                                "ifzs",
+                            )?;
                             // Restore data
-                            let pc = zmachine.restore_post(&instruction, data)?.next_instruction();
+                            let pc = zmachine
+                                .restore_post(&instruction, data)?
+                                .next_instruction();
                             zmachine.set_pc(pc)?
                         }
+                        Directive::Save => {
+                            let r = screen.prompt_and_write(
+                                "Save to: ",
+                                zmachine.name(),
+                                "ifzs",
+                                request.save_data(),
+                                false,
+                            );
+                            let pc = zmachine
+                                .save_post(&instruction, r.is_ok())?
+                                .next_instruction();
+                            zmachine.set_pc(pc)?
+                        }
+
                         Directive::SetCursor => {
                             screen.move_cursor(request.row() as u32, request.column() as u32);
                             zmachine.set_pc(r.next_instruction())?
@@ -256,7 +293,9 @@ fn run(
                         }
                         Directive::SetFont => {
                             let old_font = screen.set_font(request.font() as u8);
-                            let pc = zmachine.set_font_post(&instruction, old_font)?.next_instruction();
+                            let pc = zmachine
+                                .set_font_post(&instruction, old_font)?
+                                .next_instruction();
                             zmachine.set_pc(pc)?
                         }
                         Directive::SetTextStyle => {

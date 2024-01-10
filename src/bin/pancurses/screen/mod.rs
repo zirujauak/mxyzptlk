@@ -1,7 +1,10 @@
 use core::fmt;
 use std::{
+    fs::{self, File},
+    io::{Read, Write},
+    path::Path,
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH}, path::Path, fs::File, io::Read,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use log::{debug, error, info, trace, warn};
@@ -10,8 +13,9 @@ use regex::Regex;
 use zm::{
     config::Config,
     error::{ErrorCode, RuntimeError},
-    recoverable_error,
-    types::{InputEvent, Interrupt}, sound::Manager, files,
+    files, recoverable_error,
+    sound::Manager,
+    types::{InputEvent, Interrupt},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -239,11 +243,12 @@ impl Screen {
 
     pub fn select_window(&mut self, window: u8) -> Result<(), RuntimeError> {
         self.lines_since_input = 0;
-        self.terminal.set_window(window);
         if window == 0 {
+            self.terminal.set_window(window);
             self.selected_window = 0;
             Ok(())
         } else if self.cursor_1.is_some() {
+            self.terminal.set_window(window);
             self.selected_window = 1;
             self.cursor_1 = Some((self.top, 1));
             Ok(())
@@ -434,7 +439,7 @@ impl Screen {
     }
 
     pub fn print_str(&mut self, str: &str) {
-        let v:Vec<u16> = str.chars().map(|x| (x as u8) as u16).collect();
+        let v: Vec<u16> = str.chars().map(|x| (x as u8) as u16).collect();
         self.print(&v);
     }
 
@@ -643,11 +648,7 @@ impl Screen {
         Ok(input_buffer)
     }
 
-    pub fn status_line(
-        &mut self,
-        left: &Vec<u16>,
-        right: &Vec<u16>,
-    ) -> Result<(), RuntimeError> {
+    pub fn status_line(&mut self, left: &Vec<u16>, right: &Vec<u16>) -> Result<(), RuntimeError> {
         let width = self.columns() as usize;
         let available_for_left = width - right.len() - 1;
         let mut l = left.clone();
@@ -808,7 +809,56 @@ impl Screen {
         }
     }
 
-    pub fn prompt_and_read(&mut self, prompt: &str, name: &str, suffix: &str) -> Result<Vec<u8>, RuntimeError> {
+    pub fn prompt_and_create(
+        &mut self,
+        prompt: &str,
+        name: &str,
+        suffix: &str,
+        overwrite: bool,
+    ) -> Result<File, RuntimeError> {
+        match self.prompt_filename(prompt, name, suffix, overwrite, true) {
+            Ok(filename) => match fs::OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(filename.trim())
+            {
+                Ok(f) => Ok(f),
+                Err(e) => recoverable_error!(ErrorCode::FileError, "{}", e),
+            },
+            Err(e) => {
+                self.print_str(&format!("Error creating file: {}\r", e));
+                Err(e)
+            }
+        }
+    }
+
+    pub fn prompt_and_write(
+        &mut self,
+        prompt: &str,
+        name: &str,
+        suffix: &str,
+        data: &[u8],
+        overwrite: bool,
+    ) -> Result<(), RuntimeError> {
+        let mut file = self.prompt_and_create(prompt, name, suffix, overwrite)?;
+
+        match file.write_all(data) {
+            Ok(_) => (),
+            Err(e) => return recoverable_error!(ErrorCode::FileError, "{}", e),
+        };
+        match file.flush() {
+            Ok(_) => Ok(()),
+            Err(e) => recoverable_error!(ErrorCode::FileError, "{}", e),
+        }
+    }
+
+    pub fn prompt_and_read(
+        &mut self,
+        prompt: &str,
+        name: &str,
+        suffix: &str,
+    ) -> Result<Vec<u8>, RuntimeError> {
         let filename = self.prompt_filename(prompt, name, suffix, true, false)?;
         let mut data = Vec::new();
         match File::open(filename.trim()) {
@@ -819,7 +869,6 @@ impl Screen {
             Err(e) => recoverable_error!(ErrorCode::FileError, "{}: {}", filename, e),
         }
     }
-
 }
 
 pub trait Terminal {
