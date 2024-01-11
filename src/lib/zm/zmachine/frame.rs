@@ -1,11 +1,14 @@
+use crate::instruction::StoreResult;
 use crate::quetzal::{Stk, Stks};
-use crate::types::StoreResult;
 use crate::{error::*, fatal_error};
 
 #[derive(Debug)]
 pub struct Frame {
     address: usize,
+    /// The address of the most recently executed instruction
     pc: usize,
+    /// The address of the next instruction to execute
+    next_pc: usize,
     local_variables: Vec<u16>,
     argument_count: u8,
     stack: Vec<u16>,
@@ -59,6 +62,7 @@ impl Frame {
         Frame {
             address,
             pc,
+            next_pc: pc,
             local_variables: local_variables.to_vec(),
             argument_count,
             stack: stack.to_vec(),
@@ -81,6 +85,14 @@ impl Frame {
 
     pub fn set_pc(&mut self, pc: usize) {
         self.pc = pc;
+    }
+
+    pub fn next_pc(&self) -> usize {
+        self.next_pc
+    }
+
+    pub fn set_next_pc(&mut self, next_pc: usize) {
+        self.next_pc = next_pc;
     }
 
     pub fn local_variables(&self) -> &Vec<u16> {

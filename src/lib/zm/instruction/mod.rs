@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::types::StoreResult;
+use crate::{error::RuntimeError, zmachine::InterpreterRequest};
 
 pub mod decoder;
 pub mod processor;
@@ -98,6 +98,38 @@ impl Branch {
 
     fn branch_address(&self) -> usize {
         self.branch_address
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StoreResult {
+    address: usize,
+    variable: u8,
+}
+
+impl fmt::Display for StoreResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.variable == 0 {
+            write!(f, "-(SP)")
+        } else if self.variable < 16 {
+            write!(f, "L{:02x}", self.variable - 1)
+        } else {
+            write!(f, "G{:02x}", self.variable - 16)
+        }
+    }
+}
+
+impl StoreResult {
+    pub fn new(address: usize, variable: u8) -> StoreResult {
+        StoreResult { address, variable }
+    }
+
+    pub fn address(&self) -> usize {
+        self.address
+    }
+
+    pub fn variable(&self) -> u8 {
+        self.variable
     }
 }
 
@@ -405,5 +437,277 @@ impl Instruction {
 
     pub fn next_address(&self) -> usize {
         self.next_address
+    }
+}
+
+#[derive(Debug)]
+pub enum NextAddress {
+    Address(usize),
+    ReadCharInterrupt(usize, u16),
+    ReadInterrupt(usize, u16, bool),
+    Quit,
+}
+
+#[derive(Debug)]
+pub struct InstructionResult {
+    next_address: NextAddress,
+    interpreter_request: Option<InterpreterRequest>,
+}
+
+impl InstructionResult {
+    pub fn new(next_address: NextAddress) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: None,
+        })
+    }
+
+    pub fn next_address(&self) -> &NextAddress {
+        &self.next_address
+    }
+
+    pub fn interpreter_request(&self) -> Option<&InterpreterRequest> {
+        self.interpreter_request.as_ref()
+    }
+
+    pub fn message(
+        next_address: NextAddress,
+        message: &str,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::message(message),
+        })
+    }
+
+    pub fn buffer_mode(
+        next_address: NextAddress,
+        mode: u16,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::buffer_mode(mode),
+        })
+    }
+
+    pub fn erase_line(next_address: NextAddress) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::erase_line(),
+        })
+    }
+
+    pub fn erase_window(
+        next_address: NextAddress,
+        window: i16,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::erase_window(window),
+        })
+    }
+
+    pub fn get_cursor(next_address: NextAddress) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::get_cursor(),
+        })
+    }
+
+    pub fn new_line(next_address: NextAddress) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::new_line(),
+        })
+    }
+
+    pub fn output_stream(
+        next_address: NextAddress,
+        stream: i16,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::output_stream(stream),
+        })
+    }
+
+    pub fn print(
+        next_address: NextAddress,
+        text: Vec<u16>,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::print(text),
+        })
+    }
+
+    pub fn print_ret(
+        next_address: NextAddress,
+        text: Vec<u16>,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::print_ret(text),
+        })
+    }
+
+    pub fn print_table(
+        next_address: NextAddress,
+        table: Vec<u16>,
+        width: u16,
+        height: u16,
+        skip: u16,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::print_table(table, width, height, skip),
+        })
+    }
+
+    pub fn quit() -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address: NextAddress::Quit,
+            interpreter_request: None,
+        })
+    }
+
+    pub fn read(
+        next_address: NextAddress,
+        length: u8,
+        terminators: Vec<u16>,
+        timeout: u16,
+        input: Vec<u16>,
+        redraw: bool,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::read(
+                length,
+                terminators,
+                timeout,
+                input,
+                redraw,
+            ),
+        })
+    }
+
+    pub fn read_char(
+        next_address: NextAddress,
+        timeout: u16,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::read_char(timeout),
+        })
+    }
+
+    pub fn restore(
+        next_address: NextAddress,
+        name: &str,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::restore(name),
+        })
+    }
+
+    pub fn save(
+        next_address: NextAddress,
+        name: &str,
+        data: Vec<u8>,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::save(name, data),
+        })
+    }
+
+    pub fn set_colour(
+        next_address: NextAddress,
+        foreground: u16,
+        background: u16,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::set_colour(foreground, background),
+        })
+    }
+
+    pub fn set_cursor(
+        next_address: NextAddress,
+        row: u16,
+        column: u16,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::set_cursor(row, column),
+        })
+    }
+
+    pub fn set_font(
+        next_address: NextAddress,
+        font: u16,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::set_font(font),
+        })
+    }
+
+    pub fn set_text_style(
+        next_address: NextAddress,
+        style: u16,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::set_text_style(style),
+        })
+    }
+
+    pub fn set_window(
+        next_address: NextAddress,
+        window: u16,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::set_window(window),
+        })
+    }
+
+    pub fn show_status(
+        next_address: NextAddress,
+        left: Vec<u16>,
+        right: Vec<u16>,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::show_status(left, right),
+        })
+    }
+
+    pub fn sound_effect(
+        next_address: NextAddress,
+        number: u16,
+        effect: u16,
+        volume: u8,
+        repeats: u8,
+        routine: usize,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::sound_effect(
+                number, effect, volume, repeats, routine,
+            ),
+        })
+    }
+
+    pub fn split_window(
+        next_address: NextAddress,
+        lines: u16,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::split_window(lines),
+        })
     }
 }

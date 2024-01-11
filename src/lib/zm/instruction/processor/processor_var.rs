@@ -1,11 +1,10 @@
 use crate::{
     error::{ErrorCode, RuntimeError},
     fatal_error,
-    instruction::{processor::store_result, Instruction},
+    instruction::{processor::store_result, Instruction, InstructionResult, NextAddress},
     object::property,
     recoverable_error, text,
-    types::{Directive, DirectiveRequest, InputEvent, InstructionResult},
-    zmachine::{header::HeaderField, ZMachine},
+    zmachine::{header::HeaderField, InputEvent, ZMachine},
 };
 
 use super::{branch, call_fn, operand_values};
@@ -18,13 +17,13 @@ pub fn call_vs(
     let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = &operands[1..].to_vec();
 
-    Ok(InstructionResult::none(call_fn(
+    InstructionResult::new(call_fn(
         zmachine,
         address,
         instruction.next_address(),
         arguments,
         instruction.store().copied(),
-    )?))
+    )?)
 }
 
 pub fn storew(
@@ -34,7 +33,7 @@ pub fn storew(
     let operands = operand_values(zmachine, instruction)?;
     let address = operands[0] as isize + (operands[1] as i16 * 2) as isize;
     zmachine.write_word(address as usize, operands[2])?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn storeb(
@@ -44,7 +43,7 @@ pub fn storeb(
     let operands = operand_values(zmachine, instruction)?;
     let address = operands[0] as isize + (operands[1] as i16) as isize;
     zmachine.write_byte(address as usize, operands[2] as u8)?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn put_prop(
@@ -59,7 +58,7 @@ pub fn put_prop(
         operands[1] as u8,
         operands[2],
     )?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 fn terminators(zmachine: &ZMachine) -> Result<Vec<u16>, RuntimeError> {
@@ -110,11 +109,6 @@ pub fn read_pre(
     };
 
     let timeout = if operands.len() > 2 { operands[2] } else { 0 };
-    let routine = if operands.len() > 3 {
-        zmachine.packed_routine_address(operands[3])?
-    } else {
-        0
-    };
     let terminators = terminators(zmachine)?;
 
     // For V4+, the text buffer may already contain input
@@ -141,19 +135,27 @@ pub fn read_pre(
     }
 
     // Pass max input length and timeout, if any, to the interpreter
-    Ok(InstructionResult::new(
-        Directive::Read,
-        DirectiveRequest::read(
-            length,
-            &terminators,
-            timeout,
-            routine,
-            instruction.address(),
-            instruction.next_address(),
-            &preload,
-        ),
-        instruction.next_address,
-    ))
+    InstructionResult::read(
+        NextAddress::Address(instruction.next_address),
+        length,
+        terminators,
+        timeout,
+        preload,
+        false,
+    )
+    // Ok(InstructionResult::new(
+    //     Directive::Read,
+    //     DirectiveRequest::read(
+    //         length,
+    //         &terminators,
+    //         timeout,
+    //         routine,
+    //         instruction.address(),
+    //         instruction.next_address(),
+    //         &preload,
+    //     ),
+    //     instruction.next_address,
+    // ))
 }
 
 /// [READ](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#read) set up
@@ -218,7 +220,7 @@ pub fn read_post(
         store_result(zmachine, instruction, *terminator.unwrap())?;
     }
 
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn read_interrupted(
@@ -247,14 +249,14 @@ pub fn read_interrupted(
     }
 
     if routine > 0 {
-        Ok(InstructionResult::none(zmachine.call_read_interrupt(
+        InstructionResult::new(zmachine.call_read_interrupt(
             routine,
             &Vec::new(),
             None,
             instruction.address,
-        )?))
+        )?)
     } else {
-        Ok(InstructionResult::none(instruction.address))
+        InstructionResult::new(NextAddress::Address(instruction.address))
     }
 }
 
@@ -273,7 +275,7 @@ pub fn read_abort(
     } else {
         zmachine.write_byte(text_buffer + 1, 0)?;
     }
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 // pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
 //     let operands = operand_values(zmachine, instruction)?;
@@ -432,12 +434,10 @@ pub fn print_char(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    // zmachine.print(&vec![operands[0]])?;
-    Ok(InstructionResult::new(
-        Directive::Print,
-        DirectiveRequest::print(&[operands[0]]),
-        instruction.next_address(),
-    ))
+    InstructionResult::print(
+        NextAddress::Address(instruction.next_address),
+        vec![operands[0]],
+    )
 }
 
 pub fn print_num(
@@ -450,12 +450,7 @@ pub fn print_num(
     for c in s.chars() {
         text.push(c as u16);
     }
-    // zmachine.print(&text)?;
-    Ok(InstructionResult::new(
-        Directive::Print,
-        DirectiveRequest::print(&text),
-        instruction.next_address,
-    ))
+    InstructionResult::print(NextAddress::Address(instruction.next_address), text)
 }
 
 pub fn random(
@@ -477,7 +472,7 @@ pub fn random(
         store_result(zmachine, instruction, value)?;
     }
 
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn push(
@@ -486,7 +481,7 @@ pub fn push(
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     zmachine.push(operands[0])?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn pull(
@@ -501,11 +496,10 @@ pub fn pull(
     // the second value in the stack.
     if operands[0] == 0 {
         zmachine.variable(0)?;
-        // zmachine.state.current_frame_mut()?.local_variable(0)?;
     }
 
     zmachine.set_variable(operands[0] as u8, value)?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn split_window(
@@ -513,13 +507,7 @@ pub fn split_window(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    // zmachine.split_window(operands[0])?;
-    Ok(InstructionResult::new(
-        Directive::SplitWindow,
-        DirectiveRequest::split_window(operands[0]),
-        instruction.next_address,
-    ))
-    // Ok(instruction.next_address())
+    InstructionResult::split_window(NextAddress::Address(instruction.next_address), operands[0])
 }
 
 pub fn set_window(
@@ -527,13 +515,7 @@ pub fn set_window(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    // zmachine.set_window(operands[0])?;
-    Ok(InstructionResult::new(
-        Directive::SetWindow,
-        DirectiveRequest::set_window(operands[0]),
-        instruction.next_address,
-    ))
-    // Ok(instruction.next_address())
+    InstructionResult::set_window(NextAddress::Address(instruction.next_address), operands[0])
 }
 
 pub fn call_vs2(
@@ -544,13 +526,13 @@ pub fn call_vs2(
     let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = operands[1..operands.len()].to_vec();
 
-    Ok(InstructionResult::none(call_fn(
+    InstructionResult::new(call_fn(
         zmachine,
         address,
         instruction.next_address,
         &arguments,
         instruction.store().copied(),
-    )?))
+    )?)
 }
 
 pub fn erase_window(
@@ -558,13 +540,10 @@ pub fn erase_window(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    // zmachine.erase_window(operands[0] as i16)?;
-    Ok(InstructionResult::new(
-        Directive::EraseWindow,
-        DirectiveRequest::erase_window(operands[0] as i16),
-        instruction.next_address,
-    ))
-    // Ok(instruction.next_address())
+    InstructionResult::erase_window(
+        NextAddress::Address(instruction.next_address),
+        operands[0] as i16,
+    )
 }
 
 pub fn erase_line(
@@ -573,17 +552,10 @@ pub fn erase_line(
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if operands[0] == 1 {
-        Ok(InstructionResult::empty(
-            Directive::EraseLine,
-            instruction.next_address,
-        ))
-        // zmachine.erase_line()?;
+        InstructionResult::erase_line(NextAddress::Address(instruction.next_address))
     } else {
-        Ok(InstructionResult::none(instruction.next_address))
+        InstructionResult::new(NextAddress::Address(instruction.next_address))
     }
-
-    // Ok(InstructionResult::empty(Directive::EraseLine, instruction.next_address))
-    // Ok(instruction.next_address())
 }
 
 pub fn set_cursor(
@@ -591,28 +563,18 @@ pub fn set_cursor(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    Ok(InstructionResult::new(
-        Directive::SetCursor,
-        DirectiveRequest::set_cursor(operands[0], operands[1]),
-        instruction.next_address,
-    ))
-    // zmachine.set_cursor(operands[0], operands[1])?;
-    // Ok(instruction.next_address())
+    InstructionResult::set_cursor(
+        NextAddress::Address(instruction.next_address),
+        operands[0],
+        operands[1],
+    )
 }
 
-// TBD: pre/(interpreter callout)/post
 pub fn get_cursor_pre(
-    zmachine: &mut ZMachine,
+    _zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    Ok(InstructionResult::empty(
-        Directive::GetCursor,
-        instruction.next_address,
-    ))
-    // let (row, column) = zmachine.cursor()?;
-    // zmachine.write_word(operands[0] as usize, row)?;
-    // zmachine.write_word(operands[0] as usize + 2, column)?;
-    // Ok(instruction.next_address())
+    InstructionResult::get_cursor(NextAddress::Address(instruction.next_address))
 }
 
 pub fn get_cursor_post(
@@ -624,8 +586,7 @@ pub fn get_cursor_post(
     let operands = operand_values(zmachine, instruction)?;
     zmachine.write_word(operands[0] as usize, row)?;
     zmachine.write_word(operands[0] as usize + 2, column)?;
-    Ok(InstructionResult::none(instruction.next_address))
-    // Ok(instruction.next_address())
+    InstructionResult::new(NextAddress::Address(instruction.next_address))
 }
 
 pub fn set_text_style(
@@ -633,13 +594,7 @@ pub fn set_text_style(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    Ok(InstructionResult::new(
-        Directive::SetTextStyle,
-        DirectiveRequest::set_text_style(operands[0]),
-        instruction.next_address,
-    ))
-    // zmachine.set_text_style(operands[0])?;
-    // Ok(instruction.next_address())
+    InstructionResult::set_text_style(NextAddress::Address(instruction.next_address), operands[0])
 }
 
 pub fn buffer_mode(
@@ -647,13 +602,7 @@ pub fn buffer_mode(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    Ok(InstructionResult::new(
-        Directive::BufferMode,
-        DirectiveRequest::buffer_mode(operands[0]),
-        instruction.next_address,
-    ))
-    // zmachine.buffer_mode(operands[0])?;
-    // Ok(instruction.next_address())
+    InstructionResult::buffer_mode(NextAddress::Address(instruction.next_address), operands[0])
 }
 
 pub fn output_stream(
@@ -669,7 +618,7 @@ pub fn output_stream(
     };
 
     zmachine.output_stream(stream, table)?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::output_stream(NextAddress::Address(instruction.next_address), stream)
 }
 
 pub fn input_stream(
@@ -678,7 +627,7 @@ pub fn input_stream(
 ) -> Result<InstructionResult, RuntimeError> {
     let _operands = operand_values(zmachine, instruction)?;
     info!(target: "app::instruction", "INPUT_STREAM not implemented, instruction ignored");
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 // TBD: pre/(interpreter callout)/post
@@ -689,20 +638,26 @@ pub fn sound_effect_pre(
     let operands: Vec<u16> = operand_values(zmachine, instruction)?;
     let number = operands[0];
     match number {
-        1 | 2 => Ok(InstructionResult::new(
-            Directive::SoundEffect,
-            DirectiveRequest::sound_effect(number, 0, 0, 0, 0),
-            instruction.next_address,
-        )),
+        1 | 2 => InstructionResult::sound_effect(
+            NextAddress::Address(instruction.next_address),
+            number,
+            0,
+            0,
+            0,
+            0,
+        ),
         _ => {
             let effect = operands[1];
             match effect {
                 // Prepare, Stop, Unload
-                1 | 3 | 4 => Ok(InstructionResult::new(
-                    Directive::SoundEffect,
-                    DirectiveRequest::sound_effect(number, effect, 0, 0, 0),
-                    instruction.next_address,
-                )),
+                1 | 3 | 4 => InstructionResult::sound_effect(
+                    NextAddress::Address(instruction.next_address),
+                    number,
+                    effect,
+                    0,
+                    0,
+                    0,
+                ),
                 // Play
                 2 => {
                     let (volume, repeats) = if operands.len() > 2 {
@@ -719,11 +674,14 @@ pub fn sound_effect_pre(
                         0
                     };
 
-                    Ok(InstructionResult::new(
-                        Directive::SoundEffect,
-                        DirectiveRequest::sound_effect(number, effect, volume, repeats, routine),
-                        instruction.next_address,
-                    ))
+                    InstructionResult::sound_effect(
+                        NextAddress::Address(instruction.next_address),
+                        number,
+                        effect,
+                        volume,
+                        repeats,
+                        routine,
+                    )
                 }
                 _ => {
                     // TBD: Beep here?
@@ -752,11 +710,7 @@ pub fn read_char_pre(
     }
 
     let timeout = if operands.len() > 1 { operands[1] } else { 0 };
-    Ok(InstructionResult::new(
-        Directive::ReadChar,
-        DirectiveRequest::read_char(timeout, instruction.address),
-        instruction.next_address,
-    ))
+    InstructionResult::read_char(NextAddress::Address(instruction.next_address), timeout)
 }
 
 pub fn read_char_post(
@@ -767,7 +721,7 @@ pub fn read_char_post(
     match key.zchar() {
         Some(c) => {
             store_result(zmachine, instruction, c)?;
-            Ok(InstructionResult::none(instruction.next_address()))
+            InstructionResult::new(NextAddress::Address(instruction.next_address()))
         }
         None => {
             fatal_error!(ErrorCode::ReadNothing, "read_char returned no key")
@@ -782,19 +736,19 @@ pub fn read_char_interrupted(
     let operands = operand_values(zmachine, instruction)?;
     let routine = zmachine.packed_routine_address(operands[2])?;
 
-    Ok(InstructionResult::none(zmachine.call_read_char_interrupt(
+    InstructionResult::new(zmachine.call_read_char_interrupt(
         routine,
         &Vec::new(),
         None,
         instruction.address,
-    )?))
+    )?)
 }
 pub fn read_char_abort(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     store_result(zmachine, instruction, 0)?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 // pub fn read_char(
@@ -889,7 +843,7 @@ pub fn scan_table(
         store_result(zmachine, instruction, 0)?;
     }
 
-    branch(zmachine, instruction, condition)
+    InstructionResult::new(branch(zmachine, instruction, condition)?)
 }
 
 pub fn not(
@@ -898,7 +852,7 @@ pub fn not(
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     store_result(zmachine, instruction, !operands[0])?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn call_vn(
@@ -909,13 +863,13 @@ pub fn call_vn(
     let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = &operands[1..].to_vec();
 
-    Ok(InstructionResult::none(call_fn(
+    InstructionResult::new(call_fn(
         zmachine,
         address,
         instruction.next_address(),
         arguments,
         instruction.store().copied(),
-    )?))
+    )?)
 }
 
 pub fn call_vn2(
@@ -926,13 +880,13 @@ pub fn call_vn2(
     let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = &operands[1..].to_vec();
 
-    Ok(InstructionResult::none(call_fn(
+    InstructionResult::new(call_fn(
         zmachine,
         address,
         instruction.next_address(),
         arguments,
         instruction.store().copied(),
-    )?))
+    )?)
 }
 
 pub fn tokenise(
@@ -954,7 +908,7 @@ pub fn tokenise(
     };
 
     text::parse_text(zmachine, text_buffer, parse_buffer, dictionary, flag)?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn encode_text(
@@ -978,7 +932,7 @@ pub fn encode_text(
         zmachine.write_word(dest_buffer + (i * 2), *w)?
     }
 
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn copy_table(
@@ -1005,7 +959,7 @@ pub fn copy_table(
         }
     }
 
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn print_table(
@@ -1019,30 +973,20 @@ pub fn print_table(
     let skip = if operands.len() > 3 { operands[3] } else { 0 } as usize;
 
     let mut data = Vec::new();
-    // let origin = zmachine.cursor()?;
-    // let rows = zmachine.rows();
     for i in 0..height as usize {
-        // if origin.0 + i as u16 > zmachine.rows() {
-        //     zmachine.new_line()?;
-        //     zmachine.set_cursor(rows, origin.1)?;
-        // } else {
-        //     zmachine.set_cursor(origin.0 + i as u16, origin.1)?;
-        // }
-        // let mut text = Vec::new();
+        let offset = i * (width + skip);
         for j in 0..(width + skip) {
-            let offset = i * (width + skip);
             data.push(zmachine.read_byte(table + offset + j)? as u16);
-            // text.push(zmachine.read_byte(table + offset + j)? as u16);
         }
-        // zmachine.print(&text)?;
     }
 
-    Ok(InstructionResult::new(
-        Directive::PrintTable,
-        DirectiveRequest::print_table(&data, width as u16, height, skip as u16),
-        instruction.next_address,
-    ))
-    // Ok(instruction.next_address())
+    InstructionResult::print_table(
+        NextAddress::Address(instruction.next_address),
+        data,
+        width as u16,
+        height,
+        skip as u16,
+    )
 }
 
 pub fn check_arg_count(
@@ -1051,11 +995,11 @@ pub fn check_arg_count(
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
 
-    branch(
+    InstructionResult::new(branch(
         zmachine,
         instruction,
         zmachine.argument_count()? >= operands[0] as u8,
-    )
+    )?)
 }
 
 #[cfg(test)]

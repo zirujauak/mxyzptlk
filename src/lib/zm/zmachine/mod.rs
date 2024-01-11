@@ -3,18 +3,20 @@ use std::{
     fs::File,
 };
 
+use pancurses::Input;
+
 use crate::{
     config::Config,
     error::{ErrorCode, RuntimeError},
     fatal_error,
     instruction::{
-        processor::{self, processor_0op, processor_ext, processor_var},
-        Instruction,
+        decoder::{self, decode_instruction},
+        processor::{self, operand_values, processor_0op, processor_ext, processor_var},
+        Instruction, InstructionResult, NextAddress, StoreResult,
     },
     object::property,
     quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
     recoverable_error, text,
-    types::{Directive, DirectiveRequest, InputEvent, InstructionResult, StoreResult},
 };
 
 use self::{
@@ -64,6 +66,740 @@ impl Stream3 {
     }
 }
 
+#[derive(Debug, Default, Eq, PartialEq)]
+pub enum Interrupt {
+    #[default]
+    ReadTimeout,
+    Sound,
+}
+
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct InputEvent {
+    zchar: Option<u16>,
+    row: Option<u16>,
+    column: Option<u16>,
+    interrupt: Option<Interrupt>,
+}
+
+impl InputEvent {
+    pub fn no_input() -> InputEvent {
+        InputEvent::default()
+    }
+
+    pub fn from_char(zchar: u16) -> InputEvent {
+        InputEvent {
+            zchar: Some(zchar),
+            ..Default::default()
+        }
+    }
+
+    pub fn from_mouse(zchar: u16, row: u16, column: u16) -> InputEvent {
+        InputEvent {
+            zchar: Some(zchar),
+            row: Some(row),
+            column: Some(column),
+            ..Default::default()
+        }
+    }
+
+    pub fn from_interrupt(interrupt: Interrupt) -> InputEvent {
+        InputEvent {
+            interrupt: Some(interrupt),
+            ..Default::default()
+        }
+    }
+
+    pub fn zchar(&self) -> Option<u16> {
+        self.zchar
+    }
+
+    pub fn interrupt(&self) -> Option<&Interrupt> {
+        self.interrupt.as_ref()
+    }
+
+    pub fn row(&self) -> Option<u16> {
+        self.row
+    }
+
+    pub fn column(&self) -> Option<u16> {
+        self.column
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum RequestType {
+    BufferMode,
+    EraseLine,
+    EraseWindow,
+    GetCursor,
+    InputStream,
+    Message,
+    NewLine,
+    OutputStream,
+    Print,
+    PrintRet,
+    PrintTable,
+    Quit,
+    Read,
+    ReadAbort,
+    ReadRedraw,
+    ReadChar,
+    Restart,
+    Restore,
+    RestoreComplete,
+    Save,
+    SetColour,
+    SetCursor,
+    SetFont,
+    SetTextStyle,
+    SetWindow,
+    ShowStatus,
+    SoundEffect,
+    SplitWindow,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RequestPayload {
+    // Messaging
+    message: String,
+
+    // BufferMode
+    buffer_mode: u16,
+
+    // EraseWindow
+    window_erase: i16,
+
+    // OutputStream
+    stream: i16,
+
+    // Print//PrintRet
+    text: Vec<u16>,
+
+    // PrintTable
+    table: Vec<u16>,
+    width: u16,
+    height: u16,
+    skip: u16,
+
+    // Read
+    length: u8,
+    terminators: Vec<u16>,
+    input: Vec<u16>,
+
+    // ...interrupted
+    next_instruction_address: usize,
+    instruction_address: usize,
+
+    // Read/ReadChar
+    timeout: u16,
+
+    // Restore/Save
+    name: String,
+
+    // Save
+    save_data: Vec<u8>,
+
+    // SetColour
+    foreground: u16,
+    background: u16,
+
+    // SetCursor
+    row: u16,
+    column: u16,
+
+    // SetFont
+    font: u16,
+
+    // SetTextStyle
+    style: u16,
+
+    // SetWindow
+    window_set: u16,
+
+    // ShowStatus
+    status_left: Vec<u16>,
+    status_right: Vec<u16>,
+
+    // SoundEffect
+    number: u16,
+    effect: u16,
+    volume: u8,
+    repeats: u8,
+    routine: usize,
+
+    // SplitWindow
+    split_lines: u16,
+}
+
+impl RequestPayload {
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    // EraseWindow
+    pub fn window_erase(&self) -> i16 {
+        self.window_erase
+    }
+
+    // BufferMode
+    pub fn buffer_mode(&self) -> u16 {
+        self.buffer_mode
+    }
+
+    // Print/PrintRet
+    pub fn text(&self) -> &Vec<u16> {
+        &self.text
+    }
+
+    // PrintTable
+    pub fn table(&self) -> &Vec<u16> {
+        &self.table
+    }
+
+    pub fn width(&self) -> u16 {
+        self.width
+    }
+
+    pub fn height(&self) -> u16 {
+        self.height
+    }
+
+    pub fn skip(&self) -> u16 {
+        self.skip
+    }
+
+    // Read
+    pub fn length(&self) -> u8 {
+        self.length
+    }
+
+    pub fn terminators(&self) -> &Vec<u16> {
+        &self.terminators
+    }
+
+    pub fn timeout(&self) -> u16 {
+        self.timeout
+    }
+
+    pub fn input(&self) -> &Vec<u16> {
+        &self.input
+    }
+
+    pub fn instruction_address(&self) -> usize {
+        self.instruction_address
+    }
+
+    pub fn next_instruction_address(&self) -> usize {
+        self.next_instruction_address
+    }
+
+    // Save
+    pub fn save_data(&self) -> &Vec<u8> {
+        &self.save_data
+    }
+
+    // SetColour
+    pub fn foreground(&self) -> u16 {
+        self.foreground
+    }
+
+    pub fn background(&self) -> u16 {
+        self.background
+    }
+
+    // SetCursor
+    pub fn row(&self) -> u16 {
+        self.row
+    }
+
+    // SetFont
+    pub fn font(&self) -> u16 {
+        self.font
+    }
+
+    pub fn column(&self) -> u16 {
+        self.column
+    }
+
+    // SetTextStyle
+    pub fn style(&self) -> u16 {
+        self.style
+    }
+
+    // SetWindow
+    pub fn window_set(&self) -> u16 {
+        self.window_set
+    }
+
+    // ShowStatus
+    pub fn status_left(&self) -> &Vec<u16> {
+        &self.status_left
+    }
+
+    pub fn status_right(&self) -> &Vec<u16> {
+        &self.status_right
+    }
+
+    // SoundEffect
+    pub fn number(&self) -> u16 {
+        self.number
+    }
+
+    pub fn effect(&self) -> u16 {
+        self.effect
+    }
+
+    pub fn volume(&self) -> u8 {
+        self.volume
+    }
+
+    pub fn repeats(&self) -> u8 {
+        self.repeats
+    }
+
+    pub fn routine(&self) -> usize {
+        self.routine
+    }
+
+    // SplitWindow
+    pub fn split_lines(&self) -> u16 {
+        self.split_lines
+    }
+}
+
+/// Request for the interpreter (screen, sound) to do something
+#[derive(Clone, Debug)]
+pub struct InterpreterRequest {
+    request_type: RequestType,
+    request: RequestPayload,
+}
+
+impl InterpreterRequest {
+    pub fn request_type(&self) -> &RequestType {
+        &self.request_type
+    }
+
+    pub fn request(&self) -> &RequestPayload {
+        &self.request
+    }
+
+    pub fn message(message: &str) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::Message,
+            request: RequestPayload {
+                message: message.to_string(),
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn buffer_mode(mode: u16) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::BufferMode,
+            request: RequestPayload {
+                buffer_mode: mode,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn erase_line() -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::EraseLine,
+            request: RequestPayload::default(),
+        })
+    }
+
+    pub fn erase_window(window: i16) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::EraseWindow,
+            request: RequestPayload {
+                window_erase: window,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn get_cursor() -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::GetCursor,
+            request: RequestPayload::default(),
+        })
+    }
+
+    pub fn new_line() -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::NewLine,
+            request: RequestPayload {
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn output_stream(stream: i16) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::OutputStream,
+            request: RequestPayload {
+                stream,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn print(text: Vec<u16>) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::Print,
+            request: RequestPayload {
+                text,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn print_ret(text: Vec<u16>) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::PrintRet,
+            request: RequestPayload {
+                text,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn print_table(
+        table: Vec<u16>,
+        width: u16,
+        height: u16,
+        skip: u16,
+    ) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::PrintRet,
+            request: RequestPayload {
+                table,
+                width,
+                height,
+                skip,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn quit() -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::Quit,
+            request: RequestPayload::default(),
+        })
+    }
+
+    pub fn read(
+        length: u8,
+        terminators: Vec<u16>,
+        timeout: u16,
+        input: Vec<u16>,
+        redraw: bool,
+    ) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::Read,
+            request: RequestPayload {
+                length,
+                terminators,
+                timeout,
+                input,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn read_abort(address: usize, next_address: usize) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::ReadAbort,
+            request: RequestPayload {
+                instruction_address: address,
+                next_instruction_address: next_address,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn read_redraw(address: usize, input: Vec<u16>) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::ReadRedraw,
+            request: RequestPayload {
+                instruction_address: address,
+                input,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn read_char(timeout: u16) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::ReadChar,
+            request: RequestPayload {
+                timeout,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn restore(name: &str) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::Restore,
+            request: RequestPayload {
+                name: name.to_string(),
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn save(name: &str, save_data: Vec<u8>) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::Save,
+            request: RequestPayload {
+                name: name.to_string(),
+                save_data,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn set_colour(foreground: u16, background: u16) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::SetColour,
+            request: RequestPayload {
+                foreground,
+                background,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn set_cursor(row: u16, column: u16) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::SetCursor,
+            request: RequestPayload {
+                row,
+                column,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn set_font(font: u16) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::SetFont,
+            request: RequestPayload {
+                font,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn set_text_style(style: u16) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::SetTextStyle,
+            request: RequestPayload {
+                style,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn set_window(window: u16) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::SetWindow,
+            request: RequestPayload {
+                window_set: window,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn show_status(left: Vec<u16>, right: Vec<u16>) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::ShowStatus,
+            request: RequestPayload {
+                status_left: left,
+                status_right: right,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn sound_effect(
+        number: u16,
+        effect: u16,
+        volume: u8,
+        repeats: u8,
+        routine: usize,
+    ) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::SoundEffect,
+            request: RequestPayload {
+                number,
+                effect,
+                volume,
+                repeats,
+                routine,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn split_window(lines: u16) -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::SplitWindow,
+            request: RequestPayload {
+                split_lines: lines,
+                ..Default::default()
+            },
+        })
+    }
+}
+
+#[derive(Default)]
+pub struct ResponsePayload {
+    // GET_CURSOR
+    row: u16,
+    column: u16,
+
+    // READ
+    input: Vec<u16>,
+    // ...interrupted
+    interrupt: Interrupt,
+
+    // READ_CHAR
+    key: InputEvent,
+
+    // RESTORE
+    save_data: Vec<u8>,
+
+    // SAVE
+    success: bool,
+
+    // SET_FONT
+    font: u16,
+}
+
+impl ResponsePayload {
+    pub fn key(&self) -> &InputEvent {
+        &self.key
+    }
+
+    pub fn input(&self) -> &Vec<u16> {
+        &self.input
+    }
+}
+
+pub enum ResponseType {
+    GetCursor,
+    ReadComplete,
+    ReadInterrupted,
+    ReadCharComplete,
+    ReadCharInterrupted,
+    RestoreComplete,
+    SaveComplete,
+    SetFont,
+}
+
+// Response from the interpreter to an InterpreterRequest
+pub struct InterpreterResponse {
+    response_type: ResponseType,
+    response: ResponsePayload,
+}
+
+impl InterpreterResponse {
+    pub fn response_type(&self) -> &ResponseType {
+        &self.response_type
+    }
+
+    pub fn response(&self) -> &ResponsePayload {
+        &self.response
+    }
+
+    pub fn get_cursor(row: u16, column: u16) -> Option<InterpreterResponse> {
+        Some(InterpreterResponse {
+            response_type: ResponseType::GetCursor,
+            response: ResponsePayload {
+                row,
+                column,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn read_complete(input: Vec<u16>) -> Option<InterpreterResponse> {
+        Some(InterpreterResponse {
+            response_type: ResponseType::ReadComplete,
+            response: ResponsePayload {
+                input,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn read_char_complete(key: InputEvent) -> Option<InterpreterResponse> {
+        Some(InterpreterResponse {
+            response_type: ResponseType::ReadCharComplete,
+            response: ResponsePayload {
+                key,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn read_interrupted(input: Vec<u16>, interrupt: Interrupt) -> Option<InterpreterResponse> {
+        Some(InterpreterResponse {
+            response_type: ResponseType::ReadInterrupted,
+            response: ResponsePayload {
+                input,
+                interrupt,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn read_char_interrupted(interrupt: Interrupt) -> Option<InterpreterResponse> {
+        Some(InterpreterResponse {
+            response_type: ResponseType::ReadCharInterrupted,
+            response: ResponsePayload {
+                interrupt,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn restore(save_data: Vec<u8>) -> Option<InterpreterResponse> {
+        Some(InterpreterResponse {
+            response_type: ResponseType::RestoreComplete,
+            response: ResponsePayload {
+                save_data,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn save(success: bool) -> Option<InterpreterResponse> {
+        Some(InterpreterResponse {
+            response_type: ResponseType::SaveComplete,
+            response: ResponsePayload {
+                success,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn set_font(font: u16) -> Option<InterpreterResponse> {
+        Some(InterpreterResponse {
+            response_type: ResponseType::SetFont,
+            response: ResponsePayload {
+                font,
+                ..Default::default()
+            },
+        })
+    }
+}
+
 pub struct ZMachine {
     name: String,
     version: u8,
@@ -76,6 +812,7 @@ pub struct ZMachine {
     output_streams: u8,
     stream_2: Option<File>,
     stream_3: Vec<Stream3>,
+    instruction_count: usize,
 }
 
 impl TryFrom<(&ZMachine, usize)> for Quetzal {
@@ -194,6 +931,7 @@ impl ZMachine {
             output_streams: 0x1,
             stream_2: None,
             stream_3: Vec::new(),
+            instruction_count: 0,
         };
 
         zm.initialize(
@@ -548,13 +1286,13 @@ impl ZMachine {
         arguments: &Vec<u16>,
         result: Option<StoreResult>,
         return_address: usize,
-    ) -> Result<usize, RuntimeError> {
+    ) -> Result<NextAddress, RuntimeError> {
         // Call to address 0 results in FALSE
         if address == 0 {
             if let Some(r) = result {
                 self.set_variable(r.variable(), 0)?;
             }
-            Ok(return_address)
+            Ok(NextAddress::Address(return_address))
         } else {
             let (initial_pc, local_variables) = self.routine_header(address)?;
             let frame = Frame::call_routine(
@@ -567,7 +1305,7 @@ impl ZMachine {
             )?;
             self.frames.push(frame);
 
-            Ok(initial_pc)
+            Ok(NextAddress::Address(initial_pc))
         }
     }
 
@@ -577,13 +1315,13 @@ impl ZMachine {
         arguments: &Vec<u16>,
         result: Option<StoreResult>,
         return_address: usize,
-    ) -> Result<usize, RuntimeError> {
+    ) -> Result<NextAddress, RuntimeError> {
         // Call to address 0 results in FALSE
         if address == 0 {
             if let Some(r) = result {
                 self.set_variable(r.variable(), 0)?;
             }
-            Ok(return_address)
+            Ok(NextAddress::Address(return_address))
         } else {
             let (initial_pc, local_variables) = self.routine_header(address)?;
             let mut frame = Frame::call_routine(
@@ -597,7 +1335,7 @@ impl ZMachine {
             frame.set_read_interrupt(true);
             self.frames.push(frame);
 
-            Ok(initial_pc)
+            Ok(NextAddress::Address(initial_pc))
         }
     }
 
@@ -607,13 +1345,13 @@ impl ZMachine {
         arguments: &Vec<u16>,
         result: Option<StoreResult>,
         return_address: usize,
-    ) -> Result<usize, RuntimeError> {
+    ) -> Result<NextAddress, RuntimeError> {
         // Call to address 0 results in FALSE
         if address == 0 {
             if let Some(r) = result {
                 self.set_variable(r.variable(), 0)?;
             }
-            Ok(return_address)
+            Ok(NextAddress::Address(return_address))
         } else {
             let (initial_pc, local_variables) = self.routine_header(address)?;
             let mut frame = Frame::call_routine(
@@ -627,7 +1365,7 @@ impl ZMachine {
             frame.set_read_char_interrupt(true);
             self.frames.push(frame);
 
-            Ok(initial_pc)
+            Ok(NextAddress::Address(initial_pc))
         }
     }
 
@@ -644,31 +1382,28 @@ impl ZMachine {
         Ok(())
     }
 
-    pub fn return_routine(&mut self, value: u16) -> Result<InstructionResult, RuntimeError> {
+    pub fn return_routine(&mut self, value: u16) -> Result<NextAddress, RuntimeError> {
         if let Some(f) = self.frames.pop() {
-            let n = self.current_frame_mut()?;
-            n.set_pc(f.return_address());
-            debug!(target: "app::state", "Return {:04x} => {:?} to ${:06x}", value, f.result(), f.return_address());
+            debug!(target: "app::state", "Return {:04x} => {:?} to ${:06x}, redraw: {}", value, f.result(), f.return_address(), f.redraw_input());
             if let Some(r) = f.result() {
                 self.set_variable(r.variable(), value)?;
             }
 
+            let n = self.current_frame_mut()?;
+            n.set_next_pc(f.return_address());
+
             if f.read_interrupt() {
                 debug!(target: "app::screen", "Return from READ interrupt");
-                Ok(InstructionResult::new(
-                    Directive::ReadInterruptReturn,
-                    DirectiveRequest::read_interrupt_return(value, f.redraw_input()),
+                Ok(NextAddress::ReadInterrupt(
                     f.return_address(),
+                    value,
+                    f.redraw_input(),
                 ))
             } else if f.read_char_interrupt() {
                 debug!(target: "app::screen", "Return from READ_CHAR interrupt");
-                Ok(InstructionResult::new(
-                    Directive::ReadCharInterruptReturn,
-                    DirectiveRequest::read_interrupt_return(value, false),
-                    f.return_address(),
-                ))
+                Ok(NextAddress::ReadCharInterrupt(f.return_address(), value))
             } else {
-                Ok(InstructionResult::none(self.current_frame()?.pc()))
+                Ok(NextAddress::Address(f.return_address()))
             }
         } else {
             fatal_error!(
@@ -682,7 +1417,7 @@ impl ZMachine {
         Ok(self.current_frame()?.argument_count())
     }
 
-    pub fn throw(&mut self, depth: u16, result: u16) -> Result<InstructionResult, RuntimeError> {
+    pub fn throw(&mut self, depth: u16, result: u16) -> Result<NextAddress, RuntimeError> {
         self.frames.truncate(depth as usize);
         self.return_routine(result)
     }
@@ -927,7 +1662,12 @@ impl ZMachine {
         }
     }
 
-    pub fn output(&mut self, text: &[u16]) -> Result<(), RuntimeError> {
+    pub fn output(
+        &mut self,
+        text: &[u16],
+        next_address: NextAddress,
+        print_ret: bool
+    ) -> Result<InstructionResult, RuntimeError> {
         if self.is_stream_enabled(3) {
             if let Some(s) = self.stream_3.last_mut() {
                 for c in text {
@@ -937,15 +1677,26 @@ impl ZMachine {
                         _ => s.push(*c),
                     }
                 }
+                InstructionResult::new(next_address)
             } else {
-                return fatal_error!(
+                fatal_error!(
                     ErrorCode::Stream3Table,
                     "Stream 3 enabled, but no table to write to"
-                );
+                )
             }
-        }
+        } else if self.is_stream_enabled(1) {
+            if self.is_read_interrupt()? {
+                self.set_redraw_input()?;
+            }
 
-        Ok(())
+            if print_ret {
+                InstructionResult::print_ret(next_address, text.to_vec())
+            } else {
+                InstructionResult::print(next_address, text.to_vec())
+            }
+        } else {
+            InstructionResult::new(next_address)
+        }
     }
 
     // Save/Restore
@@ -1007,11 +1758,216 @@ impl ZMachine {
     }
 
     // Runtime
+
+    /// Decodes a single instruction at the current program counter address,
+    /// executes it and returns control to the interpreter.
+    ///
+    /// If the instruction result contains an interpreter directive, that data
+    /// is passed back to the interpreter, but the program counter is left
+    /// as is and will be updated after the interpreter responds to the directive.
+    ///
+    /// If no directive is returned, the program counter is updated as the
+    /// interpreter will generally just turn around and run the next instruction
     pub fn execute(
         &mut self,
-        instruction: &Instruction,
-    ) -> Result<InstructionResult, RuntimeError> {
-        processor::dispatch(self, instruction)
+        response: Option<&InterpreterResponse>,
+    ) -> Result<Option<InterpreterRequest>, RuntimeError> {
+        debug!(target: "app::instruction", "PC: {:05x}, next PC: {:05x}", self.pc()?, self.next_pc()?);
+        match response {
+            None => {
+                // No interpreter callback, advance to next instruction
+                self.set_pc(self.next_pc()?)?;
+                let instruction = decoder::decode_instruction(self, self.pc()?)?;
+                match processor::dispatch(self, &instruction) {
+                    Ok(result) => {
+                        debug!(target: "app::instruction", "Instruction result: {:?}", result);
+                        match result.interpreter_request() {
+                            Some(req) => {
+                                debug!(target: "app::instruction", "Interpreter callback: {:?}", req);
+                                match result.next_address() {
+                                    NextAddress::Address(a) => self.set_next_pc(*a)?,
+                                    _ => {
+                                        return fatal_error!(
+                                            ErrorCode::InvalidInstruction,
+                                            "InterpreterRequest next_address: {:?}",
+                                            result.next_address()
+                                        )
+                                    }
+                                }
+                                Ok(Some(req.clone()))
+                            }
+                            None => {
+                                match result.next_address() {
+                                    // Instruction provides next address
+                                    NextAddress::Address(a) => {
+                                        self.set_next_pc(*a)?;
+                                        Ok(None)
+                                    }
+                                    // QUIT
+                                    NextAddress::Quit => Ok(InterpreterRequest::quit()),
+                                    // READ_CHAR interrupt routine return
+                                    // address is the READ_CHAR instruction
+                                    NextAddress::ReadCharInterrupt(address, value) => {
+                                        if *value == 0 {
+                                            // READ_CHAR again
+                                            self.set_next_pc(*address)?;
+                                            Ok(None)
+                                        } else {
+                                            // Abort READ_CHAR
+                                            let i = decoder::decode_instruction(self, *address)?;
+                                            match i.store() {
+                                                Some(v) => self.set_variable(v.variable(), 0)?,
+                                                None => {
+                                                    return fatal_error!(
+                                                        ErrorCode::InvalidInstruction,
+                                                        "READ_CHAR should have a store location"
+                                                    )
+                                                }
+                                            }
+                                            self.set_next_pc(i.next_address())?;
+                                            Ok(None)
+                                        }
+                                    }
+
+                                    NextAddress::ReadInterrupt(address, value, redraw) => {
+                                        let i = decoder::decode_instruction(self, *address)?;
+                                        let text_buffer = operand_values(self, &i)?[0] as usize;
+                                        if *value == 0 {
+                                            // Redraw existing input, if necessary
+                                            if *redraw {
+                                                let mut input = Vec::new();
+                                                if self.version < 5 {
+                                                    let mut i = 1;
+                                                    loop {
+                                                        let b =
+                                                            self.read_byte(text_buffer + i)? as u16;
+                                                        if b == 0 {
+                                                            break;
+                                                        }
+                                                        input.push(b);
+                                                        i += 1;
+                                                    }
+                                                } else {
+                                                    let l =
+                                                        self.read_byte(text_buffer + 1)? as usize;
+                                                    for i in 0..l {
+                                                        input.push(
+                                                            self.read_byte(text_buffer + 2 + i)?
+                                                                as u16,
+                                                        );
+                                                    }
+                                                }
+                                                Ok(InterpreterRequest::read_redraw(*address, input))
+                                            } else {
+                                                self.set_next_pc(*address)?;
+                                                Ok(None)
+                                            }
+                                        } else {
+                                            if self.version < 5 {
+                                                // Clear the input buffer
+                                                let len = self.read_byte(text_buffer)? as usize - 1;
+                                                for i in 0..len {
+                                                    self.write_byte(text_buffer + i + 1, 0)?;
+                                                }
+                                            } else {
+                                                // Set text buffer size to 0
+                                                self.write_byte(text_buffer + 1, 0)?;
+                                                // Store terminator 0
+                                                match i.store() {
+                                                    Some(v) => {
+                                                        self.set_variable(v.variable(), 0)?
+                                                    }
+                                                    None => {
+                                                        return fatal_error!(
+                                                            ErrorCode::InvalidInstruction,
+                                                            "READ should have a store location"
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            self.set_next_pc(i.next_address())?;
+                                            Ok(None)
+                                        }
+                                    }
+                                    _ => Ok(Some(InterpreterRequest::quit().unwrap())),
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => Err(e),
+                }
+            }
+            Some(res) => match res.response_type() {
+                ResponseType::GetCursor => todo!(),
+                ResponseType::ReadComplete => {
+                    let i = decoder::decode_instruction(self, self.pc()?)?;
+                    let r = processor_var::read_post(self, &i, res.response().input().clone())?;
+                    if let NextAddress::Address(a) = r.next_address() {
+                        self.set_next_pc(*a)?;
+                        Ok(None)
+                    } else {
+                        fatal_error!(
+                            ErrorCode::InvalidInstruction,
+                            "READ should return an address"
+                        )
+                    }
+                }
+                ResponseType::ReadInterrupted => {
+                    let i = decoder::decode_instruction(self, self.pc()?)?;
+                    let operands = processor::operand_values(self, &i)?;
+                    let text_buffer = operands[0] as usize;
+                    let routine = self.packed_routine_address(operands[3])?;
+
+                    if self.version < 5 {
+                        for (i, c) in res.response().input.iter().enumerate() {
+                            self.write_byte(text_buffer + 1 + i, *c as u8)?
+                        }
+                    } else {
+                        self.write_byte(text_buffer + 1, res.response().input.len() as u8)?;
+                        for (i, c) in res.response().input.iter().enumerate() {
+                            self.write_byte(text_buffer + 2 + i, *c as u8)?
+                        }
+                    }
+                    if let NextAddress::Address(a) =
+                        self.call_read_interrupt(routine, &Vec::new(), None, self.pc()?)?
+                    {
+                        self.set_next_pc(a)?;
+                        Ok(None)
+                    } else {
+                        fatal_error!(
+                            ErrorCode::InvalidInstruction,
+                            "calling routine should return address"
+                        )
+                    }
+                }
+                ResponseType::ReadCharComplete => {
+                    let i = decoder::decode_instruction(self, self.pc()?)?;
+                    self.set_variable(
+                        i.store()
+                            .expect("READ_CHAR should have a store location")
+                            .variable(),
+                        res.response()
+                            .key()
+                            .zchar()
+                            .expect("Completed READ_CHAR should return a zchar"),
+                    )?;
+                    Ok(None)
+                }
+                ResponseType::ReadCharInterrupted => todo!(),
+                ResponseType::RestoreComplete => todo!(),
+                ResponseType::SaveComplete => todo!(),
+                ResponseType::SetFont => {
+                    let i = decoder::decode_instruction(self, self.pc()?)?;
+                    self.set_variable(
+                        i.store()
+                            .expect("SET_FONT should have a store location")
+                            .variable(),
+                        res.response().font,
+                    )?;
+                    Ok(None)
+                }
+            },
+        }
     }
 
     // Store cursor position
@@ -1086,6 +2042,15 @@ impl ZMachine {
 
     pub fn set_pc(&mut self, pc: usize) -> Result<(), RuntimeError> {
         self.current_frame_mut()?.set_pc(pc);
+        Ok(())
+    }
+
+    pub fn next_pc(&self) -> Result<usize, RuntimeError> {
+        Ok(self.current_frame()?.next_pc())
+    }
+
+    pub fn set_next_pc(&mut self, next_pc: usize) -> Result<(), RuntimeError> {
+        self.current_frame_mut()?.set_next_pc(next_pc);
         Ok(())
     }
 }

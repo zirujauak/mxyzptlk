@@ -14,8 +14,7 @@ use zm::{
     config::Config,
     error::{ErrorCode, RuntimeError},
     files, recoverable_error,
-    sound::Manager,
-    types::{InputEvent, Interrupt},
+    sound::Manager, zmachine::{InputEvent, Interrupt},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

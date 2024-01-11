@@ -1,7 +1,6 @@
 use crate::{
     quetzal::{IFhd, Quetzal},
     recoverable_error,
-    types::{Directive, DirectiveRequest},
 };
 
 use super::*;
@@ -14,14 +13,14 @@ pub fn save_pre(
     if !operands.is_empty() {
         info!(target: "app::instruction", "SAVE region not implemented yet");
         store_result(zmachine, instruction, 0)?;
-        Ok(InstructionResult::none(instruction.next_address))
+        InstructionResult::new(NextAddress::Address(instruction.next_address))
     } else if let Some(r) = instruction.store() {
         let save_data = zmachine.save_state(r.address())?;
-        Ok(InstructionResult::new(
-            Directive::Save,
-            DirectiveRequest::save(save_data),
-            instruction.address,
-        ))
+        InstructionResult::save(
+            NextAddress::Address(instruction.address),
+            zmachine.name(),
+            save_data,
+        )
     } else {
         return fatal_error!(
             ErrorCode::InvalidInstruction,
@@ -37,7 +36,7 @@ pub fn save_post(
 ) -> Result<InstructionResult, RuntimeError> {
     let sv = if success { 1 } else { 0 };
     store_result(zmachine, instruction, sv)?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 // pub fn save(
@@ -66,10 +65,10 @@ pub fn restore_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    Ok(InstructionResult::empty(
-        Directive::Restore,
-        instruction.address,
-    ))
+    InstructionResult::restore(
+        NextAddress::Address(instruction.next_address),
+        zmachine.name(),
+    )
 }
 
 pub fn restore_post(
@@ -80,12 +79,12 @@ pub fn restore_post(
     let quetzal = Quetzal::try_from(save_data)?;
     let ifhd = IFhd::try_from((&*zmachine, 0))?;
     if &ifhd != quetzal.ifhd() {
-        error!(target: "app::state", "Restore state was created from a different story file");
+        error!(target: "app::state", "Restore state was created from a different zcode program");
         store_result(zmachine, instruction, 0)?;
-        return Ok(InstructionResult::message(
-            "Restore failed: file belongs to a different zcode program".to_string(),
-            instruction.next_address,
-        ));
+        return InstructionResult::message(
+            NextAddress::Address(instruction.next_address),
+            "Restore failed: file belongs to a different zcode program",
+        );
     }
 
     match zmachine.restore_state(quetzal) {
@@ -93,19 +92,19 @@ pub fn restore_post(
             Some(a) => {
                 let i = decoder::decode_instruction(zmachine, a - 3)?;
                 store_result(zmachine, &i, 2)?;
-                Ok(InstructionResult::none(i.next_address()))
+                InstructionResult::new(NextAddress::Address(i.next_address()))
             }
-            None => Ok(InstructionResult::message(
-                "Restore failed: RESTORE instruction missing store location".to_string(),
-                instruction.next_address,
-            )),
+            None => InstructionResult::message(
+                NextAddress::Address(instruction.next_address),
+                "Restore failed: RESTORE instruction missing store location",
+            ),
         },
         Err(e) => {
             store_result(zmachine, instruction, 0)?;
-            Ok(InstructionResult::message(
-                format!("Save failed: {}", e),
-                instruction.next_address,
-            ))
+            InstructionResult::message(
+                NextAddress::Address(instruction.next_address),
+                &format!("Save failed: {}", e),
+            )
         }
     }
 }
@@ -165,7 +164,7 @@ pub fn log_shift(
     };
 
     store_result(zmachine, instruction, new_value)?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn art_shift(
@@ -193,7 +192,7 @@ pub fn art_shift(
     };
 
     store_result(zmachine, instruction, new_value as u16)?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn set_font_pre(
@@ -201,11 +200,7 @@ pub fn set_font_pre(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    Ok(InstructionResult::new(
-        Directive::SetFont,
-        DirectiveRequest::set_font(operands[0]),
-        instruction.next_address,
-    ))
+    InstructionResult::set_font(NextAddress::Address(instruction.next_address), operands[0])
 }
 
 pub fn set_font_post(
@@ -214,7 +209,7 @@ pub fn set_font_post(
     old_font: u8,
 ) -> Result<InstructionResult, RuntimeError> {
     store_result(zmachine, instruction, old_font as u16)?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn save_undo(
@@ -224,7 +219,7 @@ pub fn save_undo(
     // unwrap() should be safe here because this is a store instruction
     zmachine.save_undo(instruction.store().unwrap().address())?;
     store_result(zmachine, instruction, 1)?;
-    Ok(InstructionResult::none(instruction.next_address()))
+    InstructionResult::new(NextAddress::Address(instruction.next_address()))
 }
 
 pub fn restore_undo(
@@ -236,16 +231,16 @@ pub fn restore_undo(
             Some(address) => {
                 let i = decoder::decode_instruction(zmachine, address - 3)?;
                 store_result(zmachine, &i, 2)?;
-                Ok(InstructionResult::none(i.next_address()))
+                InstructionResult::new(NextAddress::Address(i.next_address()))
             }
             None => {
                 store_result(zmachine, instruction, 0)?;
-                Ok(InstructionResult::none(instruction.next_address()))
+                InstructionResult::new(NextAddress::Address(instruction.next_address()))
             }
         },
         Err(_) => {
             store_result(zmachine, instruction, 0)?;
-            Ok(InstructionResult::none(instruction.next_address()))
+            InstructionResult::new(NextAddress::Address(instruction.next_address()))
         }
     }
 }

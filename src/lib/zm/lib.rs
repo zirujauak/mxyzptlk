@@ -11,7 +11,6 @@ pub mod object;
 pub mod quetzal;
 pub mod sound;
 pub mod text;
-pub mod types;
 pub mod zmachine;
 
 #[cfg(test)]
