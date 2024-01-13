@@ -603,6 +603,14 @@ impl InstructionResult {
         })
     }
 
+    pub fn restart(
+        next_address: NextAddress
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::restart()
+        })
+    }
     pub fn restore(
         next_address: NextAddress,
         name: &str,

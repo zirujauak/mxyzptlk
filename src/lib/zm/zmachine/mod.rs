@@ -545,6 +545,13 @@ impl InterpreterRequest {
         })
     }
 
+    pub fn restart() -> Option<InterpreterRequest> {
+        Some(InterpreterRequest {
+            request_type: RequestType::Restart,
+            request: RequestPayload::default()
+        })
+    }
+
     pub fn restore(name: &str) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::Restore,
@@ -2063,6 +2070,7 @@ impl ZMachine {
                         ))
                     } else {
                         let a = self.restore_state(quetzal)?;
+                        debug!(target: "app::instruction", "Restore: {:?}", a);
                         if let Some(address) = a {
                             let inst_a = match self.version {
                                 3 | 4 => address - 1,
@@ -2088,7 +2096,7 @@ impl ZMachine {
                                         )
                                     }
                                 },
-                                4..=8 => match i.store() {
+                                4..=8 => match inst.store() {
                                     Some(v) => {
                                         self.set_variable(v.variable(), 2)?;
                                         self.set_next_pc(inst.next_address())?;
@@ -2123,7 +2131,7 @@ impl ZMachine {
                                 4..=8 => match i.store() {
                                     Some(v) => {
                                         self.set_variable(v.variable(), 0)?;
-                                        self.set_next_pc(i.next_address());
+                                        self.set_next_pc(i.next_address())?;
                                     }
                                     None => {
                                         return fatal_error!(
