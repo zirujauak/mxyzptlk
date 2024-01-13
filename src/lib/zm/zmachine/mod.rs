@@ -16,7 +16,7 @@ use crate::{
     },
     object::property,
     quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
-    recoverable_error, text,
+    recoverable_error, text, zmachine,
 };
 
 use self::{
@@ -682,6 +682,9 @@ pub struct ResponsePayload {
 
     // SET_FONT
     font: u16,
+
+    // SOUND_EFFECT finished routine
+    routine: usize,
 }
 
 impl ResponsePayload {
@@ -703,6 +706,7 @@ pub enum ResponseType {
     RestoreComplete,
     SaveComplete,
     SetFont,
+    SoundInterrupt,
 }
 
 // Response from the interpreter to an InterpreterRequest
@@ -751,12 +755,17 @@ impl InterpreterResponse {
         })
     }
 
-    pub fn read_interrupted(input: Vec<u16>, interrupt: Interrupt) -> Option<InterpreterResponse> {
+    pub fn read_interrupted(
+        input: Vec<u16>,
+        interrupt: Interrupt,
+        routine: usize,
+    ) -> Option<InterpreterResponse> {
         Some(InterpreterResponse {
             response_type: ResponseType::ReadInterrupted,
             response: ResponsePayload {
                 input,
                 interrupt,
+                routine,
                 ..Default::default()
             },
         })
@@ -797,6 +806,16 @@ impl InterpreterResponse {
             response_type: ResponseType::SetFont,
             response: ResponsePayload {
                 font,
+                ..Default::default()
+            },
+        })
+    }
+
+    pub fn sound_interrupt(routine: usize) -> Option<InterpreterResponse> {
+        Some(InterpreterResponse {
+            response_type: ResponseType::SoundInterrupt,
+            response: ResponsePayload {
+                routine,
                 ..Default::default()
             },
         })
@@ -1901,7 +1920,14 @@ impl ZMachine {
                 }
             }
             Some(res) => match res.response_type() {
-                ResponseType::GetCursor => todo!(),
+                ResponseType::GetCursor => {
+                    let i = decode_instruction(self, self.pc()?)?;
+                    let operands = processor::operand_values(self, &i)?;
+                    self.write_word(operands[0] as usize, res.response().row)?;
+                    self.write_word(operands[0] as usize + 2, res.response().column)?;
+                    self.set_next_pc(i.next_address())?;
+                    Ok(None)
+                }
                 ResponseType::ReadComplete => {
                     let i = decoder::decode_instruction(self, self.pc()?)?;
                     let r = processor_var::read_post(self, &i, res.response().input().clone())?;
@@ -1919,7 +1945,11 @@ impl ZMachine {
                     let i = decoder::decode_instruction(self, self.pc()?)?;
                     let operands = processor::operand_values(self, &i)?;
                     let text_buffer = operands[0] as usize;
-                    let routine = self.packed_routine_address(operands[3])?;
+                    let routine = if res.response().routine > 0 {
+                        res.response().routine
+                    } else {
+                        self.packed_routine_address(operands[3])?
+                    };
 
                     if self.version < 5 {
                         for (i, c) in res.response().input.iter().enumerate() {
@@ -1931,16 +1961,36 @@ impl ZMachine {
                             self.write_byte(text_buffer + 2 + i, *c as u8)?
                         }
                     }
-                    if let NextAddress::Address(a) =
-                        self.call_read_interrupt(routine, &Vec::new(), None, self.pc()?)?
-                    {
-                        self.set_next_pc(a)?;
-                        Ok(None)
-                    } else {
-                        fatal_error!(
-                            ErrorCode::InvalidInstruction,
-                            "calling routine should return address"
-                        )
+                    match res.response().interrupt {
+                        Interrupt::ReadTimeout => {
+                            if let NextAddress::Address(a) =
+                                self.call_read_interrupt(routine, &Vec::new(), None, self.pc()?)?
+                            {
+                                self.set_next_pc(a)?;
+                                Ok(None)
+                            } else {
+                                fatal_error!(
+                                    ErrorCode::InvalidInstruction,
+                                    "calling routine should return address"
+                                )
+                            }
+                        }
+                        Interrupt::Sound => {
+                            if let NextAddress::Address(a) = self.call_routine(
+                                routine,
+                                &vec![],
+                                None,
+                                self.pc()?,
+                            )? {
+                                self.set_next_pc(a)?;
+                                Ok(None)
+                            } else {
+                                fatal_error!(
+                                    ErrorCode::InvalidInstruction,
+                                    "calling routine should return address"
+                                )
+                            }
+                        }
                     }
                 }
                 ResponseType::ReadCharComplete => {
@@ -2139,6 +2189,19 @@ impl ZMachine {
                             .variable(),
                         res.response().font,
                     )?;
+                    Ok(None)
+                }
+                ResponseType::SoundInterrupt => {
+                    let r = self.call_routine(res.response().routine, &vec![], None, self.pc()?)?;
+                    match r {
+                        NextAddress::Address(a) => self.set_next_pc(a)?,
+                        _ => {
+                            return fatal_error!(
+                                ErrorCode::InvalidInstruction,
+                                "Call routine should return an Address"
+                            )
+                        }
+                    }
                     Ok(None)
                 }
             },

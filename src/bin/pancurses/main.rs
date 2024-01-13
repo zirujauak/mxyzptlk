@@ -97,226 +97,221 @@ fn run(
     let mut response = None;
     loop {
         n += 1;
-        // if sound.routine() > 0 && !sound.is_playing() {
-        //     debug!(target: "app::sound", "Sound interrupt ${:05x}", sound.routine());
-        //     zmachine.call_routine(sound.routine(), &Vec::new(), None, zmachine.pc()?)?;
-        //     sound.clear_routine();
-        // } else {
-        log_mdc::insert("instruction_count", format!("{:8x}", n));
-        // TODO: Recoverable error handling
-        let result = zmachine.execute(response.as_ref())?;
-        // Reset the interpreter response
-        response = None;
-        if let Some(req) = result {
-            match req.request_type() {
-                RequestType::BufferMode => {
-                    screen.buffer_mode(req.request().buffer_mode());
-                }
-                RequestType::EraseWindow => {
-                    screen.erase_window(req.request().window_erase() as i8)?;
-                }
-                RequestType::GetCursor => {
-                    let (row, column) = screen.cursor();
-                    response = InterpreterResponse::get_cursor(row as u16, column as u16);
-                }
-                RequestType::Message => {
-                    screen.print_str(req.request().message());
-                }
-                RequestType::NewLine => {
-                    screen.new_line();
-                }
-                RequestType::OutputStream => {
-                    // TBD: Remove this RequestType?
-                }
-                RequestType::Print => {
-                    // TODO! Check streams before dispatching from zmachine
-                    // if zmachine.is_stream_enabled(1) && !zmachine.is_stream_enabled(3) {
-                    //     if zmachine.is_read_interrupt()? {
-                    //         zmachine.set_redraw_input()?;
+        if sound.routine() > 0 && !sound.is_playing() {
+            debug!(target: "app::sound", "Sound interrupt ${:05x}", sound.routine());
+            response = InterpreterResponse::sound_interrupt(sound.routine());
+            sound.clear_routine();
+        } else {
+            log_mdc::insert("instruction_count", format!("{:8x}", n));
+            // TODO: Recoverable error handling
+            let result = zmachine.execute(response.as_ref())?;
+            // Reset the interpreter response
+            response = None;
+            if let Some(req) = result {
+                match req.request_type() {
+                    RequestType::BufferMode => {
+                        screen.buffer_mode(req.request().buffer_mode());
+                    }
+                    RequestType::EraseWindow => {
+                        screen.erase_window(req.request().window_erase() as i8)?;
+                    }
+                    RequestType::GetCursor => {
+                        let (row, column) = screen.cursor();
+                        response = InterpreterResponse::get_cursor(row as u16, column as u16);
+                    }
+                    RequestType::Message => {
+                        screen.print_str(req.request().message());
+                    }
+                    RequestType::NewLine => {
+                        screen.new_line();
+                    }
+                    RequestType::OutputStream => {
+                        // TBD: Remove this RequestType?
+                    }
+                    RequestType::Print => {
+                        screen.print(req.request().text());
+                    }
+                    RequestType::PrintRet => {
+                        screen.print(req.request().text());
+                        screen.new_line();
+                    }
+                    RequestType::PrintTable => {
+                        let origin = screen.cursor();
+                        let rows = screen.rows();
+                        let effective_width =
+                            req.request().width() as usize + req.request().skip() as usize;
+
+                        for i in 0..req.request().height() as usize {
+                            if origin.0 + i as u32 > rows {
+                                screen.new_line();
+                                screen.move_cursor(rows, origin.1);
+                            } else {
+                                screen.move_cursor(origin.0 + i as u32, origin.1);
+                            }
+                            let mut text = Vec::new();
+                            let offset = i * effective_width;
+                            for j in 0..req.request().width() as usize {
+                                text.push(req.request().table()[offset + j])
+                            }
+                            debug!(target: "app::screen", "PRINT_TABLE: '{}'", text.iter().map(|x| (*x as u8) as char).collect::<String>());
+                            screen.print(&text);
+                        }
+                    }
+                    RequestType::Quit => {
+                        quit(screen);
+                        return Ok(());
+                    }
+                    RequestType::Read => {
+                        if zmachine.version() == 3 {
+                            let (left, right) = zmachine.status_line()?;
+                            screen.status_line(&left, &right)?;
+                        }
+                        let input = screen.read_line(
+                            req.request().input(),
+                            req.request().length() as usize,
+                            req.request().terminators(),
+                            req.request().timeout(),
+                            Some(sound),
+                        )?;
+                        // If no input was returned, or the last character in the buffer is not a terminator,
+                        // then the read must have timed out.
+                        if input.is_empty()
+                            || !req.request().terminators().contains(input.last().unwrap())
+                        {
+                            if sound.routine() > 0 && !sound.is_playing() {
+                                debug!(target: "app::screen", "Sound playback finished, dispatching sound routine");
+                                response =
+                                    InterpreterResponse::read_interrupted(input, Interrupt::Sound, sound.routine());
+                                sound.clear_routine();
+                                // zmachine.call_routine(sound.routine(), &Vec::new(), None, pc)?;
+                                // sound.clear_routine();
+                            } else {
+                                debug!(target: "app::screen", "Read timed out, dispatching read routine");
+                                response = InterpreterResponse::read_interrupted(
+                                    input,
+                                    Interrupt::ReadTimeout,
+                                    0
+                                );
+                            }
+                        } else {
+                            response = InterpreterResponse::read_complete(input);
+                        }
+                    }
+                    RequestType::ReadRedraw => {
+                        // Print the input
+                        screen.print(req.request().input());
+                    }
+
+                    // RequestType::ReadInterruptReturn => {
+                    //     // Terminate input immedicately
+                    //     if request.read_int_result() == 1 {
+                    //         let instruction =
+                    //             decoder::decode_instruction(zmachine, request.read_instruction())?;
+                    //         let pc = zmachine.read_abort(&instruction)?.next_instruction();
+                    //         zmachine.set_pc(pc)?;
+                    //     } else if request.redraw_input() {
+                    //         zmachine.set_pc(r.next_instruction())?
                     //     }
-                    screen.print(req.request().text());
-                }
-                RequestType::PrintRet => {
-                    // TODO! Check streams before dispatching from zmachine
-                    // if zmachine.is_stream_enabled(1) && !zmachine.is_stream_enabled(3) {
-                    //     if zmachine.is_read_interrupt()? {
-                    //         zmachine.set_redraw_input()?;
-                    //     }
-                    //     screen.print(request.text());
-                    //     screen.new_line();
                     // }
-                    // zmachine.output(request.text())?;
-                    // zmachine.set_pc(r.next_instruction())?
-                    screen.print(req.request().text());
-                    screen.new_line();
-                }
-                RequestType::PrintTable => {
-                    let origin = screen.cursor();
-                    let rows = screen.rows();
-                    let effective_width =
-                        req.request().width() as usize + req.request().skip() as usize;
-
-                    for i in 0..req.request().height() as usize {
-                        if origin.0 + i as u32 > rows {
-                            screen.new_line();
-                            screen.move_cursor(rows, origin.1);
+                    RequestType::ReadChar => {
+                        let key = screen.read_key(req.request().timeout())?;
+                        if key.interrupt().is_some() {
+                            if sound.routine() > 0 && !sound.is_playing() {
+                                debug!(target: "app::screen", "Sound playback finished, dispatching sound routine");
+                                response =
+                                    InterpreterResponse::read_char_interrupted(Interrupt::Sound);
+                                // zmachine.call_routine(sound.routine(), &Vec::new(), None, pc)?;
+                                // sound.clear_routine();
+                            } else {
+                                debug!(target: "app::screen", "Read character timed out, dispatching read routine");
+                                response = InterpreterResponse::read_char_interrupted(
+                                    Interrupt::ReadTimeout,
+                                );
+                            }
                         } else {
-                            screen.move_cursor(origin.0 + i as u32, origin.1);
+                            response = InterpreterResponse::read_char_complete(key);
                         }
-                        let mut text = Vec::new();
-                        let offset = i * effective_width;
-                        for j in 0..req.request().width() as usize {
-                            text.push(req.request().table()[offset + j])
-                        }
-                        debug!(target: "app::screen", "PRINT_TABLE: '{}'", text.iter().map(|x| (*x as u8) as char).collect::<String>());
-                        screen.print(&text);
                     }
-                }
-                RequestType::Quit => {
-                    quit(screen);
-                    return Ok(());
-                }
-                RequestType::Read => {
-                    if zmachine.version() == 3 {
-                        let (left, right) = zmachine.status_line()?;
-                        screen.status_line(&left, &right)?;
+                    // RequestType::ReadCharInterruptReturn => {
+                    //     debug!(target: "app::screen", "{:?}", r);
+                    //     // Terminate input immedicately
+                    //     let instruction =
+                    //         decoder::decode_instruction(zmachine, r.next_instruction())?;
+                    //     if request.read_int_result() == 1 {
+                    //         let pc = zmachine.read_char_abort(&instruction)?.next_instruction();
+                    //         zmachine.set_pc(pc)?;
+                    //     } else {
+                    //         zmachine.set_pc(r.next_instruction())?;
+                    //     }
+                    // }
+                    // RequestType::Restart => zmachine.set_pc(r.next_instruction())?,
+                    RequestType::Restore => {
+                        // Prompt for filename and read data
+                        let data =
+                            screen.prompt_and_read("Restore from: ", zmachine.name(), "ifzs")?;
+                        response = InterpreterResponse::restore(data)
                     }
-                    let input = screen.read_line(
-                        req.request().input(),
-                        req.request().length() as usize,
-                        req.request().terminators(),
-                        req.request().timeout(),
-                        Some(sound),
-                    )?;
-                    // If no input was returned, or the last character in the buffer is not a terminator,
-                    // then the read must have timed out.
-                    if input.is_empty()
-                        || !req.request().terminators().contains(input.last().unwrap())
-                    {
-                        if sound.routine() > 0 && !sound.is_playing() {
-                            debug!(target: "app::screen", "Sound playback finished, dispatching sound routine");
-                            response =
-                                InterpreterResponse::read_interrupted(input, Interrupt::Sound);
-                            // zmachine.call_routine(sound.routine(), &Vec::new(), None, pc)?;
-                            // sound.clear_routine();
-                        } else {
-                            debug!(target: "app::screen", "Read timed out, dispatching read routine");
-                            response = InterpreterResponse::read_interrupted(
-                                input,
-                                Interrupt::ReadTimeout,
-                            );
-                        }
-                    } else {
-                        response = InterpreterResponse::read_complete(input);
+                    RequestType::Save => {
+                        let r = screen.prompt_and_write(
+                            "Save to: ",
+                            zmachine.name(),
+                            "ifzs",
+                            req.request().save_data(),
+                            false,
+                        );
+                        response = InterpreterResponse::save(r.is_ok())
                     }
-                }
-                RequestType::ReadRedraw => {
-                    // Print the input
-                    screen.print(req.request().input());
-                }
 
-                // RequestType::ReadInterruptReturn => {
-                //     // Terminate input immedicately
-                //     if request.read_int_result() == 1 {
-                //         let instruction =
-                //             decoder::decode_instruction(zmachine, request.read_instruction())?;
-                //         let pc = zmachine.read_abort(&instruction)?.next_instruction();
-                //         zmachine.set_pc(pc)?;
-                //     } else if request.redraw_input() {
-                //         zmachine.set_pc(r.next_instruction())?
-                //     }
-                // }
-                RequestType::ReadChar => {
-                    let key = screen.read_key(req.request().timeout())?;
-                    if key.interrupt().is_some() {
-                        if sound.routine() > 0 && !sound.is_playing() {
-                            debug!(target: "app::screen", "Sound playback finished, dispatching sound routine");
-                            response = InterpreterResponse::read_char_interrupted(Interrupt::Sound);
-                            // zmachine.call_routine(sound.routine(), &Vec::new(), None, pc)?;
-                            // sound.clear_routine();
-                        } else {
-                            debug!(target: "app::screen", "Read character timed out, dispatching read routine");
-                            response =
-                                InterpreterResponse::read_char_interrupted(Interrupt::ReadTimeout);
-                        }
-                    } else {
-                        response = InterpreterResponse::read_char_complete(key);
+                    RequestType::SetCursor => {
+                        screen
+                            .move_cursor(req.request().row() as u32, req.request().column() as u32);
                     }
-                }
-                // RequestType::ReadCharInterruptReturn => {
-                //     debug!(target: "app::screen", "{:?}", r);
-                //     // Terminate input immedicately
-                //     let instruction =
-                //         decoder::decode_instruction(zmachine, r.next_instruction())?;
-                //     if request.read_int_result() == 1 {
-                //         let pc = zmachine.read_char_abort(&instruction)?.next_instruction();
-                //         zmachine.set_pc(pc)?;
-                //     } else {
-                //         zmachine.set_pc(r.next_instruction())?;
-                //     }
-                // }
-                // RequestType::Restart => zmachine.set_pc(r.next_instruction())?,
-                RequestType::Restore => {
-                    // Prompt for filename and read data
-                    let data = screen.prompt_and_read("Restore from: ", zmachine.name(), "ifzs")?;
-                    response = InterpreterResponse::restore(data)
-                }
-                RequestType::Save => {
-                    let r = screen.prompt_and_write(
-                        "Save to: ",
-                        zmachine.name(),
-                        "ifzs",
-                        req.request().save_data(),
-                        false,
-                    );
-                    response = InterpreterResponse::save(r.is_ok())
-                }
-
-                RequestType::SetCursor => {
-                    screen.move_cursor(req.request().row() as u32, req.request().column() as u32);
-                }
-                RequestType::SetColour => {
-                    screen.set_colors(req.request().foreground(), req.request().background())?;
-                }
-                RequestType::SetFont => {
-                    let old_font = screen.set_font(req.request().font() as u8);
-                    response = InterpreterResponse::set_font(old_font as u16);
-                }
-                RequestType::SetTextStyle => {
-                    screen.set_style(req.request().style() as u8)?;
-                }
-                RequestType::SetWindow => {
-                    screen.select_window(req.request().window_set() as u8)?;
-                }
-                RequestType::ShowStatus => {
-                    screen
-                        .status_line(req.request().status_left(), req.request().status_right())?;
-                }
-                RequestType::SoundEffect => match req.request().number() {
-                    1 | 2 => screen.beep(),
-                    _ => match req.request().effect() {
-                        1 => (),
-                        2 => {
-                            sound.play_sound(
-                                req.request().number(),
-                                req.request().volume(),
-                                Some(req.request().repeats()),
-                                req.request().routine(),
-                            )?;
-                        }
-                        3 | 4 => sound.stop_sound(),
-                        _ => (),
+                    RequestType::SetColour => {
+                        screen
+                            .set_colors(req.request().foreground(), req.request().background())?;
+                    }
+                    RequestType::SetFont => {
+                        let old_font = screen.set_font(req.request().font() as u8);
+                        response = InterpreterResponse::set_font(old_font as u16);
+                    }
+                    RequestType::SetTextStyle => {
+                        screen.set_style(req.request().style() as u8)?;
+                    }
+                    RequestType::SetWindow => {
+                        screen.select_window(req.request().window_set() as u8)?;
+                    }
+                    RequestType::ShowStatus => {
+                        screen.status_line(
+                            req.request().status_left(),
+                            req.request().status_right(),
+                        )?;
+                    }
+                    RequestType::SoundEffect => match req.request().number() {
+                        1 | 2 => screen.beep(),
+                        _ => match req.request().effect() {
+                            1 => (),
+                            2 => {
+                                sound.play_sound(
+                                    req.request().number(),
+                                    req.request().volume(),
+                                    Some(req.request().repeats()),
+                                    req.request().routine(),
+                                )?;
+                            }
+                            3 | 4 => sound.stop_sound(),
+                            _ => (),
+                        },
                     },
-                },
-                RequestType::SplitWindow => {
-                    screen.split_window(req.request().split_lines() as u32);
-                }
-                _ => {
-                    debug!("Interpreter directive: {:?}", req.request_type());
-                    return Err(RuntimeError::fatal(
-                        ErrorCode::UnimplementedInstruction,
-                        format!("{:?}", req.request_type()).to_string(),
-                    ));
+                    RequestType::SplitWindow => {
+                        screen.split_window(req.request().split_lines() as u32);
+                    }
+                    _ => {
+                        debug!("Interpreter directive: {:?}", req.request_type());
+                        return Err(RuntimeError::fatal(
+                            ErrorCode::UnimplementedInstruction,
+                            format!("{:?}", req.request_type()).to_string(),
+                        ));
+                    }
                 }
             }
         }

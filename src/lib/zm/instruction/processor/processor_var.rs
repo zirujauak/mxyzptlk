@@ -134,6 +134,8 @@ pub fn read_pre(
         _ => {}
     }
 
+    debug!(target: "app::screen", "Preload input: {:?}", preload);
+    
     // Pass max input length and timeout, if any, to the interpreter
     InstructionResult::read(
         NextAddress::Address(instruction.next_address),
