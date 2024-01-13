@@ -12,7 +12,7 @@ use crate::{
     instruction::{
         decoder::{self, decode_instruction},
         processor::{self, operand_values, processor_0op, processor_ext, processor_var},
-        Instruction, InstructionResult, NextAddress, StoreResult,
+        Instruction, InstructionResult, NextAddress, Operand, StoreResult,
     },
     object::property,
     quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
@@ -174,6 +174,7 @@ pub struct RequestPayload {
 
     // Print//PrintRet
     text: Vec<u16>,
+    transcript: bool,
 
     // PrintTable
     table: Vec<u16>,
@@ -446,21 +447,23 @@ impl InterpreterRequest {
         })
     }
 
-    pub fn print(text: Vec<u16>) -> Option<InterpreterRequest> {
+    pub fn print(text: Vec<u16>, transcript: bool) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::Print,
             request: RequestPayload {
                 text,
+                transcript,
                 ..Default::default()
             },
         })
     }
 
-    pub fn print_ret(text: Vec<u16>) -> Option<InterpreterRequest> {
+    pub fn print_ret(text: Vec<u16>, transcript: bool) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::PrintRet,
             request: RequestPayload {
                 text,
+                transcript,
                 ..Default::default()
             },
         })
@@ -1666,7 +1669,7 @@ impl ZMachine {
         &mut self,
         text: &[u16],
         next_address: NextAddress,
-        print_ret: bool
+        print_ret: bool,
     ) -> Result<InstructionResult, RuntimeError> {
         if self.is_stream_enabled(3) {
             if let Some(s) = self.stream_3.last_mut() {
@@ -1690,9 +1693,9 @@ impl ZMachine {
             }
 
             if print_ret {
-                InstructionResult::print_ret(next_address, text.to_vec())
+                InstructionResult::print_ret(next_address, text.to_vec(), self.is_stream_enabled(2))
             } else {
-                InstructionResult::print(next_address, text.to_vec())
+                InstructionResult::print(next_address, text.to_vec(), self.is_stream_enabled(2))
             }
         } else {
             InstructionResult::new(next_address)
@@ -1953,9 +1956,175 @@ impl ZMachine {
                     )?;
                     Ok(None)
                 }
-                ResponseType::ReadCharInterrupted => todo!(),
-                ResponseType::RestoreComplete => todo!(),
-                ResponseType::SaveComplete => todo!(),
+                ResponseType::ReadCharInterrupted => {
+                    let i = decoder::decode_instruction(self, self.pc()?)?;
+                    let operands = processor::operand_values(self, &i)?;
+                    let routine = self.packed_routine_address(operands[2])? as usize;
+                    if let NextAddress::Address(a) =
+                        self.call_read_interrupt(routine, &Vec::new(), None, self.pc()?)?
+                    {
+                        self.set_next_pc(a)?;
+                        Ok(None)
+                    } else {
+                        fatal_error!(
+                            ErrorCode::InvalidInstruction,
+                            "calling routine should return address"
+                        )
+                    }
+                }
+                ResponseType::RestoreComplete => {
+                    let i = decoder::decode_instruction(self, self.pc()?)?;
+                    let quetzal = Quetzal::try_from(res.response().save_data.clone())?;
+                    let ifhd = IFhd::try_from((&*self, 0))?;
+                    if &ifhd != quetzal.ifhd() {
+                        error!(target: "app::state", "Restore state was created from a different zcode program");
+                        match self.version {
+                            3 => match processor::branch(self, &i, false)? {
+                                NextAddress::Address(a) => self.set_next_pc(a)?,
+                                _ => {
+                                    return fatal_error!(
+                                        ErrorCode::InvalidInstruction,
+                                        "RESTORE branch should return an address"
+                                    )
+                                }
+                            },
+                            4..=8 => match i.store() {
+                                Some(v) => {
+                                    self.set_variable(v.variable(), 0)?;
+                                    self.set_next_pc(i.next_address());
+                                }
+                                None => {
+                                    return fatal_error!(
+                                        ErrorCode::InvalidInstruction,
+                                        "RESTORE should have a store location"
+                                    )
+                                }
+                            },
+                            _ => {
+                                return fatal_error!(
+                                    ErrorCode::UnsupportedVersion,
+                                    "Version {} is not supported",
+                                    self.version
+                                )
+                            }
+                        }
+                        Ok(InterpreterRequest::message(
+                            "Restore failed: file belongs to a different zcode program",
+                        ))
+                    } else {
+                        let a = self.restore_state(quetzal)?;
+                        if let Some(address) = a {
+                            let inst_a = match self.version {
+                                3 | 4 => address - 1,
+                                5..=8 => address - 3,
+                                _ => return fatal_error!(ErrorCode::UnsupportedVersion, "Version {} is not supported", self.version),
+                            };
+                            let inst = decoder::decode_instruction(self, inst_a)?;
+                            match self.version {
+                                3 => match processor::branch(self, &inst, true)? {
+                                    NextAddress::Address(a) => {
+                                        self.set_next_pc(a)?;
+                                    }
+                                    _ => {
+                                        return fatal_error!(
+                                            ErrorCode::InvalidInstruction,
+                                            "RESTORE branch should return an address"
+                                        )
+                                    }
+                                },
+                                4..=8 => match i.store() {
+                                    Some(v) => {
+                                        self.set_variable(v.variable(), 2)?;
+                                        self.set_next_pc(inst.next_address())?;
+                                    }
+                                    None => {
+                                        return fatal_error!(
+                                            ErrorCode::InvalidInstruction,
+                                            "RESTORE should have a store location"
+                                        )
+                                    }
+                                },
+                                _ => {
+                                    return fatal_error!(
+                                        ErrorCode::UnsupportedVersion,
+                                        "Version {} is not supported",
+                                        self.version
+                                    )
+                                }
+                            }
+                            Ok(None)
+                        } else {
+                            match self.version() {
+                                3 => match processor::branch(self, &i, false)? {
+                                    NextAddress::Address(a) => self.set_next_pc(a)?,
+                                    _ => {
+                                        return fatal_error!(
+                                            ErrorCode::InvalidInstruction,
+                                            "RESTORE branch should return an address"
+                                        )
+                                    }
+                                },
+                                4..=8 => match i.store() {
+                                    Some(v) => {
+                                        self.set_variable(v.variable(), 0)?;
+                                        self.set_next_pc(i.next_address());
+                                    }
+                                    None => {
+                                        return fatal_error!(
+                                            ErrorCode::InvalidInstruction,
+                                            "RESTORE should have a store location"
+                                        )
+                                    }
+                                },
+                                _ => {
+                                    return fatal_error!(
+                                        ErrorCode::UnsupportedVersion,
+                                        "Version {} is not supported",
+                                        self.version
+                                    )
+                                }
+                            }
+                            Ok(None)
+                        }
+                    }
+                }
+                ResponseType::SaveComplete => {
+                    let i = decoder::decode_instruction(self, self.pc()?)?;
+                    match self.version {
+                        3 => match processor::branch(self, &i, res.response().success)? {
+                            NextAddress::Address(a) => self.set_next_pc(a)?,
+                            _ => {
+                                return fatal_error!(
+                                    ErrorCode::InvalidInstruction,
+                                    "SAVE branch should return an address"
+                                )
+                            }
+                        },
+                        4..=8 => match i.store() {
+                            Some(v) => {
+                                self.set_variable(
+                                    v.variable(),
+                                    if res.response().success { 1 } else { 0 },
+                                )?;
+                                self.set_next_pc(i.next_address());
+                            }
+                            None => {
+                                return fatal_error!(
+                                    ErrorCode::InvalidInstruction,
+                                    "SAVE should have a store location"
+                                )
+                            }
+                        },
+                        _ => {
+                            return fatal_error!(
+                                ErrorCode::UnsupportedVersion,
+                                "Version {} not supported",
+                                self.version
+                            );
+                        }
+                    }
+                    Ok(None)
+                }
                 ResponseType::SetFont => {
                     let i = decoder::decode_instruction(self, self.pc()?)?;
                     self.set_variable(

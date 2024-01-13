@@ -36,7 +36,7 @@ pub fn operand_values(
     Ok(v)
 }
 
-fn branch(
+pub fn branch(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
     condition: bool,

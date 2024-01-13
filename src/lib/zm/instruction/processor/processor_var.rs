@@ -434,10 +434,7 @@ pub fn print_char(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    InstructionResult::print(
-        NextAddress::Address(instruction.next_address),
-        vec![operands[0]],
-    )
+    zmachine.output(&vec![operands[0]], NextAddress::Address(instruction.next_address), false)
 }
 
 pub fn print_num(
@@ -450,7 +447,7 @@ pub fn print_num(
     for c in s.chars() {
         text.push(c as u16);
     }
-    InstructionResult::print(NextAddress::Address(instruction.next_address), text)
+    zmachine.output(&text, NextAddress::Address(instruction.next_address), false)
 }
 
 pub fn random(

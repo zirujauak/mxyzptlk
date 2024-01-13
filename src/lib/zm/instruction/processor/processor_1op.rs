@@ -86,14 +86,7 @@ pub fn print_addr(
     let operands = operand_values(zmachine, instruction)?;
     let text = text::as_text(zmachine, operands[0] as usize, false)?;
 
-    InstructionResult::print(NextAddress::Address(instruction.next_address), text)
-    // Ok(InstructionResult::new(
-    //     Directive::Print,
-    //     DirectiveRequest::print(&text),
-    //     instruction.next_address,
-    // ))
-    // zmachine.print(&text)?;
-    // Ok(instruction.next_address())
+    zmachine.output(&text, NextAddress::Address(instruction.next_address), false)
 }
 
 pub fn call_1s(
@@ -157,9 +150,7 @@ pub fn print_obj(
     let ztext = property::short_name(zmachine, operands[0] as usize)?;
     let text = text::from_vec(zmachine, &ztext, false)?;
 
-    InstructionResult::print(NextAddress::Address(instruction.next_address), text)
-    // zmachine.print(&text)?;
-    // Ok(instruction.next_address())
+    zmachine.output(&text, NextAddress::Address(instruction.next_address), false)
 }
 
 pub fn ret(

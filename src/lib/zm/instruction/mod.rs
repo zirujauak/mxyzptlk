@@ -534,20 +534,22 @@ impl InstructionResult {
     pub fn print(
         next_address: NextAddress,
         text: Vec<u16>,
+        transcript: bool
     ) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
-            interpreter_request: InterpreterRequest::print(text),
+            interpreter_request: InterpreterRequest::print(text, transcript),
         })
     }
 
     pub fn print_ret(
         next_address: NextAddress,
         text: Vec<u16>,
+        transcript: bool
     ) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
-            interpreter_request: InterpreterRequest::print_ret(text),
+            interpreter_request: InterpreterRequest::print_ret(text, transcript),
         })
     }
 
