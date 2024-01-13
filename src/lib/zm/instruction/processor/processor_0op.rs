@@ -28,7 +28,11 @@ pub fn print(
 ) -> Result<InstructionResult, RuntimeError> {
     let ztext = zmachine.string_literal(instruction.address() + 1)?;
     let text = text::from_vec(zmachine, &ztext, false)?;
-    zmachine.output(&text, NextAddress::Address(instruction.next_address + (ztext.len() * 2)), false)
+    zmachine.output(
+        &text,
+        NextAddress::Address(instruction.next_address + (ztext.len() * 2)),
+        false,
+    )
     // if zmachine.is_read_interrupt()? {
     //     zmachine.set_redraw_input()?;
     // }

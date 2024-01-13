@@ -434,7 +434,11 @@ pub fn print_char(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    zmachine.output(&vec![operands[0]], NextAddress::Address(instruction.next_address), false)
+    zmachine.output(
+        &vec![operands[0]],
+        NextAddress::Address(instruction.next_address),
+        false,
+    )
 }
 
 pub fn print_num(

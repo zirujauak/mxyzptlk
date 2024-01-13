@@ -2017,7 +2017,13 @@ impl ZMachine {
                             let inst_a = match self.version {
                                 3 | 4 => address - 1,
                                 5..=8 => address - 3,
-                                _ => return fatal_error!(ErrorCode::UnsupportedVersion, "Version {} is not supported", self.version),
+                                _ => {
+                                    return fatal_error!(
+                                        ErrorCode::UnsupportedVersion,
+                                        "Version {} is not supported",
+                                        self.version
+                                    )
+                                }
                             };
                             let inst = decoder::decode_instruction(self, inst_a)?;
                             match self.version {

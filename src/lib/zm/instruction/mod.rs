@@ -534,7 +534,7 @@ impl InstructionResult {
     pub fn print(
         next_address: NextAddress,
         text: Vec<u16>,
-        transcript: bool
+        transcript: bool,
     ) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
@@ -545,7 +545,7 @@ impl InstructionResult {
     pub fn print_ret(
         next_address: NextAddress,
         text: Vec<u16>,
-        transcript: bool
+        transcript: bool,
     ) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
