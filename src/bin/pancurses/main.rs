@@ -7,16 +7,15 @@ use std::io::Read;
 use std::panic;
 use std::process::exit;
 
+use screen::Screen;
 use zm::blorb::Blorb;
 use zm::config::Config;
 use zm::error::{ErrorCode, RuntimeError};
 use zm::files;
-use zm::instruction::decoder;
 use zm::sound::Manager;
 use zm::zmachine::{InterpreterResponse, Interrupt, RequestType, ZMachine};
 
 use crate::log::*;
-use crate::screen::Screen;
 
 mod screen;
 
@@ -201,18 +200,6 @@ fn run(
                         // Print the input
                         screen.print(req.request().input());
                     }
-
-                    // RequestType::ReadInterruptReturn => {
-                    //     // Terminate input immedicately
-                    //     if request.read_int_result() == 1 {
-                    //         let instruction =
-                    //             decoder::decode_instruction(zmachine, request.read_instruction())?;
-                    //         let pc = zmachine.read_abort(&instruction)?.next_instruction();
-                    //         zmachine.set_pc(pc)?;
-                    //     } else if request.redraw_input() {
-                    //         zmachine.set_pc(r.next_instruction())?
-                    //     }
-                    // }
                     RequestType::ReadChar => {
                         let key = screen.read_key(req.request().timeout())?;
                         if key.interrupt().is_some() {
@@ -232,19 +219,10 @@ fn run(
                             response = InterpreterResponse::read_char_complete(key);
                         }
                     }
-                    // RequestType::ReadCharInterruptReturn => {
-                    //     debug!(target: "app::screen", "{:?}", r);
-                    //     // Terminate input immedicately
-                    //     let instruction =
-                    //         decoder::decode_instruction(zmachine, r.next_instruction())?;
-                    //     if request.read_int_result() == 1 {
-                    //         let pc = zmachine.read_char_abort(&instruction)?.next_instruction();
-                    //         zmachine.set_pc(pc)?;
-                    //     } else {
-                    //         zmachine.set_pc(r.next_instruction())?;
-                    //     }
-                    // }
-                    // RequestType::Restart => zmachine.set_pc(r.next_instruction())?,
+                    RequestType::Restart => {
+                        screen.reset();
+                        sound.stop_sound();
+                    }
                     RequestType::Restore => {
                         // Prompt for filename and read data
                         let data =
