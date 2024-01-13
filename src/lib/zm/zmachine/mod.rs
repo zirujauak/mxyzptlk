@@ -476,7 +476,7 @@ impl InterpreterRequest {
         skip: u16,
     ) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
-            request_type: RequestType::PrintRet,
+            request_type: RequestType::PrintTable,
             request: RequestPayload {
                 table,
                 width,
