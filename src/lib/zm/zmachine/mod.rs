@@ -432,7 +432,7 @@ impl InterpreterRequest {
             request: RequestPayload {
                 stream,
                 ..Default::default()
-            }
+            },
         })
     }
 
@@ -482,7 +482,7 @@ impl InterpreterRequest {
         width: u16,
         height: u16,
         skip: u16,
-        transcript: bool
+        transcript: bool,
     ) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::PrintTable,

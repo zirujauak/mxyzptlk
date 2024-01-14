@@ -4,11 +4,11 @@ use super::*;
 use crate::zmachine::ZMachine;
 
 /// Determines the type of the {operand_index} operand in {type_byte}.
-/// 
+///
 /// # Arguments
 /// * `type_byte` - byte with operand type encoding
 /// * `operand_index` - the index of the operand to decode (0..=3)
-/// 
+///
 /// # Returns
 /// [Option] containing the [OperandType], or [None]
 fn operand_type(type_byte: u8, operand_index: u8) -> Option<OperandType> {
@@ -26,11 +26,11 @@ fn operand_type(type_byte: u8, operand_index: u8) -> Option<OperandType> {
 }
 
 /// Decodes the operand type of a long form 2OP instruction
-/// 
+///
 /// # Arguments
 /// * `opcode` - opcode byte
 /// * `index` - index of the operand (0..=1)
-/// 
+///
 /// # Returns
 /// * [OperandType] of the operand
 fn long_operand_type(opcode: u8, index: u8) -> OperandType {
@@ -42,12 +42,12 @@ fn long_operand_type(opcode: u8, index: u8) -> OperandType {
 }
 
 /// Decodes all the operand types for an opcodce.
-/// 
+///
 /// # Arguments
 /// * `bytes` - array of instruction bytes
 /// * `opcode` - [Opcode] of the instruction
 /// * `offset` - current offset in the `bytes` array
-/// 
+///
 /// # Returns
 /// Tuple with the new offset into the `bytes` array and a vector of [OperandType] values.
 fn operand_types(
@@ -76,9 +76,7 @@ fn operand_types(
                 }
             }
             // 2VAR opcodes have another byte of operand types
-            if opcode.form == OpcodeForm::Var
-                && (opcode.opcode == 0xEC || opcode.opcode == 0xFA)
-            {
+            if opcode.form == OpcodeForm::Var && (opcode.opcode == 0xEC || opcode.opcode == 0xFA) {
                 let b = bytes[offset];
                 offset += 1;
                 for i in 0..4 {
@@ -95,11 +93,11 @@ fn operand_types(
 }
 
 /// Combines high- and low-byte values into a word
-/// 
+///
 /// # Arguments
 /// * `hb` - high byte
 /// * `lb` - low byte
-/// 
+///
 /// # Returns
 /// Word value
 fn word_value(hb: u8, lb: u8) -> u16 {
@@ -107,12 +105,12 @@ fn word_value(hb: u8, lb: u8) -> u16 {
 }
 
 /// Decodes the operands for an instruction.
-/// 
+///
 /// # Arguments
 /// * `bytes` - array of instruction bytes
 /// * `operand_types` - Vector of [OperandType] values
 /// * `offset` - current offset in the `bytes` array
-/// 
+///
 /// # Returns
 /// Tuple with the new offset into the `bytes` array and a vector of operand values.
 fn operands(
@@ -155,10 +153,10 @@ const STORE_INSTRUCTIONS: &[u8] = &[
 const EXT_STORE_INSTRUCTIONS: &[u8] = &[0x00, 0x01, 0x02, 0x03, 0x04, 0x09, 0x0a];
 
 /// Tests whether an opcode is a store instruction
-/// 
+///
 /// # Arguments
 /// `opcode` - [Opcode] to test
-/// 
+///
 /// # Returns
 /// True if the opcode is a store incstruction, false if not.
 fn is_store_instruction(opcode: &Opcode) -> bool {
@@ -184,13 +182,13 @@ fn is_store_instruction(opcode: &Opcode) -> bool {
 }
 
 /// Decodes the store variable for an instruction.
-/// 
+///
 /// # Arguments
 /// * 'address' - address of the current offset in memory
 /// * `bytes` - array of instruction bytes
 /// * `opcode` - [Opcode] of the instruction
 /// * `offset` - current offset in the `bytes` array
-/// 
+///
 /// # Returns
 /// [Result] with a tuple with the new offset into the `bytes` array and an [Option] containing the [StoreResult] or [None] or a [RuntimeError].
 
@@ -208,13 +206,13 @@ fn result_variable(
 }
 
 /// Calculates the destination adress of a branch.
-/// 
+///
 /// # Arguments
 /// * `address` - base address
 /// * `offset` - branch offset
-/// 
+///
 /// # Returns
-/// If the `offset` is 0 or 1, returns the `offset`, otherwise returns the `address` + `offset` 
+/// If the `offset` is 0 or 1, returns the `offset`, otherwise returns the `address` + `offset`
 fn branch_address(address: usize, offset: i16) -> usize {
     match offset {
         0 => 0,
@@ -224,12 +222,12 @@ fn branch_address(address: usize, offset: i16) -> usize {
 }
 
 /// Decodes the branch condition and destination for an instruction.
-/// 
+///
 /// # Arguments
 /// * `address` - address of the instruction in memory
 /// * `bytes` - array of instruction bytes
 /// * `offset` - current offset in the `bytes` array
-/// 
+///
 /// # Returns
 /// [Result] with a tuple with the new offset into the `bytes` array and an [Option] with the [Branch] info or [None] or a [RuntimeError].
 fn branch_condition(
@@ -269,13 +267,13 @@ fn branch_condition(
 }
 
 /// Decodes the branch information for an instruction.
-/// 
+///
 /// # Arguments
 /// * `address` - address of the instruction in memory
 /// * `bytes` - array of instruction bytes
 /// * `opcode` - [Opcode] of the instruction
 /// * `offset` - current offset in the `bytes` array
-/// 
+///
 /// # Returns
 /// A [Result} with a tuple with the new offset into the `bytes` array and an [Option] containing [Branch] information or [None] or a [RuntimeError].
 
@@ -315,12 +313,12 @@ fn branch(
 }
 
 /// Decodes the opcode for an instruction.
-/// 
+///
 /// # Arguments
 /// * `bytes` - array of instruction bytes
 /// * `version' - ZMachine version
 /// * `offset` - current offset in the `bytes` array
-/// 
+///
 /// # Returns
 /// [Result] with a tuple with the new offset into the `bytes` array and the [Opcode] or a [RuntimeError]
 fn opcode(bytes: &[u8], version: u8, offset: usize) -> Result<(usize, Opcode), RuntimeError> {
@@ -372,11 +370,11 @@ fn opcode(bytes: &[u8], version: u8, offset: usize) -> Result<(usize, Opcode), R
 }
 
 /// Decodes an instruction
-/// 
+///
 /// # Arguments
 /// * `zmachine` - Reference to the zmachine
 /// * `address` - Address of the instruction in memory
-/// 
+///
 /// # Returns
 /// [Result] containing the [Instruction] or a [RuntimeError]
 pub fn decode_instruction(

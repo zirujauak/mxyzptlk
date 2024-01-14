@@ -102,12 +102,12 @@ pub fn put_prop(
 
 /// Returns an array of input terminator characters.  For versions 5 and greater,
 /// the optional terminator table as specified in the header is read.
-/// 
+///
 /// # Arguments
 /// * `zmachine` - reference to the zmachine
-/// 
+///
 /// # Returns
-/// Vector of terminator characters, consistent of carriage return and 
+/// Vector of terminator characters, consistent of carriage return and
 /// any characters in the terminator table.
 fn terminators(zmachine: &ZMachine) -> Result<Vec<u16>, RuntimeError> {
     let mut terminators = vec!['\r' as u16];
@@ -131,10 +131,10 @@ fn terminators(zmachine: &ZMachine) -> Result<Vec<u16>, RuntimeError> {
 }
 
 /// Returns the lower-case variant of an alpha ASCII character.
-/// 
+///
 /// # Arguments
 /// * `c` - character to cast to lower-case
-/// 
+///
 /// # Returns
 /// The lower-case variant of the character if `c` is alpha, else the
 /// original character.
@@ -235,7 +235,7 @@ pub fn read_post(
     let terminator = if let Some(t) = input_buffer.last() {
         t
     } else {
-        return fatal_error!(ErrorCode::InvalidInput, "READ returned no input")
+        return fatal_error!(ErrorCode::InvalidInput, "READ returned no input");
     };
 
     let end = input_buffer.len() - 1;
@@ -316,16 +316,12 @@ pub fn print_num(
     for c in s.chars() {
         text.push(c as u16);
     }
-    zmachine.output(
-        &text,
-        Address(instruction.next_address),
-        RequestType::Print,
-    )
+    zmachine.output(&text, Address(instruction.next_address), RequestType::Print)
 }
 
 /// [RANDOM](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#random): generates a random number
 /// or seeds the RNG.
-/// 
+///
 /// If operand 0 is:
 /// * ..=-1000 - seeds the RNG with the absolute value, storing 0
 /// * -999..=0 - sets the RNG into predictable mode, returning 1..=operand[0] in sequence, storing 0
@@ -379,7 +375,7 @@ pub fn push(
 
 /// [PULL](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#pull): pulls the value on
 /// top of the stack and stores it.
-/// 
+///
 ///
 /// # Arguments
 /// * `zmachine` - Mutable reference to the zmachine
@@ -482,10 +478,7 @@ pub fn erase_window(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    InstructionResult::erase_window(
-        Address(instruction.next_address),
-        operands[0] as i16,
-    )
+    InstructionResult::erase_window(Address(instruction.next_address), operands[0] as i16)
 }
 
 /// [ERASE_LINE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#erase_line): prepares
@@ -525,11 +518,7 @@ pub fn set_cursor(
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    InstructionResult::set_cursor(
-        Address(instruction.next_address),
-        operands[0],
-        operands[1],
-    )
+    InstructionResult::set_cursor(Address(instruction.next_address), operands[0], operands[1])
 }
 
 /// [GET_CURSOR](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#get_cursor): prepares
@@ -587,9 +576,9 @@ pub fn buffer_mode(
 
 /// [SPLIT_WINDOW](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#pull): enables or disables
 /// the output stream in operand 0.  Stream 3 must include a byte address in operand 1 when enabled.
-/// 
+///
 /// If operand 0 is positive, the stream is enabled, otherwise the stream is disabled.
-/// 
+///
 /// # Arguments
 /// * `zmachine` - Mutable reference to the zmachine
 /// * `instruction` - Reference to the instruction
@@ -648,14 +637,9 @@ pub fn sound_effect_pre(
     let operands: Vec<u16> = operand_values(zmachine, instruction)?;
     let number = operands[0];
     match number {
-        1 | 2 => InstructionResult::sound_effect(
-            Address(instruction.next_address),
-            number,
-            0,
-            0,
-            0,
-            0,
-        ),
+        1 | 2 => {
+            InstructionResult::sound_effect(Address(instruction.next_address), number, 0, 0, 0, 0)
+        }
         _ => {
             let effect = operands[1];
             match effect {
@@ -736,7 +720,7 @@ pub fn read_char_pre(
 /// [SCAN_TABLE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#scan_table): scans the
 /// table at the byte address in operand 1, which is operand 2 fields long, for the value in
 /// operand 0.  
-/// 
+///
 /// If a fourth operands is present, bit 7 is set for words or clear for bytes. The remaining 7
 /// bits indicate the size of each table entry in bytes. Only the first byte or word of
 /// each entry is scanned.
@@ -859,7 +843,7 @@ pub fn call_vn2(
     )?)
 }
 
-/// [TOKENISE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#tokenise): performs lexical 
+/// [TOKENISE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#tokenise): performs lexical
 /// analysis of the text at the byte address in operand 0, with the parse buffer at the byte address in
 /// operand 1, an optional dictioary at byte address in operand 2, and an optional flag in operand 3
 /// that indicates unrecognized words should not be written to the parse buffer.
@@ -894,7 +878,7 @@ pub fn tokenise(
 
 /// [ENCODE_TEXT](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#encode_text): encodes
 /// the text at the byte address in operand 0 with length in operand 1 and starting index in operand 2, storing
-/// the result to the byte address in operand 3. 
+/// the result to the byte address in operand 3.
 ///
 /// # Arguments
 /// * `zmachine` - Mutable reference to the zmachine
@@ -926,9 +910,9 @@ pub fn encode_text(
     InstructionResult::new(Address(instruction.next_address))
 }
 
-/// [COPY_TABLE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#copy_table): copies operand 2 bytes 
+/// [COPY_TABLE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#copy_table): copies operand 2 bytes
 /// from the table at the byte address in operand 0 to the byte address in operand 1.
-/// 
+///
 /// If operand 1 is 0, then operand 2 bytes of the table at operand 0 are zeroed out.
 /// If operand 2 is postive, then the copy is performed forwards or backwards to handle any
 /// overlap between the source and destination.
@@ -969,7 +953,7 @@ pub fn copy_table(
 
 /// [PRINT_TABLE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#print_table): prepares
 /// a print table interpreter request.
-/// 
+///
 /// Prints from the table of zscii text at the byte address in operand 0, which has
 /// width in operand 1.  Height is specified by operand 2, if present, or defaults to 1.
 /// Operand 3, if present, specifies the number of characters to skip between lines,.
@@ -1005,7 +989,7 @@ pub fn print_table(
         width as u16,
         height,
         skip as u16,
-        zmachine.is_stream_enabled(2)
+        zmachine.is_stream_enabled(2),
     )
 }
 

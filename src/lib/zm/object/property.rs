@@ -1,3 +1,4 @@
+//! Object [property](https://inform-fiction.org/zmachine/standards/z1point1/sect12.html#four) utility functions
 use std::cmp::Ordering;
 
 use crate::{
@@ -8,6 +9,14 @@ use crate::{
 
 use super::object_address;
 
+/// Gets the property table byte address for an object
+///
+/// # Arguments
+/// * `zmachine` - Reference to the zmachine
+/// * `object` - Object number
+///
+/// # Returns
+/// [Result] with the byte address of the property table or a [RuntimeError]
 fn property_table_address(zmachine: &ZMachine, object: usize) -> Result<usize, RuntimeError> {
     let object_address = object_address(zmachine, object)?;
     let offset = match zmachine.version() {
@@ -19,6 +28,17 @@ fn property_table_address(zmachine: &ZMachine, object: usize) -> Result<usize, R
     Ok(result)
 }
 
+/// Gets the byte address for a specific property for an object.
+///
+/// If the property does not exist for the object, 0 is returned.
+///
+/// # Arguments
+/// * `zmachine` - Reference to the zmachine
+/// * `object` - Object number
+/// * `property` - Property number
+///
+/// # Returns
+/// [Result] with the byte address of the object's property, 0,  or a [RuntimeError]
 fn address(zmachine: &ZMachine, object: usize, property: u8) -> Result<usize, RuntimeError> {
     let property_table_address = property_table_address(zmachine, object)?;
     let header_size = zmachine.read_byte(property_table_address)? as usize;
@@ -67,6 +87,14 @@ fn address(zmachine: &ZMachine, object: usize, property: u8) -> Result<usize, Ru
     Ok(0)
 }
 
+/// Gets the size of a property
+///
+/// # Arguments
+/// * `zmachine` - Reference to the zmachine
+/// * `property_address` - Byte address of the the property
+///
+/// # Returns
+/// [Result] property size in bytes or a [RuntimeError]
 fn size(zmachine: &ZMachine, property_address: usize) -> Result<usize, RuntimeError> {
     let size_byte = zmachine.read_byte(property_address)?;
     match zmachine.version() {
@@ -86,6 +114,14 @@ fn size(zmachine: &ZMachine, property_address: usize) -> Result<usize, RuntimeEr
     }
 }
 
+/// Gets the bytes address of a property's data
+///
+/// # Arguments
+/// * `zmachine` - Reference to the zmachine
+/// * `property_address` - Byte address of the property
+///
+/// # Returns
+/// [Result] with the byte address of the property data or a [RuntimeError]
 fn data_address(zmachine: &ZMachine, property_address: usize) -> Result<usize, RuntimeError> {
     match zmachine.version() {
         3 => Ok(property_address + 1),
@@ -100,6 +136,16 @@ fn data_address(zmachine: &ZMachine, property_address: usize) -> Result<usize, R
     }
 }
 
+/// Gets the byte address of an object's property
+///
+/// If the property does not exist for the object, 0 is returned.
+/// # Arguments
+/// * `zmachine` - Reference to the zmachine
+/// * `object` - Object number
+/// * `property` - Property number
+///
+/// # Returns
+/// [Result] with the byte address of the property data, 0, or a [RuntimeError]
 pub fn property_data_address(
     zmachine: &ZMachine,
     object: usize,
@@ -113,6 +159,15 @@ pub fn property_data_address(
     }
 }
 
+/// Gets the length of a property's data
+///
+/// If the `property_data_address` is 0, 0 is returned.
+/// # Arguments
+/// * `zmachine` - Reference to the zmachine
+/// * `property_data_address` - Byte address of the property's data
+///
+/// # Returns
+/// [Result] the length of a property's data, 0, or a [RuntimeError]
 pub fn property_length(
     zmachine: &ZMachine,
     property_data_address: usize,
@@ -134,6 +189,14 @@ pub fn property_length(
     }
 }
 
+/// Gets the ztext of the short name of an object
+///
+/// # Arguments
+/// * `zmachine` - Reference to the zmachine
+/// * `object` - Object number
+///
+/// # Returns
+/// [Result] with a vector of ztext words or a [RuntimeError]
 pub fn short_name(zmachine: &ZMachine, object: usize) -> Result<Vec<u16>, RuntimeError> {
     let property_table_address = property_table_address(zmachine, object)?;
     let header_count = zmachine.read_byte(property_table_address)? as usize;
@@ -145,12 +208,32 @@ pub fn short_name(zmachine: &ZMachine, object: usize) -> Result<Vec<u16>, Runtim
     Ok(ztext)
 }
 
+/// Gets the default value of a property
+///
+/// # Arguments
+/// * `zmachine` - Reference to the zmachine
+/// * `property` - Property number
+///
+/// # Returns
+/// [Result] with the default word value of a property or a [RuntimeError]
 fn default_property(zmachine: &ZMachine, property: u8) -> Result<u16, RuntimeError> {
     let object_table = zmachine.header_word(HeaderField::ObjectTable)? as usize;
     let property_address = object_table + ((property as usize - 1) * 2);
     zmachine.read_word(property_address)
 }
 
+/// Gets the value of a property for an object
+///
+/// The property value must be either a byte or a word value. If the property does not exist
+/// for the object, the default property word value is returned.
+///
+/// # Arguments
+/// * `zmachine` - Reference to the zmachine
+/// * `object` - Object number
+/// * `property` - Property number
+///
+/// # Returns
+/// [Result] with the property value or a [RuntimeError]
 pub fn property(zmachine: &ZMachine, object: usize, property: u8) -> Result<u16, RuntimeError> {
     let property_address = address(zmachine, object, property)?;
     if property_address == 0 {
@@ -172,6 +255,18 @@ pub fn property(zmachine: &ZMachine, object: usize, property: u8) -> Result<u16,
     }
 }
 
+/// Gets the next property set on an object.
+///
+/// Properties are ordered in descending order by number.  If `property` is 0, the first property number on the object is returned.
+/// If there is no next property, 0 is returned.
+///
+/// # Arguments
+/// * `zmachine` - Reference to the zmachine
+/// * `object` - Object number
+/// * `property` - Property number
+///
+/// # Returns
+/// [Result] with the next property number set for the object, 0, or a [RuntimeError]
 pub fn next_property(zmachine: &ZMachine, object: usize, property: u8) -> Result<u8, RuntimeError> {
     if property == 0 {
         let prop_table = property_table_address(zmachine, object)?;
@@ -199,6 +294,18 @@ pub fn next_property(zmachine: &ZMachine, object: usize, property: u8) -> Result
     }
 }
 
+/// Sets the value of a proeprty for an object.
+///
+/// The property must exist on the object and must be either a byte or word value.
+///
+/// # Arguments
+/// * `zmachine` - Reference to the zmachine
+/// * `object` - Object number
+/// * `property` - Property number
+/// * `value` - Byte or word value to set
+///
+/// # Returns
+/// Empty [Result] or a [RuntimeError]
 pub fn set_property(
     zmachine: &mut ZMachine,
     object: usize,
@@ -209,7 +316,9 @@ pub fn set_property(
     if property_address == 0 {
         fatal_error!(
             ErrorCode::InvalidObjectProperty,
-            "Can't get property address for property 0"
+            "Object {} does not have property {}",
+            object,
+            property
         )
     } else {
         let property_size = size(zmachine, property_address)?;
@@ -227,8 +336,16 @@ pub fn set_property(
 
         if property_size == 1 {
             zmachine.write_byte(property_data, value as u8)
-        } else {
+        } else if property_size == 2 {
             zmachine.write_word(property_data, value)
+        } else {
+            fatal_error!(
+                ErrorCode::InvalidObjectProperty,
+                "Object {} property {} size ({}) is not a byte or a word",
+                object,
+                property,
+                property_size
+            )
         }
     }
 }

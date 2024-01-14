@@ -1,10 +1,10 @@
 //! [EXT](https://inform-fiction.org/zmachine/standards/z1point1/sect14.html#EXT)
 //! instructions: Extended form instructions.
 
+use super::*;
 use crate::recoverable_error;
 #[allow(unused)] // Documentation
 use crate::zmachine::RequestType;
-use super::*;
 
 /// [SAVE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#save): records current game state to a vector of zbytes (u8) to be saved to
 /// a storage medium by the interpreter
@@ -27,11 +27,7 @@ pub fn save_pre(
         InstructionResult::new(Address(instruction.next_address))
     } else if let Some(r) = instruction.store {
         let save_data = zmachine.save_state(r.address)?;
-        InstructionResult::save(
-            Address(instruction.address),
-            zmachine.name(),
-            save_data,
-        )
+        InstructionResult::save(Address(instruction.address), zmachine.name(), save_data)
     } else {
         return fatal_error!(
             ErrorCode::InvalidInstruction,
@@ -54,10 +50,7 @@ pub fn restore_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    InstructionResult::restore(
-        Address(instruction.next_address),
-        zmachine.name(),
-    )
+    InstructionResult::restore(Address(instruction.next_address), zmachine.name())
 }
 
 /// [LOG_SHIFT](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#log_shift): logically
