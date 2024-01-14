@@ -470,14 +470,7 @@ impl Screen {
 
             let style = self.current_style;
 
-            self.print_char_at(
-                zchar,
-                r,
-                c,
-                self.current_colors,
-                &style,
-                self.font,
-            );
+            self.print_char_at(zchar, r, c, self.current_colors, &style, self.font);
             self.advance_cursor();
         }
     }

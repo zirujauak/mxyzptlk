@@ -1,10 +1,21 @@
-use crate::{
-    quetzal::{IFhd, Quetzal},
-    recoverable_error,
-};
+//! [EXT](https://inform-fiction.org/zmachine/standards/z1point1/sect14.html#EXT)
+//! instructions: Extended form instructions.
 
+use crate::recoverable_error;
+#[allow(unused)] // Documentation
+use crate::zmachine::RequestType;
 use super::*;
 
+/// [SAVE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#save): records current game state to a vector of zbytes (u8) to be saved to
+/// a storage medium by the interpreter
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::Save] interpreter
+/// request or a [RuntimeError]
 pub fn save_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -13,11 +24,11 @@ pub fn save_pre(
     if !operands.is_empty() {
         info!(target: "app::instruction", "SAVE region not implemented yet");
         store_result(zmachine, instruction, 0)?;
-        InstructionResult::new(NextAddress::Address(instruction.next_address))
-    } else if let Some(r) = instruction.store() {
-        let save_data = zmachine.save_state(r.address())?;
+        InstructionResult::new(Address(instruction.next_address))
+    } else if let Some(r) = instruction.store {
+        let save_data = zmachine.save_state(r.address)?;
         InstructionResult::save(
-            NextAddress::Address(instruction.address),
+            Address(instruction.address),
             zmachine.name(),
             save_data,
         )
@@ -29,120 +40,36 @@ pub fn save_pre(
     }
 }
 
-pub fn save_post(
-    zmachine: &mut ZMachine,
-    instruction: &Instruction,
-    success: bool,
-) -> Result<InstructionResult, RuntimeError> {
-    let sv = if success { 1 } else { 0 };
-    store_result(zmachine, instruction, sv)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
-}
-
-// pub fn save(
-//     zmachine: &mut ZMachine,
-//     instruction: &Instruction,
-// ) -> Result<InstructionResult, RuntimeError> {
-//     let operands = operand_values(zmachine, instruction)?;
-//     if !operands.is_empty() {
-//         info!(target: "app::instruction", "SAVE auxiliary data not implemented yet");
-//         store_result(zmachine, instruction, 0)?;
-//     } else {
-//         // unwrap() should be safe here because this is a store instruction
-//         match zmachine.save(instruction.store().unwrap().address()) {
-//             Ok(_) => {
-//                 store_result(zmachine, instruction, 1)?;
-//             }
-//             Err(_) => {
-//                 store_result(zmachine, instruction, 0)?;
-//             }
-//         }
-//     }
-//     Ok(InstructionResult::none(instruction.next_address()))
-// }
-
+/// [RESTORE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#restore): records current game state to a vector of zbytes (u8) to be saved to
+/// a storage medium by the interpreter
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::Restore] interpreter
+/// request or a [RuntimeError]
 pub fn restore_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     InstructionResult::restore(
-        NextAddress::Address(instruction.next_address),
+        Address(instruction.next_address),
         zmachine.name(),
     )
 }
 
-pub fn restore_post(
-    zmachine: &mut ZMachine,
-    instruction: &Instruction,
-    save_data: Vec<u8>,
-) -> Result<InstructionResult, RuntimeError> {
-    let quetzal = Quetzal::try_from(save_data)?;
-    let ifhd = IFhd::try_from((&*zmachine, 0))?;
-    if &ifhd != quetzal.ifhd() {
-        error!(target: "app::state", "Restore state was created from a different zcode program");
-        store_result(zmachine, instruction, 0)?;
-        return InstructionResult::message(
-            NextAddress::Address(instruction.next_address),
-            "Restore failed: file belongs to a different zcode program",
-        );
-    }
-
-    match zmachine.restore_state(quetzal) {
-        Ok(address) => match address {
-            Some(a) => {
-                let i = decoder::decode_instruction(zmachine, a - 3)?;
-                store_result(zmachine, &i, 2)?;
-                InstructionResult::new(NextAddress::Address(i.next_address()))
-            }
-            None => InstructionResult::message(
-                NextAddress::Address(instruction.next_address),
-                "Restore failed: RESTORE instruction missing store location",
-            ),
-        },
-        Err(e) => {
-            store_result(zmachine, instruction, 0)?;
-            InstructionResult::message(
-                NextAddress::Address(instruction.next_address),
-                &format!("Save failed: {}", e),
-            )
-        }
-    }
-}
-
-// pub fn restore(
-//     zmachine: &mut ZMachine,
-//     instruction: &Instruction,
-// ) -> Result<InstructionResult, RuntimeError> {
-//     let operands = operand_values(zmachine, instruction)?;
-//     if !operands.is_empty() {
-//         info!(target: "app::instruction", "RESTORE auxiliary data not implemented yet");
-//         store_result(zmachine, instruction, 0)?;
-//         Ok(InstructionResult::none(instruction.next_address()))
-//     } else {
-//         match zmachine.restore() {
-//             Ok(address) => match address {
-//                 Some(a) => {
-//                     let i = decoder::decode_instruction(zmachine, a - 3)?;
-//                     store_result(zmachine, &i, 2)?;
-//                     Ok(InstructionResult::none(i.next_address()))
-//                 }
-//                 None => {
-//                     store_result(zmachine, instruction, 0)?;
-//                     Ok(InstructionResult::none(instruction.next_address()))
-//                 }
-//             },
-//             Err(e) => {
-//                 zmachine.print_str(format!("Error restoring: {}\r", e))?;
-//                 store_result(zmachine, instruction, 0)?;
-//                 Ok(InstructionResult::message(
-//                     "V5+ Restore TBD".to_string(),
-//                     instruction.next_address(),
-//                 ))
-//             }
-//         }
-//     }
-// }
-
+/// [LOG_SHIFT](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#log_shift): logically
+/// shifts the value in operand 0 by operand 1, to the left if positive and to the right
+/// if negative, storing the result. Operand 1 should be in the range -15..=15.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn log_shift(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -164,9 +91,19 @@ pub fn log_shift(
     };
 
     store_result(zmachine, instruction, new_value)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [ART_SHIFT](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#art_shift): arithmatically
+/// shifts the value in operand 0 by operand 1, to the left if positive and to the right
+/// if negative, storing the result. Operand 1 should be in the range -15..=15.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn art_shift(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -192,36 +129,55 @@ pub fn art_shift(
     };
 
     store_result(zmachine, instruction, new_value as u16)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [SET_FONT](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#set_font): sends
+/// an interpreter request to set a new font.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::SetFont] interpreter
+/// request or a [RuntimeError]
 pub fn set_font_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    InstructionResult::set_font(NextAddress::Address(instruction.next_address), operands[0])
+    InstructionResult::set_font(Address(instruction.next_address), operands[0])
 }
 
-pub fn set_font_post(
-    zmachine: &mut ZMachine,
-    instruction: &Instruction,
-    old_font: u8,
-) -> Result<InstructionResult, RuntimeError> {
-    store_result(zmachine, instruction, old_font as u16)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
-}
-
+/// [SAVE_UNDO](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#save_undo): saves the
+/// current state to memory to support the "undo" command.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn save_undo(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     // unwrap() should be safe here because this is a store instruction
-    zmachine.save_undo(instruction.store().unwrap().address())?;
+    zmachine.save_undo(instruction.store.unwrap().address)?;
     store_result(zmachine, instruction, 1)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [RESTORE_UNDO](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#restore_undo): restores
+/// the saved undo state.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn restore_undo(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -231,16 +187,16 @@ pub fn restore_undo(
             Some(address) => {
                 let i = decoder::decode_instruction(zmachine, address - 3)?;
                 store_result(zmachine, &i, 2)?;
-                InstructionResult::new(NextAddress::Address(i.next_address()))
+                InstructionResult::new(Address(i.next_address))
             }
             None => {
                 store_result(zmachine, instruction, 0)?;
-                InstructionResult::new(NextAddress::Address(instruction.next_address()))
+                InstructionResult::new(Address(instruction.next_address))
             }
         },
         Err(_) => {
             store_result(zmachine, instruction, 0)?;
-            InstructionResult::new(NextAddress::Address(instruction.next_address()))
+            InstructionResult::new(Address(instruction.next_address))
         }
     }
 }

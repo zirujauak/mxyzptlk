@@ -1,8 +1,20 @@
+//! [2OP](https://inform-fiction.org/zmachine/standards/z1point1/sect14.html#2OP)
+//! instructions: long and variable form instructions that have two (or, in some cases, more) operands.
+
 use super::*;
 use crate::error::RuntimeError;
 use crate::object::{self, attribute, property};
 use crate::zmachine::ZMachine;
 
+/// [JE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#je): branches if
+/// operands 0 is equal to any of the subsequent operands.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn je(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -17,6 +29,15 @@ pub fn je(
     InstructionResult::new(branch(zmachine, instruction, false)?)
 }
 
+/// [JL](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#jl): branches if
+/// operand 0 is less than operand 1
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn jl(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -29,6 +50,15 @@ pub fn jl(
     )?)
 }
 
+/// [JG](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#jg): branches if
+/// operand 0 is greater than operand 1
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn jg(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -41,6 +71,16 @@ pub fn jg(
     )?)
 }
 
+/// [DEC_CHK](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#dec_chk): decrements
+/// the variable specified by operand 0 in place and branches if the decremented value is less
+/// than operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn dec_chk(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -56,6 +96,16 @@ pub fn dec_chk(
     )?)
 }
 
+/// [INC_CHK](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#inc_chk): increments
+/// the variable specified by operand 0 in place and branches if the decremented value is greater
+/// than operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn inc_chk(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -71,6 +121,15 @@ pub fn inc_chk(
     )?)
 }
 
+/// [JIN](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#jin): branches if
+/// the parent of the object in operand 0 is the object in operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn jin(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -83,6 +142,15 @@ pub fn jin(
     )?)
 }
 
+/// [TEST](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#test): branches if
+/// operand 0 bitwise AND operand 1 is equal to operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn test(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -95,6 +163,15 @@ pub fn test(
     )?)
 }
 
+/// [OR](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#or): stores the
+/// bitwise OR of operand 0 with operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn or(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -106,9 +183,18 @@ pub fn or(
     }
 
     store_result(zmachine, instruction, result)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [AND](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#and): stores the
+/// bitwise AND of operand 0 with operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn and(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -120,9 +206,18 @@ pub fn and(
     }
 
     store_result(zmachine, instruction, result)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [TEST_ATTR](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#test_attr): branches if
+/// the object in operand 0 has the attribute in operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn test_attr(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -132,6 +227,15 @@ pub fn test_attr(
     InstructionResult::new(branch(zmachine, instruction, condition)?)
 }
 
+/// [SET_ATTR](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#set_attr): sets the attribute
+/// in operand 1 on the object in operand 0.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn set_attr(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -141,9 +245,18 @@ pub fn set_attr(
         attribute::set(zmachine, operands[0] as usize, operands[1] as u8)?;
     }
 
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [CLEAR_ATTR](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#clear_attr): clears the attribute
+/// in operand 1 on the object in operand 0.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn clear_attr(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -152,18 +265,36 @@ pub fn clear_attr(
     if operands[0] > 0 {
         attribute::clear(zmachine, operands[0] as usize, operands[1] as u8)?;
     }
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [STORE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#store): sets the variable
+/// referenced by operand 0 to the value in operand 1
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn store(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     zmachine.set_variable_indirect(operands[0] as u8, operands[1])?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [INSERT_OBJ](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#insert_obj): inserts the
+/// object in operand 0 as the first child of the object in operand 1.  
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn insert_obj(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -209,9 +340,18 @@ pub fn insert_obj(
         }
     }
 
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [LOADW](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#loadw): stores the word
+/// value from the word array at the byte address in operand 0, indexed by operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn loadw(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -219,9 +359,18 @@ pub fn loadw(
     let operands = operand_values(zmachine, instruction)?;
     let address = (operands[0] as isize + (operands[1] as i16 * 2) as isize) as usize;
     store_result(zmachine, instruction, zmachine.read_word(address)?)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [LOADB](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#loadb): stores the byte
+/// value from the byte array at the byte address in operand 0, indexed by operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn loadb(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -229,9 +378,19 @@ pub fn loadb(
     let operands = operand_values(zmachine, instruction)?;
     let address = (operands[0] as isize + (operands[1] as i16) as isize) as usize;
     store_result(zmachine, instruction, zmachine.read_byte(address)? as u16)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [GET_PROP](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#get_prop): stores the 1-
+/// or 2-byte value of the property in operand 1 of the object in operand 0.  If the object does not
+/// have the requested property, the default property value is stored.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn get_prop(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -245,9 +404,19 @@ pub fn get_prop(
         store_result(zmachine, instruction, value)?;
     }
 
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [GET_PROP_ADDR](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#get_prop_addr): stores the byte
+/// address of the property in operand 1 for the object in operand 0.  If the object does not have
+/// the property, 0 is stored instead.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn get_prop_addr(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -262,9 +431,19 @@ pub fn get_prop_addr(
         store_result(zmachine, instruction, value as u16)?;
     }
 
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [GET_NEXT_PROP](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#get_next_prop): stores the next
+/// property after the property in operand 1 for the object in operand 1.  If there is no next property, 0 is
+/// stored.  If operand 1 is 0, the first property number on the object is returned.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn get_next_prop(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -278,9 +457,18 @@ pub fn get_next_prop(
         store_result(zmachine, instruction, value as u16)?;
     }
 
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [ADD](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#add): performs signed
+/// addition, storing the result of adding operand 0 to operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn add(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -293,9 +481,18 @@ pub fn add(
     }
 
     store_result(zmachine, instruction, value as u16)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [SUB](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#sub): performs signed
+/// subtraction, storing the result of subtracting operand 0 from operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn sub(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -308,9 +505,18 @@ pub fn sub(
     }
 
     store_result(zmachine, instruction, value as u16)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [MUL](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#mul): performs signed
+/// multiplication, storing the result of multiplying operand 0 by operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn mul(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -323,9 +529,18 @@ pub fn mul(
     }
 
     store_result(zmachine, instruction, value as u16)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [DIV](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#div): performs signed
+/// division, storing the result of dividing operand 0 by operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn div(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -347,9 +562,18 @@ pub fn div(
     }
 
     store_result(zmachine, instruction, value as u16)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [MOD](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#mod): performs signed
+/// division, storing the remainder of dividing operand 0 by operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn modulus(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -370,27 +594,43 @@ pub fn modulus(
     }
 
     store_result(zmachine, instruction, value as u16)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [CALL_2S](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#call_2s): Calls
+/// a routine with a single argument and stores the result.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn call_2s(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-
     let address = zmachine.packed_routine_address(operands[0])?;
-    let arguments = vec![operands[1]];
 
-    InstructionResult::new(call_fn(
+    InstructionResult::new(call_routine(
         zmachine,
         address,
-        instruction.next_address(),
-        &arguments,
-        instruction.store().copied(),
+        instruction.next_address,
+        &vec![operands[1]],
+        instruction.store,
     )?)
 }
 
+/// [CALL_2N](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#call_2n): Calls
+/// a routine with a single argument and will not store the result.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn call_2n(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -400,26 +640,42 @@ pub fn call_2n(
     let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = vec![operands[1]];
 
-    InstructionResult::new(call_fn(
+    InstructionResult::new(call_routine(
         zmachine,
         address,
-        instruction.next_address(),
+        instruction.next_address,
         &arguments,
         None,
     )?)
 }
 
+/// [SET_COLOUR](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#set_colour): Sets the
+/// foreground and background colours to the values in operand 0 and operand 1, respectively.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn set_colour(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    InstructionResult::set_colour(
-        NextAddress::Address(instruction.next_address),
-        operands[0],
-        operands[1],
-    )
+    InstructionResult::set_colour(Address(instruction.next_address), operands[0], operands[1])
 }
+
+/// [THROW](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#throw): Resets
+/// the stack to the previously caught frame pointer in operand 1, returning the
+/// value in operand 0.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 
 pub fn throw(
     zmachine: &mut ZMachine,

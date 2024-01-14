@@ -1,6 +1,16 @@
-use super::*;
-use crate::{error::*, zmachine::ZMachine};
+//! Instruction decoder
 
+use super::*;
+use crate::zmachine::ZMachine;
+
+/// Determines the type of the {operand_index} operand in {type_byte}.
+/// 
+/// # Arguments
+/// * `type_byte` - byte with operand type encoding
+/// * `operand_index` - the index of the operand to decode (0..=3)
+/// 
+/// # Returns
+/// [Option] containing the [OperandType], or [None]
 fn operand_type(type_byte: u8, operand_index: u8) -> Option<OperandType> {
     // Types are packed in the byte: 00112233
     // To get type 1 (index 0), shift left 6 bits
@@ -15,6 +25,14 @@ fn operand_type(type_byte: u8, operand_index: u8) -> Option<OperandType> {
     }
 }
 
+/// Decodes the operand type of a long form 2OP instruction
+/// 
+/// # Arguments
+/// * `opcode` - opcode byte
+/// * `index` - index of the operand (0..=1)
+/// 
+/// # Returns
+/// * [OperandType] of the operand
 fn long_operand_type(opcode: u8, index: u8) -> OperandType {
     if opcode >> (6 - index) & 1 == 1 {
         OperandType::Variable
@@ -23,21 +41,30 @@ fn long_operand_type(opcode: u8, index: u8) -> OperandType {
     }
 }
 
+/// Decodes all the operand types for an opcodce.
+/// 
+/// # Arguments
+/// * `bytes` - array of instruction bytes
+/// * `opcode` - [Opcode] of the instruction
+/// * `offset` - current offset in the `bytes` array
+/// 
+/// # Returns
+/// Tuple with the new offset into the `bytes` array and a vector of [OperandType] values.
 fn operand_types(
     bytes: &[u8],
     opcode: &Opcode,
     mut offset: usize,
 ) -> Result<(usize, Vec<OperandType>), RuntimeError> {
     let mut types = Vec::new();
-    match opcode.form() {
+    match opcode.form {
         OpcodeForm::Short => {
-            if let Some(t) = operand_type(opcode.opcode(), 1) {
+            if let Some(t) = operand_type(opcode.opcode, 1) {
                 types.push(t);
             }
         }
         OpcodeForm::Long => {
-            types.push(long_operand_type(opcode.opcode(), 0));
-            types.push(long_operand_type(opcode.opcode(), 1));
+            types.push(long_operand_type(opcode.opcode, 0));
+            types.push(long_operand_type(opcode.opcode, 1));
         }
         OpcodeForm::Var | OpcodeForm::Ext => {
             let b = bytes[offset];
@@ -49,8 +76,8 @@ fn operand_types(
                 }
             }
             // 2VAR opcodes have another byte of operand types
-            if opcode.form() == &OpcodeForm::Var
-                && (opcode.opcode() == 0xEC || opcode.opcode() == 0xFA)
+            if opcode.form == OpcodeForm::Var
+                && (opcode.opcode == 0xEC || opcode.opcode == 0xFA)
             {
                 let b = bytes[offset];
                 offset += 1;
@@ -67,10 +94,27 @@ fn operand_types(
     Ok((offset, types))
 }
 
+/// Combines high- and low-byte values into a word
+/// 
+/// # Arguments
+/// * `hb` - high byte
+/// * `lb` - low byte
+/// 
+/// # Returns
+/// Word value
 fn word_value(hb: u8, lb: u8) -> u16 {
     (((hb as u16) << 8) & 0xFF00) + ((lb as u16) & 0xFF)
 }
 
+/// Decodes the operands for an instruction.
+/// 
+/// # Arguments
+/// * `bytes` - array of instruction bytes
+/// * `operand_types` - Vector of [OperandType] values
+/// * `offset` - current offset in the `bytes` array
+/// 
+/// # Returns
+/// Tuple with the new offset into the `bytes` array and a vector of operand values.
 fn operands(
     bytes: &[u8],
     operand_types: &Vec<OperandType>,
@@ -97,6 +141,7 @@ fn operands(
     Ok((offset, operands))
 }
 
+/// Store instruction opcodes
 const STORE_INSTRUCTIONS: &[u8] = &[
     0x08, 0x28, 0x48, 0x68, 0xc8, 0x09, 0x29, 0x49, 0x69, 0xc9, 0x0F, 0x2F, 0x4F, 0x6F, 0xcf, 0x10,
     0x30, 0x50, 0x70, 0xd0, 0x11, 0x31, 0x51, 0x71, 0xd1, 0x12, 0x32, 0x52, 0x72, 0xd2, 0x13, 0x33,
@@ -106,14 +151,22 @@ const STORE_INSTRUCTIONS: &[u8] = &[
     0x8e, 0x9e, 0xae, 0xe0, 0xe7, 0xec, 0xf6, 0xf7, 0xf8,
 ];
 
+/// Store instruction opcodes for EXT
 const EXT_STORE_INSTRUCTIONS: &[u8] = &[0x00, 0x01, 0x02, 0x03, 0x04, 0x09, 0x0a];
 
+/// Tests whether an opcode is a store instruction
+/// 
+/// # Arguments
+/// `opcode` - [Opcode] to test
+/// 
+/// # Returns
+/// True if the opcode is a store incstruction, false if not.
 fn is_store_instruction(opcode: &Opcode) -> bool {
-    match opcode.form() {
-        OpcodeForm::Ext => EXT_STORE_INSTRUCTIONS.to_vec().contains(&opcode.opcode()),
+    match opcode.form {
+        OpcodeForm::Ext => EXT_STORE_INSTRUCTIONS.to_vec().contains(&opcode.opcode),
         _ => {
             let mut v = STORE_INSTRUCTIONS.to_vec();
-            match opcode.version() {
+            match opcode.version {
                 3 => {}
                 4 => {
                     v.push(0xB5);
@@ -125,10 +178,21 @@ fn is_store_instruction(opcode: &Opcode) -> bool {
                 }
             }
 
-            v.contains(&opcode.opcode())
+            v.contains(&opcode.opcode)
         }
     }
 }
+
+/// Decodes the store variable for an instruction.
+/// 
+/// # Arguments
+/// * 'address' - address of the current offset in memory
+/// * `bytes` - array of instruction bytes
+/// * `opcode` - [Opcode] of the instruction
+/// * `offset` - current offset in the `bytes` array
+/// 
+/// # Returns
+/// [Result] with a tuple with the new offset into the `bytes` array and an [Option] containing the [StoreResult] or [None] or a [RuntimeError].
 
 fn result_variable(
     address: usize,
@@ -143,6 +207,14 @@ fn result_variable(
     }
 }
 
+/// Calculates the destination adress of a branch.
+/// 
+/// # Arguments
+/// * `address` - base address
+/// * `offset` - branch offset
+/// 
+/// # Returns
+/// If the `offset` is 0 or 1, returns the `offset`, otherwise returns the `address` + `offset` 
 fn branch_address(address: usize, offset: i16) -> usize {
     match offset {
         0 => 0,
@@ -151,6 +223,15 @@ fn branch_address(address: usize, offset: i16) -> usize {
     }
 }
 
+/// Decodes the branch condition and destination for an instruction.
+/// 
+/// # Arguments
+/// * `address` - address of the instruction in memory
+/// * `bytes` - array of instruction bytes
+/// * `offset` - current offset in the `bytes` array
+/// 
+/// # Returns
+/// [Result] with a tuple with the new offset into the `bytes` array and an [Option] with the [Branch] info or [None] or a [RuntimeError].
 fn branch_condition(
     address: usize,
     bytes: &[u8],
@@ -187,6 +268,17 @@ fn branch_condition(
     }
 }
 
+/// Decodes the branch information for an instruction.
+/// 
+/// # Arguments
+/// * `address` - address of the instruction in memory
+/// * `bytes` - array of instruction bytes
+/// * `opcode` - [Opcode] of the instruction
+/// * `offset` - current offset in the `bytes` array
+/// 
+/// # Returns
+/// A [Result} with a tuple with the new offset into the `bytes` array and an [Option] containing [Branch] information or [None] or a [RuntimeError].
+
 fn branch(
     address: usize,
     bytes: &[u8],
@@ -194,27 +286,27 @@ fn branch(
     offset: usize,
 ) -> Result<(usize, Option<Branch>), RuntimeError> {
     match opcode.form {
-        OpcodeForm::Ext => match opcode.instruction() {
+        OpcodeForm::Ext => match opcode.instruction {
             0x06 | 0x18 | 0x1b => branch_condition(address, bytes, offset),
             _ => Ok((offset, None)),
         },
-        _ => match opcode.operand_count() {
-            OperandCount::_0OP => match (opcode.version(), opcode.instruction()) {
+        _ => match opcode.operand_count {
+            OperandCount::_0OP => match (opcode.version, opcode.instruction) {
                 (_, 0x0d) | (_, 0x0f) => branch_condition(address, bytes, offset),
                 (3, 0x05) | (3, 0x06) => branch_condition(address, bytes, offset),
                 (_, _) => Ok((offset, None)),
             },
-            OperandCount::_1OP => match opcode.instruction() {
-                0x00 | 0x01 | 0x02 => branch_condition(address, bytes, offset),
+            OperandCount::_1OP => match opcode.instruction {
+                0x00..=0x02 => branch_condition(address, bytes, offset),
                 _ => Ok((offset, None)),
             },
-            OperandCount::_2OP => match opcode.instruction() {
+            OperandCount::_2OP => match opcode.instruction {
                 0x01 | 0x02 | 0x03 | 0x04 | 0x05 | 0x06 | 0x07 | 0x0a => {
                     branch_condition(address, bytes, offset)
                 }
                 _ => Ok((offset, None)),
             },
-            OperandCount::_VAR => match opcode.instruction() {
+            OperandCount::_VAR => match opcode.instruction {
                 0x17 | 0x1F => branch_condition(address, bytes, offset),
                 _ => Ok((offset, None)),
             },
@@ -222,6 +314,15 @@ fn branch(
     }
 }
 
+/// Decodes the opcode for an instruction.
+/// 
+/// # Arguments
+/// * `bytes` - array of instruction bytes
+/// * `version' - ZMachine version
+/// * `offset` - current offset in the `bytes` array
+/// 
+/// # Returns
+/// [Result] with a tuple with the new offset into the `bytes` array and the [Opcode] or a [RuntimeError]
 fn opcode(bytes: &[u8], version: u8, offset: usize) -> Result<(usize, Opcode), RuntimeError> {
     let mut opcode = bytes[offset];
     let (offset, form) = match opcode {
@@ -270,6 +371,14 @@ fn opcode(bytes: &[u8], version: u8, offset: usize) -> Result<(usize, Opcode), R
     ))
 }
 
+/// Decodes an instruction
+/// 
+/// # Arguments
+/// * `zmachine` - Reference to the zmachine
+/// * `address` - Address of the instruction in memory
+/// 
+/// # Returns
+/// [Result] containing the [Instruction] or a [RuntimeError]
 pub fn decode_instruction(
     zmachine: &ZMachine,
     address: usize,
@@ -816,11 +925,11 @@ mod tests {
         let o = opcode(&[0xFF, 0xBF, 0xFF], 3, 1);
         let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
-        assert_eq!(opcode.version(), 3);
-        assert_eq!(opcode.opcode(), 0xBF);
-        assert_eq!(opcode.instruction(), 0xF);
-        assert_eq!(opcode.form(), &OpcodeForm::Short);
-        assert_eq!(opcode.operand_count(), &OperandCount::_0OP);
+        assert_eq!(opcode.version, 3);
+        assert_eq!(opcode.opcode, 0xBF);
+        assert_eq!(opcode.instruction, 0xF);
+        assert_eq!(opcode.form, OpcodeForm::Short);
+        assert_eq!(opcode.operand_count, OperandCount::_0OP);
     }
 
     #[test]
@@ -829,11 +938,11 @@ mod tests {
         let o = opcode(&[0xFF, 0x8F, 0xFF], 3, 1);
         let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
-        assert_eq!(opcode.version(), 3);
-        assert_eq!(opcode.opcode(), 0x8F);
-        assert_eq!(opcode.instruction(), 0xF);
-        assert_eq!(opcode.form(), &OpcodeForm::Short);
-        assert_eq!(opcode.operand_count(), &OperandCount::_1OP);
+        assert_eq!(opcode.version, 3);
+        assert_eq!(opcode.opcode, 0x8F);
+        assert_eq!(opcode.instruction, 0xF);
+        assert_eq!(opcode.form, OpcodeForm::Short);
+        assert_eq!(opcode.operand_count, OperandCount::_1OP);
     }
 
     #[test]
@@ -842,11 +951,11 @@ mod tests {
         let o = opcode(&[0xFF, 0x9F, 0xFF], 3, 1);
         let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
-        assert_eq!(opcode.version(), 3);
-        assert_eq!(opcode.opcode(), 0x9F);
-        assert_eq!(opcode.instruction(), 0xF);
-        assert_eq!(opcode.form(), &OpcodeForm::Short);
-        assert_eq!(opcode.operand_count(), &OperandCount::_1OP);
+        assert_eq!(opcode.version, 3);
+        assert_eq!(opcode.opcode, 0x9F);
+        assert_eq!(opcode.instruction, 0xF);
+        assert_eq!(opcode.form, OpcodeForm::Short);
+        assert_eq!(opcode.operand_count, OperandCount::_1OP);
     }
 
     #[test]
@@ -855,11 +964,11 @@ mod tests {
         let o = opcode(&[0xFF, 0xAF, 0xFF], 3, 1);
         let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
-        assert_eq!(opcode.version(), 3);
-        assert_eq!(opcode.opcode(), 0xAF);
-        assert_eq!(opcode.instruction(), 0xF);
-        assert_eq!(opcode.form(), &OpcodeForm::Short);
-        assert_eq!(opcode.operand_count(), &OperandCount::_1OP);
+        assert_eq!(opcode.version, 3);
+        assert_eq!(opcode.opcode, 0xAF);
+        assert_eq!(opcode.instruction, 0xF);
+        assert_eq!(opcode.form, OpcodeForm::Short);
+        assert_eq!(opcode.operand_count, OperandCount::_1OP);
     }
 
     #[test]
@@ -868,11 +977,11 @@ mod tests {
         let o = opcode(&[0xFF, 0x1F, 0xFF], 3, 1);
         let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
-        assert_eq!(opcode.version(), 3);
-        assert_eq!(opcode.opcode(), 0x1F);
-        assert_eq!(opcode.instruction(), 0x1F);
-        assert_eq!(opcode.form(), &OpcodeForm::Long);
-        assert_eq!(opcode.operand_count(), &OperandCount::_2OP);
+        assert_eq!(opcode.version, 3);
+        assert_eq!(opcode.opcode, 0x1F);
+        assert_eq!(opcode.instruction, 0x1F);
+        assert_eq!(opcode.form, OpcodeForm::Long);
+        assert_eq!(opcode.operand_count, OperandCount::_2OP);
     }
 
     #[test]
@@ -881,11 +990,11 @@ mod tests {
         let o = opcode(&[0xFF, 0x3F, 0xFF], 3, 1);
         let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
-        assert_eq!(opcode.version(), 3);
-        assert_eq!(opcode.opcode(), 0x3F);
-        assert_eq!(opcode.instruction(), 0x1F);
-        assert_eq!(opcode.form(), &OpcodeForm::Long);
-        assert_eq!(opcode.operand_count(), &OperandCount::_2OP);
+        assert_eq!(opcode.version, 3);
+        assert_eq!(opcode.opcode, 0x3F);
+        assert_eq!(opcode.instruction, 0x1F);
+        assert_eq!(opcode.form, OpcodeForm::Long);
+        assert_eq!(opcode.operand_count, OperandCount::_2OP);
     }
 
     #[test]
@@ -894,11 +1003,11 @@ mod tests {
         let o = opcode(&[0xFF, 0x5F, 0xFF], 3, 1);
         let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
-        assert_eq!(opcode.version(), 3);
-        assert_eq!(opcode.opcode(), 0x5F);
-        assert_eq!(opcode.instruction(), 0x1F);
-        assert_eq!(opcode.form(), &OpcodeForm::Long);
-        assert_eq!(opcode.operand_count(), &OperandCount::_2OP);
+        assert_eq!(opcode.version, 3);
+        assert_eq!(opcode.opcode, 0x5F);
+        assert_eq!(opcode.instruction, 0x1F);
+        assert_eq!(opcode.form, OpcodeForm::Long);
+        assert_eq!(opcode.operand_count, OperandCount::_2OP);
     }
 
     #[test]
@@ -907,11 +1016,11 @@ mod tests {
         let o = opcode(&[0xFF, 0x7F, 0xFF], 3, 1);
         let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
-        assert_eq!(opcode.version(), 3);
-        assert_eq!(opcode.opcode(), 0x7F);
-        assert_eq!(opcode.instruction(), 0x1F);
-        assert_eq!(opcode.form(), &OpcodeForm::Long);
-        assert_eq!(opcode.operand_count(), &OperandCount::_2OP);
+        assert_eq!(opcode.version, 3);
+        assert_eq!(opcode.opcode, 0x7F);
+        assert_eq!(opcode.instruction, 0x1F);
+        assert_eq!(opcode.form, OpcodeForm::Long);
+        assert_eq!(opcode.operand_count, OperandCount::_2OP);
     }
 
     #[test]
@@ -920,11 +1029,11 @@ mod tests {
         let o = opcode(&[0xFF, 0xDF, 0xFF], 3, 1);
         let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
-        assert_eq!(opcode.version(), 3);
-        assert_eq!(opcode.opcode(), 0xDF);
-        assert_eq!(opcode.instruction(), 0x1F);
-        assert_eq!(opcode.form(), &OpcodeForm::Var);
-        assert_eq!(opcode.operand_count(), &OperandCount::_2OP);
+        assert_eq!(opcode.version, 3);
+        assert_eq!(opcode.opcode, 0xDF);
+        assert_eq!(opcode.instruction, 0x1F);
+        assert_eq!(opcode.form, OpcodeForm::Var);
+        assert_eq!(opcode.operand_count, OperandCount::_2OP);
     }
 
     #[test]
@@ -933,11 +1042,11 @@ mod tests {
         let o = opcode(&[0xFF, 0xFF, 0xFF], 3, 1);
         let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 2);
-        assert_eq!(opcode.version(), 3);
-        assert_eq!(opcode.opcode(), 0xFF);
-        assert_eq!(opcode.instruction(), 0x1F);
-        assert_eq!(opcode.form(), &OpcodeForm::Var);
-        assert_eq!(opcode.operand_count(), &OperandCount::_VAR);
+        assert_eq!(opcode.version, 3);
+        assert_eq!(opcode.opcode, 0xFF);
+        assert_eq!(opcode.instruction, 0x1F);
+        assert_eq!(opcode.form, OpcodeForm::Var);
+        assert_eq!(opcode.operand_count, OperandCount::_VAR);
     }
 
     #[test]
@@ -945,11 +1054,11 @@ mod tests {
         let o = opcode(&[0xFF, 0xBE, 0xFF, 0xFF], 5, 1);
         let (offset, opcode) = assert_ok!(o);
         assert_eq!(offset, 3);
-        assert_eq!(opcode.version(), 5);
-        assert_eq!(opcode.opcode(), 0xFF);
-        assert_eq!(opcode.instruction(), 0xFF);
-        assert_eq!(opcode.form(), &OpcodeForm::Ext);
-        assert_eq!(opcode.operand_count(), &OperandCount::_VAR);
+        assert_eq!(opcode.version, 5);
+        assert_eq!(opcode.opcode, 0xFF);
+        assert_eq!(opcode.instruction, 0xFF);
+        assert_eq!(opcode.form, OpcodeForm::Ext);
+        assert_eq!(opcode.operand_count, OperandCount::_VAR);
     }
 
     #[test]
@@ -963,18 +1072,18 @@ mod tests {
         let zmachine = mock_zmachine(map);
 
         let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
-        assert_eq!(instruction.address(), 0x600);
-        assert_eq!(instruction.opcode().version(), 3);
-        assert_eq!(instruction.opcode().opcode(), 0xBF);
-        assert_eq!(instruction.opcode().instruction(), 0xF);
-        assert_eq!(instruction.opcode().form(), &OpcodeForm::Short);
-        assert_eq!(instruction.operands(), &[]);
-        assert!(instruction.branch().is_some());
-        assert_eq!(instruction.branch().unwrap().address, 0x601);
-        assert!(instruction.branch().unwrap().condition());
-        assert_eq!(instruction.branch().unwrap().branch_address(), 0x63e);
-        assert!(instruction.store().is_none());
-        assert_eq!(instruction.next_address(), 0x602);
+        assert_eq!(instruction.address, 0x600);
+        assert_eq!(instruction.opcode.version, 3);
+        assert_eq!(instruction.opcode.opcode, 0xBF);
+        assert_eq!(instruction.opcode.instruction, 0xF);
+        assert_eq!(instruction.opcode.form, OpcodeForm::Short);
+        assert_eq!(instruction.operands, &[]);
+        assert!(instruction.branch.is_some());
+        assert_eq!(instruction.branch.unwrap().address, 0x601);
+        assert!(instruction.branch.unwrap().condition);
+        assert_eq!(instruction.branch.unwrap().branch_address, 0x63e);
+        assert!(instruction.store.is_none());
+        assert_eq!(instruction.next_address, 0x602);
     }
 
     // Store
@@ -993,20 +1102,20 @@ mod tests {
         let zmachine = mock_zmachine(map);
 
         let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
-        assert_eq!(instruction.address(), 0x600);
-        assert_eq!(instruction.opcode().version(), 3);
-        assert_eq!(instruction.opcode().opcode(), 0x83);
-        assert_eq!(instruction.opcode().instruction(), 0x3);
-        assert_eq!(instruction.opcode().form(), &OpcodeForm::Short);
+        assert_eq!(instruction.address, 0x600);
+        assert_eq!(instruction.opcode.version, 3);
+        assert_eq!(instruction.opcode.opcode, 0x83);
+        assert_eq!(instruction.opcode.instruction, 0x3);
+        assert_eq!(instruction.opcode.form, OpcodeForm::Short);
         assert_eq!(
-            instruction.operands(),
+            instruction.operands,
             &[operand(OperandType::LargeConstant, 0x1234)]
         );
-        assert!(instruction.branch().is_none());
-        let store = assert_some!(instruction.store());
-        assert_eq!(store.address(), 0x603);
-        assert_eq!(store.variable(), 0x80);
-        assert_eq!(instruction.next_address(), 0x604);
+        assert!(instruction.branch.is_none());
+        let store = assert_some!(instruction.store);
+        assert_eq!(store.address, 0x603);
+        assert_eq!(store.variable, 0x80);
+        assert_eq!(instruction.next_address, 0x604);
     }
 
     // Branch + Store
@@ -1027,23 +1136,23 @@ mod tests {
         let zmachine = mock_zmachine(map);
 
         let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
-        assert_eq!(instruction.address(), 0x600);
-        assert_eq!(instruction.opcode().version(), 3);
-        assert_eq!(instruction.opcode().opcode(), 0x91);
-        assert_eq!(instruction.opcode().instruction(), 0x1);
-        assert_eq!(instruction.opcode().form(), &OpcodeForm::Short);
+        assert_eq!(instruction.address, 0x600);
+        assert_eq!(instruction.opcode.version, 3);
+        assert_eq!(instruction.opcode.opcode, 0x91);
+        assert_eq!(instruction.opcode.instruction, 0x1);
+        assert_eq!(instruction.opcode.form, OpcodeForm::Short);
         assert_eq!(
-            instruction.operands(),
+            instruction.operands,
             &[operand(OperandType::SmallConstant, 0x12)]
         );
-        assert!(instruction.branch().is_some());
-        assert_eq!(instruction.branch().unwrap().address(), 0x603);
-        assert!(instruction.branch().unwrap().condition());
-        assert_eq!(instruction.branch().unwrap().branch_address(), 0x703);
-        assert!(instruction.store().is_some());
-        assert_eq!(instruction.store().unwrap().address(), 0x602);
-        assert_eq!(instruction.store().unwrap().variable(), 0x80);
-        assert_eq!(instruction.next_address(), 0x605);
+        assert!(instruction.branch.is_some());
+        assert_eq!(instruction.branch.unwrap().address, 0x603);
+        assert!(instruction.branch.unwrap().condition);
+        assert_eq!(instruction.branch.unwrap().branch_address, 0x703);
+        assert!(instruction.store.is_some());
+        assert_eq!(instruction.store.unwrap().address, 0x602);
+        assert_eq!(instruction.store.unwrap().variable, 0x80);
+        assert_eq!(instruction.next_address, 0x605);
     }
 
     #[test]
@@ -1058,18 +1167,18 @@ mod tests {
         let zmachine = mock_zmachine(map);
 
         let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
-        assert_eq!(instruction.address(), 0x600);
-        assert_eq!(instruction.opcode().version(), 3);
-        assert_eq!(instruction.opcode().opcode(), 0xA9);
-        assert_eq!(instruction.opcode().instruction(), 0x9);
-        assert_eq!(instruction.opcode().form(), &OpcodeForm::Short);
+        assert_eq!(instruction.address, 0x600);
+        assert_eq!(instruction.opcode.version, 3);
+        assert_eq!(instruction.opcode.opcode, 0xA9);
+        assert_eq!(instruction.opcode.instruction, 0x9);
+        assert_eq!(instruction.opcode.form, OpcodeForm::Short);
         assert_eq!(
-            instruction.operands(),
+            instruction.operands,
             &[operand(OperandType::Variable, 0x12)]
         );
-        assert!(instruction.branch().is_none());
-        assert!(instruction.store().is_none());
-        assert_eq!(instruction.next_address(), 0x602);
+        assert!(instruction.branch.is_none());
+        assert!(instruction.store.is_none());
+        assert_eq!(instruction.next_address, 0x602);
     }
 
     #[test]
@@ -1087,24 +1196,24 @@ mod tests {
         let zmachine = mock_zmachine(map);
 
         let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
-        assert_eq!(instruction.address(), 0x600);
-        assert_eq!(instruction.opcode().version(), 3);
-        assert_eq!(instruction.opcode().opcode(), 0x01);
-        assert_eq!(instruction.opcode().instruction(), 0x1);
-        assert_eq!(instruction.opcode().form(), &OpcodeForm::Long);
+        assert_eq!(instruction.address, 0x600);
+        assert_eq!(instruction.opcode.version, 3);
+        assert_eq!(instruction.opcode.opcode, 0x01);
+        assert_eq!(instruction.opcode.instruction, 0x1);
+        assert_eq!(instruction.opcode.form, OpcodeForm::Long);
         assert_eq!(
-            instruction.operands(),
+            instruction.operands,
             &[
                 operand(OperandType::SmallConstant, 0x12),
                 operand(OperandType::SmallConstant, 0x34)
             ]
         );
-        assert!(instruction.branch().is_some());
-        assert_eq!(instruction.branch().unwrap().address(), 0x603);
-        assert!(!instruction.branch().unwrap().condition());
-        assert_eq!(instruction.branch().unwrap().branch_address(), 0x641);
-        assert!(instruction.store().is_none());
-        assert_eq!(instruction.next_address(), 0x604);
+        assert!(instruction.branch.is_some());
+        assert_eq!(instruction.branch.unwrap().address, 0x603);
+        assert!(!instruction.branch.unwrap().condition);
+        assert_eq!(instruction.branch.unwrap().branch_address, 0x641);
+        assert!(instruction.store.is_none());
+        assert_eq!(instruction.next_address, 0x604);
     }
 
     #[test]
@@ -1122,23 +1231,23 @@ mod tests {
         let zmachine = mock_zmachine(map);
 
         let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
-        assert_eq!(instruction.address(), 0x600);
-        assert_eq!(instruction.opcode().version(), 3);
-        assert_eq!(instruction.opcode().opcode(), 0x28);
-        assert_eq!(instruction.opcode().instruction(), 0x8);
-        assert_eq!(instruction.opcode().form(), &OpcodeForm::Long);
+        assert_eq!(instruction.address, 0x600);
+        assert_eq!(instruction.opcode.version, 3);
+        assert_eq!(instruction.opcode.opcode, 0x28);
+        assert_eq!(instruction.opcode.instruction, 0x8);
+        assert_eq!(instruction.opcode.form, OpcodeForm::Long);
         assert_eq!(
-            instruction.operands(),
+            instruction.operands,
             &[
                 operand(OperandType::SmallConstant, 0x12),
                 operand(OperandType::Variable, 0x34)
             ]
         );
-        assert!(instruction.branch().is_none());
-        assert!(instruction.store().is_some());
-        assert_eq!(instruction.store().unwrap().address(), 0x603);
-        assert_eq!(instruction.store().unwrap().variable(), 0x80);
-        assert_eq!(instruction.next_address(), 0x604);
+        assert!(instruction.branch.is_none());
+        assert!(instruction.store.is_some());
+        assert_eq!(instruction.store.unwrap().address, 0x603);
+        assert_eq!(instruction.store.unwrap().variable, 0x80);
+        assert_eq!(instruction.next_address, 0x604);
     }
 
     #[test]
@@ -1154,21 +1263,21 @@ mod tests {
         let zmachine = mock_zmachine(map);
 
         let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
-        assert_eq!(instruction.address(), 0x600);
-        assert_eq!(instruction.opcode().version(), 3);
-        assert_eq!(instruction.opcode().opcode(), 0x4B);
-        assert_eq!(instruction.opcode().instruction(), 0xB);
-        assert_eq!(instruction.opcode().form(), &OpcodeForm::Long);
+        assert_eq!(instruction.address, 0x600);
+        assert_eq!(instruction.opcode.version, 3);
+        assert_eq!(instruction.opcode.opcode, 0x4B);
+        assert_eq!(instruction.opcode.instruction, 0xB);
+        assert_eq!(instruction.opcode.form, OpcodeForm::Long);
         assert_eq!(
-            instruction.operands(),
+            instruction.operands,
             &[
                 operand(OperandType::Variable, 0x12),
                 operand(OperandType::SmallConstant, 0x34)
             ]
         );
-        assert!(instruction.branch().is_none());
-        assert!(instruction.store().is_none());
-        assert_eq!(instruction.next_address(), 0x603);
+        assert!(instruction.branch.is_none());
+        assert!(instruction.store.is_none());
+        assert_eq!(instruction.next_address, 0x603);
     }
 
     #[test]
@@ -1186,23 +1295,23 @@ mod tests {
         let zmachine = mock_zmachine(map);
 
         let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
-        assert_eq!(instruction.address(), 0x600);
-        assert_eq!(instruction.opcode().version(), 3);
-        assert_eq!(instruction.opcode().opcode(), 0x6F);
-        assert_eq!(instruction.opcode().instruction(), 0xF);
-        assert_eq!(instruction.opcode().form(), &OpcodeForm::Long);
+        assert_eq!(instruction.address, 0x600);
+        assert_eq!(instruction.opcode.version, 3);
+        assert_eq!(instruction.opcode.opcode, 0x6F);
+        assert_eq!(instruction.opcode.instruction, 0xF);
+        assert_eq!(instruction.opcode.form, OpcodeForm::Long);
         assert_eq!(
-            instruction.operands(),
+            instruction.operands,
             &[
                 operand(OperandType::Variable, 0x12),
                 operand(OperandType::Variable, 0x34)
             ]
         );
-        assert!(instruction.branch().is_none());
-        assert!(instruction.store().is_some());
-        assert_eq!(instruction.store().unwrap().address(), 0x603);
-        assert_eq!(instruction.store().unwrap().variable(), 0x80);
-        assert_eq!(instruction.next_address(), 0x604);
+        assert!(instruction.branch.is_none());
+        assert!(instruction.store.is_some());
+        assert_eq!(instruction.store.unwrap().address, 0x603);
+        assert_eq!(instruction.store.unwrap().variable, 0x80);
+        assert_eq!(instruction.next_address, 0x604);
     }
 
     #[test]
@@ -1224,23 +1333,23 @@ mod tests {
         let zmachine = mock_zmachine(map);
 
         let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
-        assert_eq!(instruction.address(), 0x600);
-        assert_eq!(instruction.opcode().version(), 3);
-        assert_eq!(instruction.opcode().opcode(), 0xD8);
-        assert_eq!(instruction.opcode().instruction(), 0x18);
-        assert_eq!(instruction.opcode().form(), &OpcodeForm::Var);
+        assert_eq!(instruction.address, 0x600);
+        assert_eq!(instruction.opcode.version, 3);
+        assert_eq!(instruction.opcode.opcode, 0xD8);
+        assert_eq!(instruction.opcode.instruction, 0x18);
+        assert_eq!(instruction.opcode.form, OpcodeForm::Var);
         assert_eq!(
-            instruction.operands(),
+            instruction.operands,
             &[
                 operand(OperandType::LargeConstant, 0x1234),
                 operand(OperandType::LargeConstant, 0x5678)
             ]
         );
-        assert!(instruction.branch().is_none());
-        assert!(instruction.store().is_some());
-        assert_eq!(instruction.store().unwrap().address(), 0x606);
-        assert_eq!(instruction.store().unwrap().variable(), 0x80);
-        assert_eq!(instruction.next_address(), 0x607);
+        assert!(instruction.branch.is_none());
+        assert!(instruction.store.is_some());
+        assert_eq!(instruction.store.unwrap().address, 0x606);
+        assert_eq!(instruction.store.unwrap().variable, 0x80);
+        assert_eq!(instruction.next_address, 0x607);
     }
 
     #[test]
@@ -1258,18 +1367,18 @@ mod tests {
         let zmachine = mock_zmachine(map);
 
         let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
-        assert_eq!(instruction.address(), 0x600);
-        assert_eq!(instruction.opcode().version(), 3);
-        assert_eq!(instruction.opcode().opcode(), 0xE6);
-        assert_eq!(instruction.opcode().instruction(), 0x6);
-        assert_eq!(instruction.opcode().form(), &OpcodeForm::Var);
+        assert_eq!(instruction.address, 0x600);
+        assert_eq!(instruction.opcode.version, 3);
+        assert_eq!(instruction.opcode.opcode, 0xE6);
+        assert_eq!(instruction.opcode.instruction, 0x6);
+        assert_eq!(instruction.opcode.form, OpcodeForm::Var);
         assert_eq!(
-            instruction.operands(),
+            instruction.operands,
             &[operand(OperandType::LargeConstant, 0x1234)]
         );
-        assert!(instruction.branch().is_none());
-        assert!(instruction.store().is_none());
-        assert_eq!(instruction.next_address(), 0x604);
+        assert!(instruction.branch.is_none());
+        assert!(instruction.store.is_none());
+        assert_eq!(instruction.next_address, 0x604);
     }
 
     #[test]
@@ -1290,22 +1399,22 @@ mod tests {
         let zmachine = mock_zmachine(map);
 
         let instruction = assert_ok!(decode_instruction(&zmachine, 0x600));
-        assert_eq!(instruction.address(), 0x600);
-        assert_eq!(instruction.opcode().version(), 5);
-        assert_eq!(instruction.opcode().opcode(), 0x02);
-        assert_eq!(instruction.opcode().instruction(), 0x02);
-        assert_eq!(instruction.opcode().form(), &OpcodeForm::Ext);
+        assert_eq!(instruction.address, 0x600);
+        assert_eq!(instruction.opcode.version, 5);
+        assert_eq!(instruction.opcode.opcode, 0x02);
+        assert_eq!(instruction.opcode.instruction, 0x02);
+        assert_eq!(instruction.opcode.form, OpcodeForm::Ext);
         assert_eq!(
-            instruction.operands(),
+            instruction.operands,
             &[
                 operand(OperandType::SmallConstant, 0x12),
                 operand(OperandType::SmallConstant, 0x34)
             ]
         );
-        assert!(instruction.branch().is_none());
-        assert!(instruction.store().is_some());
-        assert_eq!(instruction.store().unwrap().address(), 0x605);
-        assert_eq!(instruction.store().unwrap().variable(), 0x80);
-        assert_eq!(instruction.next_address(), 0x606);
+        assert!(instruction.branch.is_none());
+        assert!(instruction.store.is_some());
+        assert_eq!(instruction.store.unwrap().address, 0x605);
+        assert_eq!(instruction.store.unwrap().variable, 0x80);
+        assert_eq!(instruction.next_address, 0x606);
     }
 }

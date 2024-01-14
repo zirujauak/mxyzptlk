@@ -6,6 +6,7 @@ pub mod decoder;
 pub mod processor;
 
 #[derive(Debug, Eq, PartialEq)]
+/// [Opcode forms](https://inform-fiction.org/zmachine/standards/z1point1/sect04.html#three)
 pub enum OpcodeForm {
     Short,
     Long,
@@ -14,6 +15,7 @@ pub enum OpcodeForm {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// [Operand types](https://inform-fiction.org/zmachine/standards/z1point1/sect04.html#two)
 pub enum OperandType {
     LargeConstant,
     SmallConstant,
@@ -21,8 +23,11 @@ pub enum OperandType {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+/// [Operands](https://inform-fiction.org/zmachine/standards/z1point1/sect04.html#five)
 pub struct Operand {
+    /// The [OperandType]
     operand_type: OperandType,
+    /// Operand value
     value: u16,
 }
 
@@ -45,26 +50,27 @@ impl fmt::Display for Operand {
 }
 
 impl Operand {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `operand_type` - [OperandType]
+    /// * `value` - Operand value
     pub fn new(operand_type: OperandType, value: u16) -> Operand {
         Operand {
             operand_type,
             value,
         }
     }
-
-    fn operand_type(&self) -> OperandType {
-        self.operand_type
-    }
-
-    fn value(&self) -> u16 {
-        self.value
-    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
+/// Branching information
 pub struct Branch {
+    /// Address of the (first) branch descriptor byte
     address: usize,
+    /// Branch-on condition
     condition: bool,
+    /// Address of the branch destination
     branch_address: usize,
 }
 
@@ -80,6 +86,12 @@ impl fmt::Display for Branch {
 }
 
 impl Branch {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `address` - address of the (first) branch descriptor byte
+    /// * `condition` - branch-on condition
+    /// * `branch_address` - branch destination address
     pub fn new(address: usize, condition: bool, branch_address: usize) -> Branch {
         Branch {
             address,
@@ -87,23 +99,14 @@ impl Branch {
             branch_address,
         }
     }
-
-    fn address(&self) -> usize {
-        self.address
-    }
-
-    fn condition(&self) -> bool {
-        self.condition
-    }
-
-    fn branch_address(&self) -> usize {
-        self.branch_address
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Where the result of an instruction will be stored
 pub struct StoreResult {
+    /// Address of the store result descriptor byte
     address: usize,
+    /// Variable to store to
     variable: u8,
 }
 
@@ -120,12 +123,13 @@ impl fmt::Display for StoreResult {
 }
 
 impl StoreResult {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `address` - Address of the store descriptor byte
+    /// * `variable` - Variable to store to
     pub fn new(address: usize, variable: u8) -> StoreResult {
         StoreResult { address, variable }
-    }
-
-    pub fn address(&self) -> usize {
-        self.address
     }
 
     pub fn variable(&self) -> u8 {
@@ -134,6 +138,7 @@ impl StoreResult {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+/// [Operand count](https://inform-fiction.org/zmachine/standards/z1point1/sect04.html#five)
 pub enum OperandCount {
     _0OP,
     _1OP,
@@ -142,6 +147,7 @@ pub enum OperandCount {
 }
 
 #[derive(Debug)]
+/// Opcode
 pub struct Opcode {
     version: u8,
     opcode: u8,
@@ -156,7 +162,7 @@ impl fmt::Display for Opcode {
             f,
             "{}",
             match self.form {
-                OpcodeForm::Ext => match self.instruction() {
+                OpcodeForm::Ext => match self.instruction {
                     0x00 => "SAVE",
                     0x01 => "RESTORE",
                     0x02 => "LOG_SHIFT",
@@ -187,8 +193,8 @@ impl fmt::Display for Opcode {
                     0x1D => "BUFFER_SCREEN",
                     _ => "UNKNOWN!",
                 },
-                _ => match self.operand_count() {
-                    OperandCount::_0OP => match self.instruction() {
+                _ => match self.operand_count {
+                    OperandCount::_0OP => match self.instruction {
                         0x0 => "RTRUE",
                         0x1 => "RFALSE",
                         0x2 => "PRINT",
@@ -199,7 +205,7 @@ impl fmt::Display for Opcode {
                         0x7 => "RESTART",
                         0x8 => "RET_POPPED",
                         0x9 => {
-                            if self.version() < 5 {
+                            if self.version < 5 {
                                 "POP"
                             } else {
                                 "CATCH"
@@ -212,7 +218,7 @@ impl fmt::Display for Opcode {
                         0xF => "PIRACY",
                         _ => "UNKNOWN!",
                     },
-                    OperandCount::_1OP => match self.instruction() {
+                    OperandCount::_1OP => match self.instruction {
                         0x0 => "JZ",
                         0x1 => "GET_SIBLING",
                         0x2 => "GET_CHILD",
@@ -237,7 +243,7 @@ impl fmt::Display for Opcode {
                         }
                         _ => "UNKNOWN!",
                     },
-                    OperandCount::_2OP => match self.instruction() {
+                    OperandCount::_2OP => match self.instruction {
                         0x01 => "JE",
                         0x02 => "JL",
                         0x03 => "JG",
@@ -268,7 +274,7 @@ impl fmt::Display for Opcode {
                         0x1C => "THROW",
                         _ => "UNKNOWN!",
                     },
-                    OperandCount::_VAR => match self.instruction() {
+                    OperandCount::_VAR => match self.instruction {
                         0x00 => {
                             if self.version < 4 {
                                 "CALL"
@@ -337,56 +343,45 @@ impl Opcode {
             operand_count,
         }
     }
-
-    pub fn version(&self) -> u8 {
-        self.version
-    }
-
-    pub fn opcode(&self) -> u8 {
-        self.opcode
-    }
-    pub fn form(&self) -> &OpcodeForm {
-        &self.form
-    }
-
-    pub fn instruction(&self) -> u8 {
-        self.instruction
-    }
-
-    pub fn operand_count(&self) -> &OperandCount {
-        &self.operand_count
-    }
 }
 
 #[derive(Debug)]
+/// [Instruction](https://inform-fiction.org/zmachine/standards/z1point1/sect04.html#one)
 pub struct Instruction {
+    /// Vector of bytes that (may) belong to the instruction
     bytes: Vec<u8>,
+    /// Address of the instruction in memory
     address: usize,
+    /// Instruction [Opcode]
     opcode: Opcode,
+    /// Vector of [Operand] values
     operands: Vec<Operand>,
+    /// [Option] containing the [StoreResult] if the instruction stores a result
     store: Option<StoreResult>,
+    /// [Option] containing the [Branch] information if the instruction branches
     branch: Option<Branch>,
+    /// Address of the instruction immediately following this one in memory
     next_address: usize,
 }
 
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "${:05x}: ", self.address())?;
+        write!(f, "${:05x}: ", self.address)?;
         for b in &self.bytes {
             write!(f, "{:02x} ", b)?;
         }
 
-        write!(f, " {}", self.opcode())?;
+        write!(f, " {}", self.opcode)?;
 
-        for o in self.operands() {
+        for o in &self.operands {
             write!(f, " {}", o)?;
         }
 
-        if let Some(s) = self.store() {
+        if let Some(s) = self.store {
             write!(f, " -> {}", s)?
         }
 
-        if let Some(b) = self.branch() {
+        if let Some(b) = &self.branch {
             write!(f, " {}", b)?
         }
 
@@ -415,18 +410,6 @@ impl Instruction {
         }
     }
 
-    pub fn address(&self) -> usize {
-        self.address
-    }
-
-    fn opcode(&self) -> &Opcode {
-        &self.opcode
-    }
-
-    fn operands(&self) -> &Vec<Operand> {
-        &self.operands
-    }
-
     pub fn store(&self) -> Option<&StoreResult> {
         self.store.as_ref()
     }
@@ -441,20 +424,32 @@ impl Instruction {
 }
 
 #[derive(Debug)]
+/// Address of the next instruction to execute
 pub enum NextAddress {
+    /// Simple address
     Address(usize),
+    /// Returning from a READ_CHAR interrupt routine
     ReadCharInterrupt(usize, u16),
+    /// Returning from a READ interrupt routine
     ReadInterrupt(usize, u16, bool),
+    /// QUITting
     Quit,
 }
 
 #[derive(Debug)]
+/// Instruction result
 pub struct InstructionResult {
+    /// [NextAddress] to execute
     next_address: NextAddress,
+    /// [Option] with any [InterpreterRequest] necessary to complete the instruction execution
     interpreter_request: Option<InterpreterRequest>,
 }
 
 impl InstructionResult {
+    /// Constructor for a simple result with no intepreter request
+    ///
+    /// # Arguments
+    /// * `next_address` - [NextAddress] to execute
     pub fn new(next_address: NextAddress) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
@@ -462,14 +457,21 @@ impl InstructionResult {
         })
     }
 
+    /// The [NextAddress] to execute
     pub fn next_address(&self) -> &NextAddress {
         &self.next_address
     }
 
+    /// [Option] with any [InterpreterRequest] required by the instruction
     pub fn interpreter_request(&self) -> Option<&InterpreterRequest> {
         self.interpreter_request.as_ref()
     }
 
+    /// Constructor for a request to have the interpreter display a message and continue
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `message` - message string
     pub fn message(
         next_address: NextAddress,
         message: &str,
@@ -480,6 +482,11 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to update the buffer mode
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `mode` - buffer mode
     pub fn buffer_mode(
         next_address: NextAddress,
         mode: u16,
@@ -490,6 +497,10 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to erase from the cursor position to the end of the line.
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
     pub fn erase_line(next_address: NextAddress) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
@@ -497,6 +508,11 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to erase a window
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `window` - window to erase
     pub fn erase_window(
         next_address: NextAddress,
         window: i16,
@@ -507,6 +523,10 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to get the current cursor position
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
     pub fn get_cursor(next_address: NextAddress) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
@@ -514,6 +534,25 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to enable or disable an input stream
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `stream` - input stream
+    pub fn input_stream(
+        next_address: NextAddress,
+        stream: i16,
+    ) -> Result<InstructionResult, RuntimeError> {
+        Ok(InstructionResult {
+            next_address,
+            interpreter_request: InterpreterRequest::input_stream(stream),
+        })
+    }
+
+    /// Constructor for a request to print a new line
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
     pub fn new_line(next_address: NextAddress) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
@@ -521,6 +560,11 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to enable or disable an output stream
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `stream` - output stream
     pub fn output_stream(
         next_address: NextAddress,
         stream: i16,
@@ -531,6 +575,12 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to print text
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `text` - text to print
+    /// * `transcript` - if true, text should also be recorded to the transcript
     pub fn print(
         next_address: NextAddress,
         text: Vec<u16>,
@@ -542,6 +592,13 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to print text, followed by a new line, and then
+    /// return true from the current routine
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `text` - text to print
+    /// * `transcript` - if true, text should also be recorded to the transcript
     pub fn print_ret(
         next_address: NextAddress,
         text: Vec<u16>,
@@ -553,19 +610,35 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to print a table
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `table` - table data
+    /// * `width` - row width
+    /// * `height` - table height
+    /// * `skip` - number of bytes to skip between lines
+    /// * `transcript` - if true, text should also be recorded to the transcript
     pub fn print_table(
         next_address: NextAddress,
         table: Vec<u16>,
         width: u16,
         height: u16,
         skip: u16,
+        transcript: bool,
     ) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
-            interpreter_request: InterpreterRequest::print_table(table, width, height, skip),
+            interpreter_request: InterpreterRequest::print_table(
+                table, width, height, skip, transcript,
+            ),
         })
     }
 
+    /// Constructor for a request to quit
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
     pub fn quit() -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address: NextAddress::Quit,
@@ -573,6 +646,15 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to read input
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `length` - maximum number of characters, including terminator
+    /// * `terminators` - vector of input terminators
+    /// * `timeout` - read timeout
+    /// * `input` - existing input
+    /// * `redraw` - if true, existing input should be printed to the screen
     pub fn read(
         next_address: NextAddress,
         length: u8,
@@ -593,6 +675,11 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to read a single character
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `timeout` - read timeout
     pub fn read_char(
         next_address: NextAddress,
         timeout: u16,
@@ -603,14 +690,22 @@ impl InstructionResult {
         })
     }
 
-    pub fn restart(
-        next_address: NextAddress
-    ) -> Result<InstructionResult, RuntimeError> {
+    /// Constructor for a request to restart
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    pub fn restart(next_address: NextAddress) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
-            interpreter_request: InterpreterRequest::restart()
+            interpreter_request: InterpreterRequest::restart(),
         })
     }
+
+    /// Constructor for a request to restore from a saved game
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `name` - zcode base filename
     pub fn restore(
         next_address: NextAddress,
         name: &str,
@@ -621,6 +716,12 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to save the game
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `name` - zcode base filename
+    /// * `data` - Byte vector of save date
     pub fn save(
         next_address: NextAddress,
         name: &str,
@@ -632,6 +733,12 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to set test colours
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `foreground` - foreground colour
+    /// * `background` - background colour
     pub fn set_colour(
         next_address: NextAddress,
         foreground: u16,
@@ -643,6 +750,12 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to set the cursor
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `row` - cursor row
+    /// * `column` - cursor column    
     pub fn set_cursor(
         next_address: NextAddress,
         row: u16,
@@ -654,6 +767,11 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to set the font
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `font` - font number
     pub fn set_font(
         next_address: NextAddress,
         font: u16,
@@ -664,6 +782,11 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to set the text style
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `style` - text style(s)
     pub fn set_text_style(
         next_address: NextAddress,
         style: u16,
@@ -674,6 +797,11 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to set the active window
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `window` - window to activate
     pub fn set_window(
         next_address: NextAddress,
         window: u16,
@@ -684,6 +812,12 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to draw the status line
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `left` - text for the left side of the status line
+    /// * `right` - text for the right side of the status line
     pub fn show_status(
         next_address: NextAddress,
         left: Vec<u16>,
@@ -695,6 +829,15 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to play or stop a sound effect
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `number` - sound effect operation
+    /// * `effect` - sound effect
+    /// * `volume` - playback volume
+    /// * `repeats` - number of times to play the effect
+    /// * `routine` - address of a routine to execute when the sound finished
     pub fn sound_effect(
         next_address: NextAddress,
         number: u16,
@@ -711,6 +854,11 @@ impl InstructionResult {
         })
     }
 
+    /// Constructor for a request to split or unsplit the screen
+    ///
+    /// # Arguments:
+    /// * `next_address` - [NextAddress] to execute
+    /// * `lines` - lines to split
     pub fn split_window(
         next_address: NextAddress,
         lines: u16,

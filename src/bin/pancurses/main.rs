@@ -179,8 +179,11 @@ fn run(
                         {
                             if sound.routine() > 0 && !sound.is_playing() {
                                 debug!(target: "app::screen", "Sound playback finished, dispatching sound routine");
-                                response =
-                                    InterpreterResponse::read_interrupted(input, Interrupt::Sound, sound.routine());
+                                response = InterpreterResponse::read_interrupted(
+                                    input,
+                                    Interrupt::Sound,
+                                    sound.routine(),
+                                );
                                 sound.clear_routine();
                                 // zmachine.call_routine(sound.routine(), &Vec::new(), None, pc)?;
                                 // sound.clear_routine();
@@ -189,7 +192,7 @@ fn run(
                                 response = InterpreterResponse::read_interrupted(
                                     input,
                                     Interrupt::ReadTimeout,
-                                    0
+                                    0,
                                 );
                             }
                         } else {

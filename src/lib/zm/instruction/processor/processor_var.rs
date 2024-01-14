@@ -1,14 +1,26 @@
+//! [VAR](https://inform-fiction.org/zmachine/standards/z1point1/sect14.html#VAR)
+//! instructions: Variable form instructions.
+
 use crate::{
     error::{ErrorCode, RuntimeError},
     fatal_error,
-    instruction::{processor::store_result, Instruction, InstructionResult, NextAddress},
+    instruction::{processor::store_result, Instruction, InstructionResult, NextAddress::Address},
     object::property,
     recoverable_error, text,
-    zmachine::{header::HeaderField, InputEvent, ZMachine},
+    zmachine::{header::HeaderField, RequestType, ZMachine},
 };
 
-use super::{branch, call_fn, operand_values};
+use super::{branch, call_routine, operand_values};
 
+/// [CALL/CALL_VS](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#call): calls the
+/// routine at the packed address in operand 0 with any additional operands as arguments.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn call_vs(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -17,15 +29,24 @@ pub fn call_vs(
     let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = &operands[1..].to_vec();
 
-    InstructionResult::new(call_fn(
+    InstructionResult::new(call_routine(
         zmachine,
         address,
-        instruction.next_address(),
+        instruction.next_address,
         arguments,
-        instruction.store().copied(),
+        instruction.store,
     )?)
 }
 
+/// [STOREW](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#storew): writes the
+/// word value in operand 2 to the array at byte address in operand 0 indexed by operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn storew(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -33,9 +54,18 @@ pub fn storew(
     let operands = operand_values(zmachine, instruction)?;
     let address = operands[0] as isize + (operands[1] as i16 * 2) as isize;
     zmachine.write_word(address as usize, operands[2])?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [STOREB](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#storeb): writes the
+/// byte value in operand 2 to the array at byte address in operand 0 indexed by operand 1.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn storeb(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -43,9 +73,18 @@ pub fn storeb(
     let operands = operand_values(zmachine, instruction)?;
     let address = operands[0] as isize + (operands[1] as i16) as isize;
     zmachine.write_byte(address as usize, operands[2] as u8)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [PUT_PROP](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#put_prop): sets the 1-
+/// or 2-byte property in operand 1 on the object in operand 0 to the value in operand 2.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn put_prop(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -58,9 +97,18 @@ pub fn put_prop(
         operands[1] as u8,
         operands[2],
     )?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// Returns an array of input terminator characters.  For versions 5 and greater,
+/// the optional terminator table as specified in the header is read.
+/// 
+/// # Arguments
+/// * `zmachine` - reference to the zmachine
+/// 
+/// # Returns
+/// Vector of terminator characters, consistent of carriage return and 
+/// any characters in the terminator table.
 fn terminators(zmachine: &ZMachine) -> Result<Vec<u16>, RuntimeError> {
     let mut terminators = vec!['\r' as u16];
 
@@ -82,7 +130,15 @@ fn terminators(zmachine: &ZMachine) -> Result<Vec<u16>, RuntimeError> {
     Ok(terminators)
 }
 
-pub fn to_lower_case(c: u16) -> u8 {
+/// Returns the lower-case variant of an alpha ASCII character.
+/// 
+/// # Arguments
+/// * `c` - character to cast to lower-case
+/// 
+/// # Returns
+/// The lower-case variant of the character if `c` is alpha, else the
+/// original character.
+fn to_lower_case(c: u16) -> u8 {
     // Uppercase ASCII is 0x41 - 0x5A
     if c > 0x40 && c < 0x5b {
         // Lowercase ASCII is 0x61 - 0x7A, so OR 0x20 to convert
@@ -92,9 +148,16 @@ pub fn to_lower_case(c: u16) -> u8 {
     }
 }
 
-/// [READ](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#read) set up
+/// [AREAD/SREAD](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#read): prepares
+/// a Read interpreter request.
 ///
-/// Returns the input buffer length, terminators, (optional) timeout, and (optional) existing buffer contents
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::Read] interpreter request
+/// or a [RuntimeError]
 pub fn read_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -135,34 +198,27 @@ pub fn read_pre(
     }
 
     debug!(target: "app::screen", "Preload input: {:?}", preload);
-    
+
     // Pass max input length and timeout, if any, to the interpreter
     InstructionResult::read(
-        NextAddress::Address(instruction.next_address),
+        Address(instruction.next_address),
         length,
         terminators,
         timeout,
         preload,
         false,
     )
-    // Ok(InstructionResult::new(
-    //     Directive::Read,
-    //     DirectiveRequest::read(
-    //         length,
-    //         &terminators,
-    //         timeout,
-    //         routine,
-    //         instruction.address(),
-    //         instruction.next_address(),
-    //         &preload,
-    //     ),
-    //     instruction.next_address,
-    // ))
 }
 
-/// [READ](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#read) set up
+/// [AREAD/SREAD](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#read): processes
+/// the input returned by the interpreter
 ///
-/// Processes the input returned by the interpreter
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn read_post(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -176,20 +232,13 @@ pub fn read_post(
         0
     };
 
-    // let len = if zmachine.version() < 5 {
-    //     zmachine.read_byte(text_buffer)? - 1
-    // } else {
-    //     zmachine.read_byte(text_buffer)?
-    // } as usize;
+    let terminator = if let Some(t) = input_buffer.last() {
+        t
+    } else {
+        return fatal_error!(ErrorCode::InvalidInput, "READ returned no input")
+    };
 
-    let terminators = terminators(zmachine)?;
-    let terminator = input_buffer.last().filter(|&x| terminators.contains(x));
-
-    let end = input_buffer.len()
-        - match terminator {
-            Some(_) => 1,
-            None => 0,
-        };
+    let end = input_buffer.len() - 1;
 
     // Store input to the text buffer
     if zmachine.version() < 5 {
@@ -219,230 +268,44 @@ pub fn read_post(
 
     if zmachine.version() > 4 {
         // unwrap() is safe here as terminator is checked for none earlier
-        store_result(zmachine, instruction, *terminator.unwrap())?;
+        store_result(zmachine, instruction, *terminator)?;
     }
 
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
-pub fn read_interrupted(
-    zmachine: &mut ZMachine,
-    instruction: &Instruction,
-    input: &[u16],
-) -> Result<InstructionResult, RuntimeError> {
-    let operands = operand_values(zmachine, instruction)?;
-    let text_buffer = operands[0] as usize;
-    let routine = if operands.len() > 2 {
-        zmachine.packed_routine_address(operands[3])?
-    } else {
-        0
-    };
-
-    if zmachine.version() == 4 {
-        for (i, b) in input.iter().enumerate() {
-            zmachine.write_byte(text_buffer + 1 + i, *b as u8)?;
-        }
-        zmachine.write_byte(text_buffer + 1 + input.len(), 0)?;
-    } else {
-        zmachine.write_byte(text_buffer + 1, input.len() as u8)?;
-        for (i, b) in input.iter().enumerate() {
-            zmachine.write_byte(text_buffer + 2 + i, *b as u8)?;
-        }
-    }
-
-    if routine > 0 {
-        InstructionResult::new(zmachine.call_read_interrupt(
-            routine,
-            &Vec::new(),
-            None,
-            instruction.address,
-        )?)
-    } else {
-        InstructionResult::new(NextAddress::Address(instruction.address))
-    }
-}
-
-pub fn read_abort(
-    zmachine: &mut ZMachine,
-    instruction: &Instruction,
-) -> Result<InstructionResult, RuntimeError> {
-    let operands = operand_values(zmachine, instruction)?;
-    let text_buffer = operands[0] as usize;
-
-    if zmachine.version() == 4 {
-        let len = zmachine.read_byte(text_buffer)? as usize - 1;
-        for i in 0..len {
-            zmachine.write_byte(text_buffer + i + 1, 0)?;
-        }
-    } else {
-        zmachine.write_byte(text_buffer + 1, 0)?;
-    }
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
-}
-// pub fn read(zmachine: &mut ZMachine, instruction: &Instruction) -> Result<InstructionResult, RuntimeError> {
-//     let operands = operand_values(zmachine, instruction)?;
-
-//     let text_buffer = operands[0] as usize;
-
-//     if let Some(r) = zmachine.read_interrupt_result() {
-//         zmachine.clear_read_interrupt();
-//         if r == 1 {
-//             if zmachine.version() == 4 {
-//                 let len = zmachine.read_byte(text_buffer)? as usize - 1;
-//                 for i in 0..len {
-//                     zmachine.write_byte(text_buffer + i + 1, 0)?;
-//                 }
-//             } else {
-//                 zmachine.write_byte(text_buffer + 1, 0)?;
-//                 store_result(zmachine, instruction, 0)?;
-//             }
-//             return Ok(instruction.next_address());
-//         }
-//     }
-
-//     let parse = if operands.len() > 1 {
-//         operands[1] as usize
-//     } else {
-//         0
-//     };
-
-//     let len = if zmachine.version() < 5 {
-//         zmachine.read_byte(text_buffer)? - 1
-//     } else {
-//         zmachine.read_byte(text_buffer)?
-//     } as usize;
-
-//     let timeout = if operands.len() > 2 { operands[2] } else { 0 };
-//     let routine = if timeout > 0 && operands.len() > 2 {
-//         zmachine.set_read_interrupt_pending();
-//         zmachine.packed_routine_address(operands[3])?
-//     } else {
-//         0
-//     };
-
-//     let mut existing_input = Vec::new();
-
-//     match zmachine.version() {
-//         3 => zmachine.status_line()?,
-//         4 => {
-//             let mut i = 1;
-//             loop {
-//                 let b = zmachine.read_byte(text_buffer + i)? as u16;
-//                 if b == 0 {
-//                     break;
-//                 }
-//                 existing_input.push(b);
-//                 i += 1;
-//             }
-//             if zmachine.input_interrupt_print() {
-//                 zmachine.print(&existing_input)?;
-//             }
-//         }
-//         _ => {
-//             let existing_len = zmachine.read_byte(text_buffer + 1)? as usize;
-//             for i in 0..existing_len {
-//                 existing_input.push(zmachine.read_byte(text_buffer + 2 + i)? as u16);
-//             }
-//             if zmachine.input_interrupt_print() {
-//                 zmachine.print(&existing_input)?;
-//             }
-//         }
-//     }
-
-//     zmachine.clear_input_interrupt_print();
-
-//     let terminators = terminators(zmachine)?;
-//     let input_buffer = zmachine.read_line(&existing_input, len, &terminators, timeout * 100)?;
-//     let terminator = input_buffer.last().filter(|&x| terminators.contains(x));
-
-//     // If there was no terminator, then input was interrupted
-//     // TODO: match this and save the unwrapped terminator when it is Some
-//     // to use later.
-//     if terminator.is_none() {
-//         // Store any input that was read before the interrupt
-//         if zmachine.version() == 4 {
-//             for (i, b) in input_buffer.iter().enumerate() {
-//                 zmachine.write_byte(text_buffer + 1 + i, *b as u8)?;
-//             }
-//             zmachine.write_byte(text_buffer + 1 + input_buffer.len(), 0)?;
-//         } else {
-//             zmachine.write_byte(text_buffer + 1, input_buffer.len() as u8)?;
-//             for (i, b) in input_buffer.iter().enumerate() {
-//                 zmachine.write_byte(text_buffer + 2 + i, *b as u8)?;
-//             }
-//         }
-
-//         debug!(target: "app::input", "READ interrupted");
-
-//         if zmachine.sound_interrupt().is_some() {
-//             if !zmachine.is_sound_playing() {
-//                 debug!(target: "app::input", "Sound interrupt firing");
-//                 zmachine.clear_read_interrupt();
-//                 return zmachine.call_sound_interrupt(instruction.address());
-//             }
-//         } else if routine > 0 {
-//             debug!(target: "app::input", "Read interrupt firing");
-//             return zmachine.call_read_interrupt(routine, instruction.address());
-//         } else {
-//             return fatal_error!(
-//                 ErrorCode::ReadNoTerminator,
-//                 "Read returned no terminator, but there is no interrupt to run"
-//             );
-//         }
-//     }
-
-//     let end = input_buffer.len()
-//         - match terminator {
-//             Some(_) => 1,
-//             None => 0,
-//         };
-
-//     // Store input to the text buffer
-//     if zmachine.version() < 5 {
-//         // Store the buffer contents
-//         for (i, b) in input_buffer.iter().enumerate() {
-//             if i < end {
-//                 zmachine.write_byte(text_buffer + 1 + i, to_lower_case(*b))?;
-//             }
-//         }
-//         // Terminated by a 0
-//         zmachine.write_byte(text_buffer + 1 + end, 0)?;
-//     } else {
-//         // Store the buffer length
-//         zmachine.write_byte(text_buffer + 1, end as u8)?;
-//         for (i, b) in input_buffer.iter().enumerate() {
-//             if i < end {
-//                 zmachine.write_byte(text_buffer + 2 + i, to_lower_case(*b))?;
-//             }
-//         }
-//     }
-
-//     // Lexical analysis
-//     if parse > 0 || zmachine.version() < 5 {
-//         let dictionary = zmachine.header_word(HeaderField::Dictionary)? as usize;
-//         text::parse_text(zmachine, text_buffer, parse, dictionary, false)?;
-//     }
-
-//     if zmachine.version() > 4 {
-//         // unwrap() is safe here as terminator is checked for none earlier
-//         store_result(zmachine, instruction, *terminator.unwrap())?;
-//     }
-
-//     Ok(instruction.next_address())
-// }
-
+/// [PRINT_CHAR](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#print_char): prints
+/// a character.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::Print] interpreter request
+/// or a [RuntimeError]
 pub fn print_char(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     zmachine.output(
-        &vec![operands[0]],
-        NextAddress::Address(instruction.next_address),
-        false,
+        &[operands[0]],
+        Address(instruction.next_address),
+        RequestType::Print,
     )
 }
 
+/// [PRINT_NUM](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#print_num): prints
+/// a number.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::PRINT] interpreter request
+/// or a [RuntimeError]
 pub fn print_num(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -453,9 +316,27 @@ pub fn print_num(
     for c in s.chars() {
         text.push(c as u16);
     }
-    zmachine.output(&text, NextAddress::Address(instruction.next_address), false)
+    zmachine.output(
+        &text,
+        Address(instruction.next_address),
+        RequestType::Print,
+    )
 }
 
+/// [RANDOM](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#random): generates a random number
+/// or seeds the RNG.
+/// 
+/// If operand 0 is:
+/// * ..=-1000 - seeds the RNG with the absolute value, storing 0
+/// * -999..=0 - sets the RNG into predictable mode, returning 1..=operand[0] in sequence, storing 0
+/// * 1.. -  generates a random number from 1..=operand[0], storing the result
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn random(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -475,18 +356,37 @@ pub fn random(
         store_result(zmachine, instruction, value)?;
     }
 
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [PUSH](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#push): push operand 0
+/// onto the stack.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn push(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     zmachine.push(operands[0])?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [PULL](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#pull): pulls the value on
+/// top of the stack and stores it.
+/// 
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn pull(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -502,25 +402,54 @@ pub fn pull(
     }
 
     zmachine.set_variable(operands[0] as u8, value)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [SPLIT_WINDOW](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#split_window): prepares
+/// a split window interpreter request
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::SplitWindow] interpreter request
+/// or a [RuntimeError]
 pub fn split_window(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    InstructionResult::split_window(NextAddress::Address(instruction.next_address), operands[0])
+    InstructionResult::split_window(Address(instruction.next_address), operands[0])
 }
 
+/// [SET_WINDOW](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#set_window): prepares
+/// a set window interpreter request
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::SetWindow] interpreter request
+/// or a [RuntimeError]
 pub fn set_window(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    InstructionResult::set_window(NextAddress::Address(instruction.next_address), operands[0])
+    InstructionResult::set_window(Address(instruction.next_address), operands[0])
 }
 
+/// [CALL_VS2](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#call_vs2): calls the routing
+/// at the packed address in operand 0 with any remaining operands as arguments.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn call_vs2(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -529,85 +458,145 @@ pub fn call_vs2(
     let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = operands[1..operands.len()].to_vec();
 
-    InstructionResult::new(call_fn(
+    InstructionResult::new(call_routine(
         zmachine,
         address,
         instruction.next_address,
         &arguments,
-        instruction.store().copied(),
+        instruction.store,
     )?)
 }
 
+/// [ERASE_WINDOW](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#erase_window): prepares
+/// an erase window interpreter request
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::EraseWindow] interpreter request
+/// or a [RuntimeError]
 pub fn erase_window(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     InstructionResult::erase_window(
-        NextAddress::Address(instruction.next_address),
+        Address(instruction.next_address),
         operands[0] as i16,
     )
 }
 
+/// [ERASE_LINE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#erase_line): prepares
+/// a erase line interpreter request
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::EraseLine] interpreter request
+/// or a [RuntimeError]
 pub fn erase_line(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     if operands[0] == 1 {
-        InstructionResult::erase_line(NextAddress::Address(instruction.next_address))
+        InstructionResult::erase_line(Address(instruction.next_address))
     } else {
-        InstructionResult::new(NextAddress::Address(instruction.next_address))
+        InstructionResult::new(Address(instruction.next_address))
     }
 }
 
+/// [SET_CURSOR](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#set_cursor): prepares
+/// a set cursor interpreter request
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::SetCursor] interpreter request
+/// or a [RuntimeError]
 pub fn set_cursor(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     InstructionResult::set_cursor(
-        NextAddress::Address(instruction.next_address),
+        Address(instruction.next_address),
         operands[0],
         operands[1],
     )
 }
 
+/// [GET_CURSOR](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#get_cursor): prepares
+/// a get cursor interpreter request
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::GetCursor] interpreter request
+/// or a [RuntimeError]
 pub fn get_cursor_pre(
     _zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    InstructionResult::get_cursor(NextAddress::Address(instruction.next_address))
+    InstructionResult::get_cursor(Address(instruction.next_address))
 }
 
-pub fn get_cursor_post(
-    zmachine: &mut ZMachine,
-    instruction: &Instruction,
-    row: u16,
-    column: u16,
-) -> Result<InstructionResult, RuntimeError> {
-    let operands = operand_values(zmachine, instruction)?;
-    zmachine.write_word(operands[0] as usize, row)?;
-    zmachine.write_word(operands[0] as usize + 2, column)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address))
-}
-
+/// [SET_TEXT_STYLE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#set_text_style): prepares
+/// a set text style interpreter request
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::SetTextStyle] interpreter request
+/// or a [RuntimeError]
 pub fn set_text_style(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    InstructionResult::set_text_style(NextAddress::Address(instruction.next_address), operands[0])
+    InstructionResult::set_text_style(Address(instruction.next_address), operands[0])
 }
 
+/// [BUFFER_MODE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#buffer_mode): prepares
+/// a buffer mode interpreter request
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::BufferMode] interpreter request
+/// or a [RuntimeError]
 pub fn buffer_mode(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
-    InstructionResult::buffer_mode(NextAddress::Address(instruction.next_address), operands[0])
+    InstructionResult::buffer_mode(Address(instruction.next_address), operands[0])
 }
 
+/// [SPLIT_WINDOW](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#pull): enables or disables
+/// the output stream in operand 0.  Stream 3 must include a byte address in operand 1 when enabled.
+/// 
+/// If operand 0 is positive, the stream is enabled, otherwise the stream is disabled.
+/// 
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::OutputStream] interpreter request
+/// or a [RuntimeError]
 pub fn output_stream(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -621,19 +610,37 @@ pub fn output_stream(
     };
 
     zmachine.output_stream(stream, table)?;
-    InstructionResult::output_stream(NextAddress::Address(instruction.next_address), stream)
+    InstructionResult::output_stream(Address(instruction.next_address), stream)
 }
 
+/// [INPUT_STREAM](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#input_stream): enable or
+/// disable an input stream.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::InputStream] interpreter request
+/// or a [RuntimeError]
 pub fn input_stream(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    let _operands = operand_values(zmachine, instruction)?;
-    info!(target: "app::instruction", "INPUT_STREAM not implemented, instruction ignored");
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    let operands = operand_values(zmachine, instruction)?;
+    InstructionResult::input_stream(Address(instruction.next_address), operands[0] as i16)
 }
 
-// TBD: pre/(interpreter callout)/post
+/// [SOUND_EFFECT](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#sound_effect): prepares
+/// a sound effect interpreter request
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::SoundEffect] interpreter request
+/// or a [RuntimeError]
 pub fn sound_effect_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -642,7 +649,7 @@ pub fn sound_effect_pre(
     let number = operands[0];
     match number {
         1 | 2 => InstructionResult::sound_effect(
-            NextAddress::Address(instruction.next_address),
+            Address(instruction.next_address),
             number,
             0,
             0,
@@ -654,7 +661,7 @@ pub fn sound_effect_pre(
             match effect {
                 // Prepare, Stop, Unload
                 1 | 3 | 4 => InstructionResult::sound_effect(
-                    NextAddress::Address(instruction.next_address),
+                    Address(instruction.next_address),
                     number,
                     effect,
                     0,
@@ -678,7 +685,7 @@ pub fn sound_effect_pre(
                     };
 
                     InstructionResult::sound_effect(
-                        NextAddress::Address(instruction.next_address),
+                        Address(instruction.next_address),
                         number,
                         effect,
                         volume,
@@ -699,6 +706,16 @@ pub fn sound_effect_pre(
     }
 }
 
+/// [READ_CHAR](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#read_char): prepares
+/// a read char interpreter request
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::ReadChar] interpreter request
+/// or a [RuntimeError]
 pub fn read_char_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -713,100 +730,23 @@ pub fn read_char_pre(
     }
 
     let timeout = if operands.len() > 1 { operands[1] } else { 0 };
-    InstructionResult::read_char(NextAddress::Address(instruction.next_address), timeout)
+    InstructionResult::read_char(Address(instruction.next_address), timeout)
 }
 
-pub fn read_char_post(
-    zmachine: &mut ZMachine,
-    instruction: &Instruction,
-    key: InputEvent,
-) -> Result<InstructionResult, RuntimeError> {
-    match key.zchar() {
-        Some(c) => {
-            store_result(zmachine, instruction, c)?;
-            InstructionResult::new(NextAddress::Address(instruction.next_address()))
-        }
-        None => {
-            fatal_error!(ErrorCode::ReadNothing, "read_char returned no key")
-        }
-    }
-}
-
-pub fn read_char_interrupted(
-    zmachine: &mut ZMachine,
-    instruction: &Instruction,
-) -> Result<InstructionResult, RuntimeError> {
-    let operands = operand_values(zmachine, instruction)?;
-    let routine = zmachine.packed_routine_address(operands[2])?;
-
-    InstructionResult::new(zmachine.call_read_char_interrupt(
-        routine,
-        &Vec::new(),
-        None,
-        instruction.address,
-    )?)
-}
-pub fn read_char_abort(
-    zmachine: &mut ZMachine,
-    instruction: &Instruction,
-) -> Result<InstructionResult, RuntimeError> {
-    store_result(zmachine, instruction, 0)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
-}
-
-// pub fn read_char(
-//     zmachine: &mut ZMachine,
-//     instruction: &Instruction,
-// ) -> Result<InstructionResult, RuntimeError> {
-//     let operands = operand_values(zmachine, instruction)?;
-//     if !operands.is_empty() && operands[0] != 1 {
-//         return fatal_error!(
-//             ErrorCode::InvalidInstruction,
-//             "READ_CHAR first argument must be 1, was {}",
-//             operands[0]
-//         );
-//     }
-
-//     if let Some(v) = zmachine.read_interrupt_result() {
-//         zmachine.clear_read_interrupt();
-//         if v == 1 {
-//             store_result(zmachine, instruction, 0)?;
-//             return Ok(instruction.next_address());
-//         }
-//     }
-
-//     let timeout = if operands.len() > 1 { operands[1] } else { 0 };
-//     let routine = if timeout > 0 && operands.len() > 2 {
-//         zmachine.set_read_interrupt_pending();
-//         zmachine.packed_routine_address(operands[2])?
-//     } else {
-//         0
-//     };
-
-//     let key = zmachine.read_key(timeout * 100)?;
-//     match key.zchar() {
-//         Some(c) => {
-//             store_result(zmachine, instruction, c)?;
-//             Ok(instruction.next_address())
-//         }
-//         None => {
-//             if let Some(i) = key.interrupt() {
-//                 match i {
-//                     Interrupt::ReadTimeout => {
-//                         zmachine.call_read_interrupt(routine, instruction.address())
-//                     }
-//                     Interrupt::Sound => zmachine.call_sound_interrupt(instruction.address()),
-//                 }
-//             } else {
-//                 fatal_error!(
-//                     ErrorCode::ReadNothing,
-//                     "read_key return no character or interrupt"
-//                 )
-//             }
-//         }
-//     }
-// }
-
+/// [SCAN_TABLE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#scan_table): scans the
+/// table at the byte address in operand 1, which is operand 2 fields long, for the value in
+/// operand 0.  
+/// 
+/// If a fourth operands is present, bit 7 is set for words or clear for bytes. The remaining 7
+/// bits indicate the size of each table entry in bytes. Only the first byte or word of
+/// each entry is scanned.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn scan_table(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -849,15 +789,33 @@ pub fn scan_table(
     InstructionResult::new(branch(zmachine, instruction, condition)?)
 }
 
+/// [NOT](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#not): stores the bitwise
+/// not of operand 0.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn not(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let operands = operand_values(zmachine, instruction)?;
     store_result(zmachine, instruction, !operands[0])?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [CALL_VN](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#call_vn): calls the routine
+/// at the packed address in operand 0 with any additional operands as arguments without string a result.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn call_vn(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -866,15 +824,24 @@ pub fn call_vn(
     let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = &operands[1..].to_vec();
 
-    InstructionResult::new(call_fn(
+    InstructionResult::new(call_routine(
         zmachine,
         address,
-        instruction.next_address(),
+        instruction.next_address,
         arguments,
-        instruction.store().copied(),
+        instruction.store,
     )?)
 }
 
+/// [CALL_VN2](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#call_vn2): calls the routine
+/// at the packed address in operand 0 with any additional operands as arugments without storing a result
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn call_vn2(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -883,15 +850,26 @@ pub fn call_vn2(
     let address = zmachine.packed_routine_address(operands[0])?;
     let arguments = &operands[1..].to_vec();
 
-    InstructionResult::new(call_fn(
+    InstructionResult::new(call_routine(
         zmachine,
         address,
-        instruction.next_address(),
+        instruction.next_address,
         arguments,
-        instruction.store().copied(),
+        instruction.store,
     )?)
 }
 
+/// [TOKENISE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#tokenise): performs lexical 
+/// analysis of the text at the byte address in operand 0, with the parse buffer at the byte address in
+/// operand 1, an optional dictioary at byte address in operand 2, and an optional flag in operand 3
+/// that indicates unrecognized words should not be written to the parse buffer.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn tokenise(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -911,9 +889,19 @@ pub fn tokenise(
     };
 
     text::parse_text(zmachine, text_buffer, parse_buffer, dictionary, flag)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [ENCODE_TEXT](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#encode_text): encodes
+/// the text at the byte address in operand 0 with length in operand 1 and starting index in operand 2, storing
+/// the result to the byte address in operand 3. 
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn encode_text(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -935,9 +923,23 @@ pub fn encode_text(
         zmachine.write_word(dest_buffer + (i * 2), *w)?
     }
 
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [COPY_TABLE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#copy_table): copies operand 2 bytes 
+/// from the table at the byte address in operand 0 to the byte address in operand 1.
+/// 
+/// If operand 1 is 0, then operand 2 bytes of the table at operand 0 are zeroed out.
+/// If operand 2 is postive, then the copy is performed forwards or backwards to handle any
+/// overlap between the source and destination.
+/// If operand 2 is negative, then the copy if performed "forwards", regardless of any overlap.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn copy_table(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -962,9 +964,23 @@ pub fn copy_table(
         }
     }
 
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [PRINT_TABLE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#print_table): prepares
+/// a print table interpreter request.
+/// 
+/// Prints from the table of zscii text at the byte address in operand 0, which has
+/// width in operand 1.  Height is specified by operand 2, if present, or defaults to 1.
+/// Operand 3, if present, specifies the number of characters to skip between lines,.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::PrintTable] interpreter request
+/// or a [RuntimeError]
 pub fn print_table(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -984,14 +1000,24 @@ pub fn print_table(
     }
 
     InstructionResult::print_table(
-        NextAddress::Address(instruction.next_address),
+        Address(instruction.next_address),
         data,
         width as u16,
         height,
         skip as u16,
+        zmachine.is_stream_enabled(2)
     )
 }
 
+/// [CHECK_ARG_COUNT](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#check_arg_count): branches if the
+/// current frame has at least operand 0 arguments.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn check_arg_count(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -1010,7 +1036,7 @@ mod tests {
     use std::{fs, path::Path};
 
     use crate::{
-        assert_ok_eq, assert_print, assert_some_eq,
+        assert_ok_eq, assert_print,
         instruction::{processor::dispatch, Opcode, OpcodeForm, OperandCount, OperandType},
         object::property,
         test_util::*,

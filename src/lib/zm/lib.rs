@@ -1,3 +1,5 @@
+#![crate_name = "zm"]
+
 #[macro_use]
 extern crate log;
 

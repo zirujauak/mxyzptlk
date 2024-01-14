@@ -1,29 +1,47 @@
 use crate::zmachine::ZMachine;
 use crate::{error::*, fatal_error};
 
-use super::*;
+use super::{NextAddress::Address, *};
 
-pub mod processor_0op;
+mod processor_0op;
 mod processor_1op;
 mod processor_2op;
-pub mod processor_ext;
+mod processor_ext;
 pub mod processor_var;
 
+/// Returns the value of an operand.  For constants, the value itself is returned.  
+/// For variables, the value of the variable is returned.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `operands` - Reference to the operand
+///
+/// # Returns
+/// Result containing the operand value as a zword (u16) or a RuntimeError
 fn operand_value(zmachine: &mut ZMachine, operand: &Operand) -> Result<u16, RuntimeError> {
-    match operand.operand_type() {
-        OperandType::SmallConstant | OperandType::LargeConstant => Ok(operand.value()),
-        OperandType::Variable => zmachine.variable(operand.value() as u8),
+    match operand.operand_type {
+        OperandType::SmallConstant | OperandType::LargeConstant => Ok(operand.value),
+        OperandType::Variable => zmachine.variable(operand.value as u8),
     }
 }
 
+/// Returns an array of the operand values for an instruction.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the vector of operand values (in order) as zwords (u16) or
+/// a RuntimeError
 pub fn operand_values(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<Vec<u16>, RuntimeError> {
     let mut v = Vec::new();
     let mut l = "Operand values: ".to_string();
-    for o in instruction.operands() {
-        let value = operand_value(zmachine, o)?;
+    for o in &instruction.operands {
+        let value = operand_value(zmachine, &o)?;
         match o.operand_type {
             OperandType::SmallConstant => l.push_str(&format!(" #{:02x}", value as u8)),
             _ => l.push_str(&format!(" #{:04x}", value)),
@@ -36,39 +54,71 @@ pub fn operand_values(
     Ok(v)
 }
 
+/// Calculates the next address following a branch.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+/// * `condition` - the branch condition
+///
+/// # Returns
+/// Result containing a NextAddress enum with the branch destination address
+/// or a RuntimeError
 pub fn branch(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
     condition: bool,
 ) -> Result<NextAddress, RuntimeError> {
-    match instruction.branch() {
+    match &instruction.branch {
         Some(b) => {
-            if condition == b.condition() {
+            if condition == b.condition {
                 match b.branch_address {
                     0 => zmachine.return_routine(0), // return false
                     1 => zmachine.return_routine(1), // return true,
-                    _ => Ok(NextAddress::Address(b.branch_address())),
+                    _ => Ok(Address(b.branch_address)),
                 }
             } else {
-                Ok(NextAddress::Address(instruction.next_address()))
+                Ok(Address(instruction.next_address))
             }
         }
-        None => Ok(NextAddress::Address(instruction.next_address())),
+        None => Ok(Address(instruction.next_address)),
     }
 }
 
+/// Store the result of executing an instruciton to the instructions store
+/// variable
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+/// * `value` - the result of executing the instruction
+///
+/// # Returns
+/// Empty result or a RuntimeError
 fn store_result(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
     value: u16,
 ) -> Result<(), RuntimeError> {
-    match instruction.store() {
-        Some(s) => zmachine.set_variable(s.variable(), value),
+    match instruction.store {
+        Some(s) => zmachine.set_variable(s.variable, value),
         None => Ok(()),
     }
 }
 
-fn call_fn(
+/// Call a routine
+///
+/// # Argument
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `address` - Address of the routine
+/// * `return_addr` - Return address
+/// * `arguments` - Reference to a vector of argument values
+/// * `result` - Option with the store result for the routine result
+///
+/// # Returns
+/// Result containing the address of the first instruction of the routine or
+/// a RuntimeError
+fn call_routine(
     zmachine: &mut ZMachine,
     address: usize,
     return_addr: usize,
@@ -78,7 +128,7 @@ fn call_fn(
     match address {
         0 | 1 => {
             if let Some(r) = result {
-                zmachine.set_variable(r.variable(), address as u16)?
+                zmachine.set_variable(r.variable, address as u16)?
             }
 
             Ok(NextAddress::Address(return_addr))
@@ -87,13 +137,21 @@ fn call_fn(
     }
 }
 
+/// Dispatch to the function implementing an instruction
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction to execute
+///
+/// # Returns
+/// Result containing the result of the instruction or a RuntimeError
 pub fn dispatch(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     debug!(target: "app::instruction", "dispatch: {}", instruction);
-    match instruction.opcode().form() {
-        OpcodeForm::Ext => match (zmachine.version(), instruction.opcode().instruction()) {
+    match instruction.opcode.form {
+        OpcodeForm::Ext => match (zmachine.version(), instruction.opcode.instruction) {
             // V6 opcodes have been omitted
             (5, 0x00) | (7, 0x00) | (8, 0x00) => processor_ext::save_pre(zmachine, instruction),
             (5, 0x01) | (7, 0x01) | (8, 0x01) => processor_ext::restore_pre(zmachine, instruction),
@@ -102,17 +160,18 @@ pub fn dispatch(
             (5, 0x04) | (7, 0x04) | (8, 0x04) => processor_ext::set_font_pre(zmachine, instruction),
             (5, 0x09) | (7, 0x09) | (8, 0x09) => processor_ext::save_undo(zmachine, instruction),
             (5, 0x0a) | (7, 0x0a) | (8, 0x0a) => processor_ext::restore_undo(zmachine, instruction),
+            // TBD: Unimplemented instructions
             //         (5, 0x0b) | (7, 0x0b) | (8, 0x0b) => processor_ext::print_unicode(context, instruction),
             //         (5, 0x0c) | (7, 0x0c) | (8, 0x0c) => processor_ext::check_unicode(context, instruction),
             //         (5, 0x0d) | (7, 0x0d) | (8, 0x0d) => processor_ext::set_true_colour(context, instruction),
             (_, _) => fatal_error!(
                 ErrorCode::UnimplementedInstruction,
                 "Unimplemented EXT instruction: {}",
-                instruction.opcode()
+                instruction.opcode
             ),
         },
-        _ => match instruction.opcode().operand_count() {
-            OperandCount::_0OP => match (zmachine.version(), instruction.opcode().instruction()) {
+        _ => match instruction.opcode.operand_count {
+            OperandCount::_0OP => match (zmachine.version(), instruction.opcode.instruction) {
                 (_, 0x0) => processor_0op::rtrue(zmachine, instruction),
                 (_, 0x1) => processor_0op::rfalse(zmachine, instruction),
                 (_, 0x2) => processor_0op::print(zmachine, instruction),
@@ -132,10 +191,10 @@ pub fn dispatch(
                 (_, _) => fatal_error!(
                     ErrorCode::UnimplementedInstruction,
                     "Unimplemented instruction: {}",
-                    instruction.opcode()
+                    instruction.opcode
                 ),
             },
-            OperandCount::_1OP => match (zmachine.version(), instruction.opcode().instruction()) {
+            OperandCount::_1OP => match (zmachine.version(), instruction.opcode.instruction) {
                 (_, 0x0) => processor_1op::jz(zmachine, instruction),
                 (_, 0x1) => processor_1op::get_sibling(zmachine, instruction),
                 (_, 0x2) => processor_1op::get_child(zmachine, instruction),
@@ -158,10 +217,10 @@ pub fn dispatch(
                 (_, _) => fatal_error!(
                     ErrorCode::UnimplementedInstruction,
                     "Unimplemented instruction: {}",
-                    instruction.opcode()
+                    instruction.opcode
                 ),
             },
-            OperandCount::_2OP => match (zmachine.version(), instruction.opcode().instruction()) {
+            OperandCount::_2OP => match (zmachine.version(), instruction.opcode.instruction) {
                 (_, 0x01) => processor_2op::je(zmachine, instruction),
                 (_, 0x02) => processor_2op::jl(zmachine, instruction),
                 (_, 0x03) => processor_2op::jg(zmachine, instruction),
@@ -197,10 +256,10 @@ pub fn dispatch(
                 (_, _) => fatal_error!(
                     ErrorCode::UnimplementedInstruction,
                     "Unimplemented instruction: {}",
-                    instruction.opcode()
+                    instruction.opcode
                 ),
             },
-            OperandCount::_VAR => match (zmachine.version(), instruction.opcode().instruction()) {
+            OperandCount::_VAR => match (zmachine.version(), instruction.opcode.instruction) {
                 (_, 0x00) => processor_var::call_vs(zmachine, instruction),
                 (_, 0x01) => processor_var::storew(zmachine, instruction),
                 (_, 0x02) => processor_var::storeb(zmachine, instruction),
@@ -262,7 +321,7 @@ pub fn dispatch(
                 (_, _) => fatal_error!(
                     ErrorCode::UnimplementedInstruction,
                     "Unimplemented instruction: {}",
-                    instruction.opcode()
+                    instruction.opcode
                 ),
             },
         },

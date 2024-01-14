@@ -1,13 +1,25 @@
+//! [0OP](https://inform-fiction.org/zmachine/standards/z1point1/sect14.html#0OP)
+//! instructions: short form instructions that have no operands.
+
 use crate::error::{ErrorCode, RuntimeError};
-use crate::instruction::{decoder, Instruction, InstructionResult, NextAddress};
-use crate::quetzal::{IFhd, Quetzal};
+use crate::instruction::{
+    Instruction, InstructionResult,
+    NextAddress::{self, Address},
+};
 use crate::zmachine::header::HeaderField;
-use crate::zmachine::ZMachine;
-use crate::{fatal_error, recoverable_error, text};
+use crate::zmachine::{RequestType, ZMachine};
+use crate::{fatal_error, text};
 
-use super::branch;
-use super::store_result;
+use super::{branch, store_result};
 
+/// [RTRUE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#rtrue): return true (1) from the current routine
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn rtrue(
     zmachine: &mut ZMachine,
     _instruction: &Instruction,
@@ -15,6 +27,14 @@ pub fn rtrue(
     InstructionResult::new(zmachine.return_routine(1)?)
 }
 
+/// [RFALSE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#rfalse): return false (0) from the current routine
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn rfalse(
     zmachine: &mut ZMachine,
     _instruction: &Instruction,
@@ -22,26 +42,36 @@ pub fn rfalse(
     InstructionResult::new(zmachine.return_routine(0)?)
 }
 
+/// [PRINT](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#print): prints the inline ztext directly following the opcode.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn print(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    let ztext = zmachine.string_literal(instruction.address() + 1)?;
+    let ztext = zmachine.string_literal(instruction.address + 1)?;
     let text = text::from_vec(zmachine, &ztext, false)?;
     zmachine.output(
         &text,
-        NextAddress::Address(instruction.next_address + (ztext.len() * 2)),
-        false,
+        Address(instruction.next_address + (ztext.len() * 2)),
+        RequestType::Print,
     )
-    // if zmachine.is_read_interrupt()? {
-    //     zmachine.set_redraw_input()?;
-    // }
-    // InstructionResult::print(
-    //     NextAddress::Address(instruction.next_address + (ztext.len() * 2)),
-    //     text,
-    // )
 }
 
+/// [PRINT_RET](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#print_ret): prints the inline ztext directly following the opcode followed by a
+/// new line, then returns true from the current routine.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn print_ret(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -49,45 +79,41 @@ pub fn print_ret(
     let ztext = zmachine.string_literal(instruction.address + 1)?;
     let text = text::from_vec(zmachine, &ztext, false)?;
     let a = zmachine.return_routine(1)?;
-    zmachine.output(&text, a, true)
-
-    // if zmachine.is_read_interrupt()? {
-    //     zmachine.set_redraw_input()?;
-    // }
-
-    // InstructionResult::print(
-    //     NextAddress::Address(instruction.next_address + (ztext.len() * 2)),
-    //     text,
-    // )
+    zmachine.output(&text, a, RequestType::PrintRet)
 }
 
+/// [NOP](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#nop): goes nowhere, does nothing.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing the [InstructionResult] or a [RuntimeError]
 pub fn nop(
     _zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    InstructionResult::new(NextAddress::Address(instruction.next_address))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
-fn save_result(
-    zmachine: &mut ZMachine,
-    instruction: &Instruction,
-    success: bool,
-) -> Result<NextAddress, RuntimeError> {
-    if zmachine.version() == 3 {
-        branch(zmachine, instruction, success)
-    } else {
-        store_result(zmachine, instruction, if success { 1 } else { 0 })?;
-        Ok(NextAddress::Address(instruction.next_address()))
-    }
-}
-
+/// [SAVE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#save): records current game state to a vector of zbytes (u8) to be saved to
+/// a storage medium by the interpreter
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::Save] interpreter
+/// request or a [RuntimeError]
 pub fn save_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let pc = if zmachine.version() == 3 {
-        match instruction.branch() {
-            Some(b) => b.address(),
+        match &instruction.branch {
+            Some(b) => b.address,
             None => {
                 return fatal_error!(
                     ErrorCode::InvalidInstruction,
@@ -96,8 +122,8 @@ pub fn save_pre(
             }
         }
     } else {
-        match instruction.store() {
-            Some(r) => r.address(),
+        match instruction.store {
+            Some(r) => r.address,
             None => {
                 return fatal_error!(
                     ErrorCode::InvalidInstruction,
@@ -108,156 +134,54 @@ pub fn save_pre(
     };
 
     let save_data = zmachine.save_state(pc)?;
-    InstructionResult::save(
-        NextAddress::Address(instruction.address),
-        zmachine.name(),
-        save_data,
-    )
+    InstructionResult::save(Address(instruction.address), zmachine.name(), save_data)
 }
 
-// pub fn save(
-//     zmachine: &mut ZMachine,
-//     instruction: &Instruction,
-// ) -> Result<InstructionResult, RuntimeError> {
-//     let pc = if zmachine.version() == 3 {
-//         match instruction.branch() {
-//             Some(b) => b.address(),
-//             None => {
-//                 return fatal_error!(
-//                     ErrorCode::InvalidInstruction,
-//                     "V3 SAVE should be a branch instruction"
-//                 )
-//             }
-//         }
-//     } else {
-//         match instruction.store() {
-//             Some(r) => r.address(),
-//             None => {
-//                 return fatal_error!(
-//                     ErrorCode::InvalidInstruction,
-//                     "V4 SAVE should be a store instruction"
-//                 )
-//             }
-//         }
-//     };
-
-//     match zmachine.save(pc) {
-//         Ok(_) => save_result(zmachine, instruction, true),
-//         Err(_) => save_result(zmachine, instruction, false),
-//     }
-// }
-
-pub fn save_post(
-    zmachine: &mut ZMachine,
-    instruction: &Instruction,
-    success: bool,
-) -> Result<InstructionResult, RuntimeError> {
-    if zmachine.version() == 3 {
-        InstructionResult::new(branch(zmachine, instruction, success)?)
-    } else {
-        store_result(zmachine, instruction, if success { 1 } else { 0 })?;
-        InstructionResult::new(NextAddress::Address(instruction.next_address))
-        // Ok(InstructionResult::none(instruction.next_address()))
-    }
-}
-
+/// [RESTORE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#restore): records current game state to a vector of zbytes (u8) to be saved to
+/// a storage medium by the interpreter
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::Restore] interpreter
+/// request or a [RuntimeError]
 pub fn restore_pre(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     // Interpreter will handle prompting for and loading the restore data
-    InstructionResult::restore(
-        NextAddress::Address(instruction.next_address),
-        zmachine.name(),
-    )
-    // Ok(InstructionResult::empty(
-    //     Directive::Restore,
-    //     instruction.address,
-    // ))
+    InstructionResult::restore(Address(instruction.next_address), zmachine.name())
 }
 
-pub fn restore_post(
-    zmachine: &mut ZMachine,
-    instruction: &Instruction,
-    save_data: Vec<u8>,
-) -> Result<InstructionResult, RuntimeError> {
-    let quetzal = Quetzal::try_from(save_data)?;
-    let ifhd = IFhd::try_from((&*zmachine, 0))?;
-    if &ifhd != quetzal.ifhd() {
-        error!(target: "app::state", "Restore state was created from a different story file");
-        return recoverable_error!(
-            ErrorCode::Restore,
-            "Save file was created from a different story file"
-        );
-    }
-
-    let r = zmachine.restore_state(quetzal)?;
-    if let Some(address) = r {
-        let i = decoder::decode_instruction(zmachine, address - 1)?;
-        if zmachine.version() == 3 {
-            // V3 is a branch
-            InstructionResult::new(branch(zmachine, &i, true)?)
-        //     Ok(InstructionResult::empty(
-        //         Directive::RestoreComplete,
-        //         branch(zmachine, &i, true)?.next_instruction(),
-        //     ))
-        } else {
-            // V4 is a store
-            store_result(zmachine, instruction, 2)?;
-            InstructionResult::new(NextAddress::Address(i.next_address))
-            // Ok(InstructionResult::empty(
-            //     Directive::RestoreComplete,
-            //     i.next_address(),
-            // ))
-        }
-    } else if zmachine.version() == 3 {
-        InstructionResult::new(branch(zmachine, instruction, false)?)
-    } else {
-        store_result(zmachine, instruction, 0)?;
-        InstructionResult::new(NextAddress::Address(instruction.next_address()))
-        // Ok(InstructionResult::none(instruction.next_address()))
-    }
-}
-
-// pub fn restore(
-//     zmachine: &mut ZMachine,
-//     instruction: &Instruction,
-// ) -> Result<InstructionResult, RuntimeError> {
-//     let address = zmachine.restore()?;
-//     match address {
-//         Some(a) => {
-//             // TBD payload necessary for interpreter to manage restore state?
-//             let i = decoder::decode_instruction(zmachine, a - 1)?;
-//             if zmachine.version() == 3 {
-//                 // V3 is a branch
-//                 branch(zmachine, &i, true)
-//             } else {
-//                 // V4 is a store
-//                 store_result(zmachine, instruction, 2)?;
-//                 Ok(InstructionResult::empty(
-//                     Directive::Restore,
-//                     i.next_address(),
-//                 ))
-//             }
-//         }
-//         None => {
-//             if zmachine.version() == 3 {
-//                 branch(zmachine, instruction, false)
-//             } else {
-//                 store_result(zmachine, instruction, 0)?;
-//                 Ok(InstructionResult::none(instruction.next_address()))
-//             }
-//         }
-//     }
-// }
-
+/// [RESTART](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#restart): resets
+/// start and restarts exeuction from the initial address.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::Restart] interpreter
+/// request or a [RuntimeError]
 pub fn restart(
     zmachine: &mut ZMachine,
     _instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    InstructionResult::new(NextAddress::Address(zmachine.restart()?))
+    InstructionResult::restart(Address(zmachine.restart()?))
 }
 
+/// [RET_POPPED](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#ret_popped): pops
+/// the value from the top of the stack and returns it as the result of the current
+/// routine.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn ret_popped(
     zmachine: &mut ZMachine,
     _instruction: &Instruction,
@@ -266,51 +190,102 @@ pub fn ret_popped(
     InstructionResult::new(zmachine.return_routine(value)?)
 }
 
+/// [POP](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#pop): pops
+/// the stack and throws away the result.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn pop(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     zmachine.variable(0)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [CATCH](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#catch): stores
+/// the current frame pointer.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn catch(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let depth = zmachine.frame_count();
     store_result(zmachine, instruction, depth as u16)?;
-    InstructionResult::new(NextAddress::Address(instruction.next_address()))
+    InstructionResult::new(Address(instruction.next_address))
 }
 
+/// [QUIT](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#quit): halts
+/// execution and exits.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::Quit] interpreter request
+/// or a [RuntimeError]
 pub fn quit(
     _zmachine: &mut ZMachine,
     _instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     InstructionResult::quit()
-    // Ok(InstructionResult::empty(Directive::Quit, 0))
 }
 
+/// [NEW_LINE](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#new_line): prints
+/// a new line.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::NewLine] interpreter request
+/// or a [RuntimeError]
 pub fn new_line(
     _zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    InstructionResult::new_line(NextAddress::Address(instruction.next_address))
+    InstructionResult::new_line(Address(instruction.next_address))
 }
 
+/// [SHOW_STATUS](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#show_status): prints
+/// the current status line.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] with a [RequestType::ShowStatus] interpreter request
+/// or a [RuntimeError]
 pub fn show_status(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
     let (left, right) = zmachine.status_line()?;
-    InstructionResult::show_status(NextAddress::Address(instruction.next_address), left, right)
-    // Ok(InstructionResult::new(
-    //     Directive::ShowStatus,
-    //     DirectiveRequest::show_status(&left, &right),
-    //     instruction.next_address,
-    // ))
+    InstructionResult::show_status(Address(instruction.next_address), left, right)
 }
 
+/// [VERIFY](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#verify): calculates
+/// the checksum of the zcode and branches if the result matches the checksum in the header.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn verify(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
@@ -321,6 +296,15 @@ pub fn verify(
     InstructionResult::new(branch(zmachine, instruction, expected == checksum)?)
 }
 
+/// [PIRACY](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#piracy): performs
+/// a piracy check.  Always branches.
+///
+/// # Arguments
+/// * `zmachine` - Mutable reference to the zmachine
+/// * `instruction` - Reference to the instruction
+///
+/// # Returns
+/// Result containing an [InstructionResult] or a [RuntimeError]
 pub fn piracy(
     zmachine: &mut ZMachine,
     instruction: &Instruction,
