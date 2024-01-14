@@ -1,3 +1,4 @@
+//! Sample Player implemented using [rodio](https://docs.rs/rodio/latest/rodio/)
 use std::io::Write;
 
 use crate::recoverable_error;
@@ -9,11 +10,17 @@ use crate::error::{ErrorCode, RuntimeError};
 
 use super::Player;
 
+/// Player
 pub struct RodioPlayer {
+    /// Rodio output stream
     _output_stream: Option<OutputStream>,
+    /// Rodio output stream handle
     _output_stream_handle: Option<OutputStreamHandle>,
+    /// Currently playing effect
     current_effect: u32,
+    /// Player sink
     sink: Option<Sink>,
+    /// Volume normalization factor
     volume_factor: f32,
 }
 
@@ -23,7 +30,7 @@ impl Player for RodioPlayer {
     }
 
     fn is_playing(&mut self) -> bool {
-        if let Some(sink) = self.get_sink().as_mut() {
+        if let Some(sink) = self.sink.as_mut() {
             !sink.empty()
         } else {
             false
@@ -38,9 +45,10 @@ impl Player for RodioPlayer {
                         Ok(_) => {
                             match Decoder::new(read) {
                                 Ok(source) => {
-                                    match self.get_sink() {
+                                    let vol = self.normalize_volume(volume);
+                                    match self.sink.as_mut() {
                                         Some(sink) => {
-                                            sink.set_volume(self.normalize_volume(volume));
+                                            sink.set_volume(vol);
                                             // V5
                                             if repeats == 0 {
                                                 sink.append(source.repeat_infinite());
@@ -81,7 +89,7 @@ impl Player for RodioPlayer {
     }
 
     fn stop_sound(&mut self) {
-        if let Some(sink) = self.get_sink() {
+        if let Some(sink) = self.sink.as_mut() {
             sink.stop()
         }
 
@@ -89,12 +97,20 @@ impl Player for RodioPlayer {
     }
 
     fn change_volume(&mut self, volume: u8) {
-        if let Some(sink) = self.get_sink() {
-            sink.set_volume(self.normalize_volume(volume));
+        let vol = self.normalize_volume(volume);
+        if let Some(sink) = self.sink.as_mut() {
+            sink.set_volume(vol);
         }
     }
 }
 
+/// Utility function to construct a new Player
+///
+/// # Arguments
+/// * `volume_factor` - Volume normalization factor
+///
+/// # Returns
+/// [Result] with a [Box] containing the [Player] implementation or a [RuntimeError]
 pub fn new_player(volume_factor: f32) -> Result<Box<dyn Player>, RuntimeError> {
     match RodioPlayer::new(volume_factor) {
         Ok(r) => Ok(Box::new(r)),
@@ -103,6 +119,10 @@ pub fn new_player(volume_factor: f32) -> Result<Box<dyn Player>, RuntimeError> {
 }
 
 impl RodioPlayer {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `volume_factor` - volume nomralization factor
     pub fn new(volume_factor: f32) -> Result<RodioPlayer, RuntimeError> {
         match OutputStream::try_default() {
             Ok((output_stream, output_stream_handle)) => {
@@ -135,12 +155,15 @@ impl RodioPlayer {
         }
     }
 
-    fn get_sink(&self) -> Option<&Sink> {
-        self.sink.as_ref()
-    }
-
+    /// Normalize playback volume
+    ///
+    /// # Arguments
+    /// * `volume` - Playback volume -1 or a value from 1 to 8, with 1 being soft and 8 being loud, and -1 being very loud.
+    ///
+    /// # Returns
+    /// [Sink] volume value, normalized for platform.
     fn normalize_volume(&self, volume: u8) -> f32 {
-        // Volume should range 1 - 8, with -1 being "very load"
+        // Volume should range 1 - 8, with -1 being "very loud"
         match volume {
             // Louder than 8 by 25%
             0xFF => (8.0 / self.volume_factor) * 1.25,

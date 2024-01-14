@@ -1,3 +1,4 @@
+//! [Sound effects](https://inform-fiction.org/zmachine/standards/z1point1/sect09.html)
 use core::fmt;
 use std::collections::HashMap;
 
@@ -10,23 +11,27 @@ mod test_player;
 #[cfg(feature = "sndfile")]
 mod loader;
 
-// #[cfg(not(test))]
+#[cfg(not(test))]
 use crate::sound::rodio_player::*;
 
-// #[cfg(test)]
-// use crate::sound::test_player::*;
+#[cfg(test)]
+use crate::sound::test_player::*;
 
 use crate::iff::Chunk;
 use crate::{blorb::Blorb, error::RuntimeError};
 
 #[derive(Debug)]
-pub struct Sound {
+/// Sound sample
+pub struct Sample {
+    /// Effect number
     number: u32,
+    /// Default repeat count [Option]
     repeats: Option<u32>,
+    /// Sample data
     data: Vec<u8>,
 }
 
-impl fmt::Display for Sound {
+impl fmt::Display for Sample {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -39,63 +44,103 @@ impl fmt::Display for Sound {
 }
 
 #[cfg(not(feature = "sndfile"))]
-impl From<(u32, &Chunk, Option<&u32>)> for Sound {
+impl From<(u32, &Chunk, Option<&u32>)> for Sample {
     fn from((number, chunk, repeats): (u32, &Chunk, Option<&u32>)) -> Self {
         if chunk.id() == "OGGV" {
-            Sound::new(number, chunk.data(), repeats)
+            Sample::new(number, chunk.data(), repeats)
         } else {
-            Sound::new(number, &[], repeats)
+            Sample::new(number, &[], repeats)
         }
     }
 }
 
 #[cfg(feature = "sndfile")]
-impl From<(u32, &Chunk, Option<&u32>)> for Sound {
+impl From<(u32, &Chunk, Option<&u32>)> for Sample {
     fn from((number, chunk, repeats): (u32, &Chunk, Option<&u32>)) -> Self {
         if chunk.id() == "OGGV" {
-            Sound::new(number, chunk.data(), repeats)
+            Sample::new(number, chunk.data(), repeats)
         } else if chunk.id() == "FORM" && chunk.sub_id() == "AIFF" {
             debug!(target: "app::sound", "Converting sound {} from AIFF", number);
             match loader::convert_aiff(&Vec::from(chunk)) {
-                Ok(s) => Sound::new(number, &s, repeats),
+                Ok(s) => Sample::new(number, &s, repeats),
                 Err(e) => {
                     error!(target: "app::sound", "Error converting AIFF resource: {}", e);
-                    Sound::new(number, &[], repeats)
+                    Sample::new(number, &[], repeats)
                 }
             }
         } else {
-            Sound::new(number, &[], repeats)
+            Sample::new(number, &[], repeats)
         }
     }
 }
 
-impl Sound {
-    pub fn new(number: u32, data: &[u8], repeats: Option<&u32>) -> Sound {
-        Sound {
+impl Sample {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `number` - effect number
+    /// * `data` - Sample data
+    /// * `repeats` - [Option] with repeat count or [None]
+    pub fn new(number: u32, data: &[u8], repeats: Option<&u32>) -> Sample {
+        Sample {
             number,
             repeats: repeats.copied(),
             data: data.to_vec(),
         }
     }
 
-    pub fn number(&self) -> u32 {
-        self.number
-    }
+    // pub fn number(&self) -> u32 {
+    //     self.number
+    // }
 
-    pub fn data(&self) -> &Vec<u8> {
-        &self.data
-    }
+    // pub fn data(&self) -> &Vec<u8> {
+    //     &self.data
+    // }
 
-    pub fn repeats(&self) -> Option<&u32> {
-        self.repeats.as_ref()
-    }
+    // pub fn repeats(&self) -> Option<&u32> {
+    //     self.repeats.as_ref()
+    // }
 }
 
+/// Sound player
 pub trait Player {
+    /// Player type name
+    ///
+    /// # Returns
+    /// Player type name
     fn type_name(&self) -> &str;
+
+    /// Check if a sample is currently playing
+    ///
+    /// # Returns
+    /// `true` if a sample is currently playing, `false` if not
     fn is_playing(&mut self) -> bool;
+
+    /// Start playback of a sample.
+    ///
+    /// Any sample currently playing is stopped.
+    ///
+    /// # Arguments
+    /// * `sound` - Sample data
+    /// * `volume` - Playback volume
+    /// * `repeates` - Number of times to play the sample
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     fn play_sound(&mut self, sound: &[u8], volume: u8, repeats: u8) -> Result<(), RuntimeError>;
+
+    /// Stop sample playback.
+    ///
+    /// Does nothing if no sample is currently playing.
     fn stop_sound(&mut self);
+
+    /// Change the volume of any currently playing sample.
+    ///
+    /// Should be called when the currently playing sample repeating and is played again with a different
+    /// volume to change the volume without abruptly interrupting the loop.
+    ///
+    /// # Arguments
+    /// * `volume` - New playback volume.
     fn change_volume(&mut self, volume: u8);
 }
 
@@ -104,15 +149,21 @@ impl fmt::Debug for dyn Player {
         write!(f, "{}", self.type_name())
     }
 }
+
 #[derive(Debug, Default)]
+/// Sound effect manager
 pub struct Manager {
+    /// Sound player
     player: Option<Box<dyn Player>>,
-    sounds: HashMap<u32, Sound>,
+    /// Effect map
+    sounds: HashMap<u32, Sample>,
+    /// Currently playing effect number
     current_effect: u32,
+    /// Routine to execute when current sample playback finishes or 0
     routine: usize,
 }
 
-impl From<Blorb> for HashMap<u32, Sound> {
+impl From<Blorb> for HashMap<u32, Sample> {
     fn from(value: Blorb) -> Self {
         let mut sounds = HashMap::new();
         let mut loops = HashMap::new();
@@ -125,8 +176,8 @@ impl From<Blorb> for HashMap<u32, Sound> {
         for index in value.ridx().indices() {
             if index.usage().eq("Snd ") {
                 if let Some(chunk) = value.sounds().get(&(index.start())) {
-                    let s = Sound::from((index.number(), chunk, loops.get(&index.number())));
-                    if !s.data().is_empty() {
+                    let s = Sample::from((index.number(), chunk, loops.get(&index.number())));
+                    if !s.data.is_empty() {
                         debug!(target: "app::sound", "Sound: {}", s);
                         sounds.insert(index.number(), s);
                     }
@@ -142,8 +193,8 @@ impl Manager {
     #[cfg(test)]
     pub fn mock() -> Result<Manager, RuntimeError> {
         let mut sounds = HashMap::new();
-        sounds.insert(3, Sound::new(1, &[0; 128], None));
-        sounds.insert(4, Sound::new(1, &[0; 256], Some(&5)));
+        sounds.insert(3, Sample::new(1, &[0; 128], None));
+        sounds.insert(4, Sample::new(1, &[0; 256], Some(&5)));
 
         Ok(Manager {
             player: Some(new_player(128.0)?),
@@ -153,6 +204,11 @@ impl Manager {
         })
     }
 
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `volume_factor` - platform-specific volume factor used to normalize volume levels
+    /// * `blorb` - [Blorb] containing sound sample resources
     pub fn new(volume_factor: f32, blorb: Blorb) -> Result<Manager, RuntimeError> {
         debug!(target: "app::sound", "Initializing sound manager with volume_factor {}", volume_factor);
         Ok(Manager {
@@ -162,6 +218,7 @@ impl Manager {
         })
     }
 
+    /// Constructor that disabled sound playback
     pub fn none() -> Result<Manager, RuntimeError> {
         Ok(Manager {
             player: None,
@@ -170,14 +227,10 @@ impl Manager {
         })
     }
 
-    pub fn current_effect(&self) -> u32 {
-        self.current_effect
-    }
-
-    pub fn sound_count(&self) -> usize {
-        self.sounds.len()
-    }
-
+    /// Check if there is a sound playing
+    ///
+    /// # Returns
+    /// `true` when a sound is currently playing, `false`` if not.
     pub fn is_playing(&mut self) -> bool {
         if let Some(p) = self.player.as_mut() {
             p.is_playing()
@@ -186,14 +239,25 @@ impl Manager {
         }
     }
 
+    /// Gets the end-of-sound routine address
     pub fn routine(&self) -> usize {
         self.routine
     }
 
+    /// Clears the end-of-sound routine address
     pub fn clear_routine(&mut self) {
         self.routine = 0
     }
 
+    /// Begin playback of a sample.
+    ///
+    /// Any currently playing sample is halted.
+    ///
+    /// # Arguments
+    /// * `effect` - Sample number
+    /// * `volume` - Playback volume
+    /// * `repeats` - [Option] with number of repeats or [None]
+    /// * `routine` - Byte address of a routine to execute when playback finished, or 0 for none.
     pub fn play_sound(
         &mut self,
         effect: u16,
@@ -231,6 +295,9 @@ impl Manager {
         }
     }
 
+    /// Halt sample playback.
+    ///
+    /// Any end-of-sound routine is *not* executed.
     pub fn stop_sound(&mut self) {
         debug!(target: "app::sound", "Stopping sound playback");
         if let Some(p) = self.player.as_mut() {
@@ -241,6 +308,10 @@ impl Manager {
         self.routine = 0;
     }
 
+    /// Change the volume of any currently playing sample.
+    ///
+    /// # Arguments
+    /// * `volume` - New playback volume
     pub fn change_volume(&mut self, volume: u8) {
         debug!(target: "app::sound", "Changing volume of playing sound to {}", volume);
         if let Some(p) = self.player.as_mut() {
@@ -261,37 +332,37 @@ mod tests {
     #[test]
     fn test_sound_from_chunk_oggv() {
         let oggv = Chunk::new_chunk(0, "OGGV", vec![1, 2, 3, 4]);
-        let sound = Sound::from((1, &oggv, None));
-        assert_eq!(sound.number(), 1);
-        assert_eq!(sound.data(), &[1, 2, 3, 4]);
+        let sound = Sample::from((1, &oggv, None));
+        assert_eq!(sound.number, 1);
+        assert_eq!(sound.data, &[1, 2, 3, 4]);
         assert!(sound.repeats.is_none());
     }
 
     #[test]
     fn test_sound_from_oggv_repeats() {
         let oggv: Chunk = Chunk::new_chunk(0, "OGGV", vec![1, 2, 3, 4]);
-        let sound = Sound::from((1, &oggv, Some(&5)));
-        assert_eq!(sound.number(), 1);
-        assert_eq!(sound.data(), &[1, 2, 3, 4]);
+        let sound = Sample::from((1, &oggv, Some(&5)));
+        assert_eq!(sound.number, 1);
+        assert_eq!(sound.data, &[1, 2, 3, 4]);
         assert_some_eq!(sound.repeats, 5);
     }
 
     #[test]
     fn test_sound_from_aiff_no_sndfile() {
         let aiff = Chunk::new_form(0, "AIFF", vec![]);
-        let sound = Sound::from((1, &aiff, None));
-        assert_eq!(sound.number(), 1);
-        assert!(sound.data().is_empty());
-        assert!(sound.repeats().is_none());
+        let sound = Sample::from((1, &aiff, None));
+        assert_eq!(sound.number, 1);
+        assert!(sound.data.is_empty());
+        assert!(sound.repeats.is_none());
     }
 
     #[test]
     fn test_sound_from_aiff_no_sndfile_repeats() {
         let aiff = Chunk::new_form(0, "AIFF", vec![]);
-        let sound = Sound::from((1, &aiff, Some(&5)));
-        assert_eq!(sound.number(), 1);
-        assert!(sound.data().is_empty());
-        assert_some_eq!(sound.repeats(), &5);
+        let sound = Sample::from((1, &aiff, Some(&5)));
+        assert_eq!(sound.number, 1);
+        assert!(sound.data.is_empty());
+        assert_some_eq!(sound.repeats, &5);
     }
 
     #[test]
@@ -299,14 +370,14 @@ mod tests {
         let blorb = mock_blorb();
         let map = HashMap::from(blorb);
         let snd = assert_some!(map.get(&1));
-        assert_eq!(snd.number(), 1);
-        assert_eq!(snd.data(), &[1, 1, 1, 1]);
-        assert_some_eq!(snd.repeats(), &10);
+        assert_eq!(snd.number, 1);
+        assert_eq!(snd.data, &[1, 1, 1, 1]);
+        assert_some_eq!(snd.repeats, &10);
         assert!(map.get(&2).is_none());
         let snd = assert_some!(map.get(&4));
-        assert_eq!(snd.number(), 4);
-        assert_eq!(snd.data(), &[4, 4, 4, 4]);
-        assert!(snd.repeats().is_none());
+        assert_eq!(snd.number, 4);
+        assert_eq!(snd.data, &[4, 4, 4, 4]);
+        assert!(snd.repeats.is_none());
     }
 
     #[test]
@@ -315,7 +386,7 @@ mod tests {
         let manager = assert_ok!(Manager::new(128.0, blorb));
         assert!(manager.player.is_some());
         assert_eq!(manager.sounds.len(), 2);
-        assert_eq!(manager.current_effect(), 0);
+        assert_eq!(manager.current_effect, 0);
     }
 
     // #[test]
@@ -368,7 +439,7 @@ mod tests {
         let mut manager = assert_ok!(Manager::new(128.0, blorb));
         manager.stop_sound();
         assert!(!manager.is_playing());
-        assert_eq!(manager.current_effect(), 0);
+        assert_eq!(manager.current_effect, 0);
         assert_eq!(play_sound(), (0, 0, 0));
     }
 
@@ -392,7 +463,7 @@ mod tests {
         let mut manager = assert_ok!(Manager::new(128.0, blorb));
         manager.change_volume(8);
         assert!(!manager.is_playing());
-        assert_eq!(manager.current_effect(), 0);
+        assert_eq!(manager.current_effect, 0);
         assert_eq!(play_sound(), (0, 0, 0));
     }
 }

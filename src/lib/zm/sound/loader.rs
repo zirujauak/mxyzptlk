@@ -1,3 +1,4 @@
+//! Utility function to convert sound sample format from AIFF to FLAC
 use std::{
     fs::File,
     io::{Read, Write},
@@ -11,6 +12,13 @@ use tempfile::NamedTempFile;
 use crate::error::{ErrorCode, RuntimeError};
 use crate::recoverable_error;
 
+/// Creates a temporary file used during sample conversion
+///
+/// # Arguments
+/// * `data` - Raw sample data
+///
+/// # Returns
+/// [Result] with a tuple of ([NamedTempFile], [File]) or a [RuntimeError]
 fn tempfile(data: Option<&Vec<u8>>) -> Result<(NamedTempFile, File), RuntimeError> {
     match NamedTempFile::new() {
         Ok(mut tempfile) => match tempfile.reopen() {
@@ -38,6 +46,13 @@ fn tempfile(data: Option<&Vec<u8>>) -> Result<(NamedTempFile, File), RuntimeErro
     }
 }
 
+/// Converts a sound sample from AIFF to FLAC
+///
+/// # Arguments
+/// * `data` - Raw AIFF sample data
+///
+/// # Returns
+/// [Result] with raw FLAC sample data or a [RuntimeError]
 pub fn convert_aiff(data: &Vec<u8>) -> Result<Vec<u8>, RuntimeError> {
     let (_, source) = tempfile(Some(data))?;
     match OpenOptions::ReadOnly(ReadOptions::Auto)
