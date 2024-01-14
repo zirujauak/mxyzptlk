@@ -905,6 +905,7 @@ impl TryFrom<&ZMachine> for Stks {
 
     fn try_from(value: &ZMachine) -> Result<Self, Self::Error> {
         let mut frames = Vec::new();
+        // TBD: Stk::trY_from(Frame)
         for f in &value.frames {
             // Flags: 0b000rvvvv
             //  r = 1 if the frame routine does not store a result
@@ -1371,7 +1372,7 @@ impl ZMachine {
                 result,
                 return_address,
             )?;
-            frame.set_read_interrupt(true);
+            frame.set_read_interrupt();
             self.frames.push(frame);
 
             Ok(NextAddress::Address(initial_pc))
@@ -1401,7 +1402,7 @@ impl ZMachine {
                 result,
                 return_address,
             )?;
-            frame.set_read_char_interrupt(true);
+            frame.set_read_char_interrupt();
             self.frames.push(frame);
 
             Ok(NextAddress::Address(initial_pc))
@@ -1417,7 +1418,7 @@ impl ZMachine {
     }
 
     pub fn set_redraw_input(&mut self) -> Result<(), RuntimeError> {
-        self.current_frame_mut()?.set_redraw_input(true);
+        self.current_frame_mut()?.set_redraw_input();
         Ok(())
     }
 

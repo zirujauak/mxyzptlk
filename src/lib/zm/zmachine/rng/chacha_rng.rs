@@ -1,17 +1,28 @@
+//! [ChaCha8](https://docs.rs/rand_chacha/latest/rand_chacha/struct.ChaCha8Rng.html) random number generator implementation
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
-use crate::zmachine::rng::*;
+#[allow(unused)]
+use crate::zmachine::rng::{
+    Mode::{self, *},
+    *,
+};
 
+/// RNG
 pub struct ChaChaRng {
+    /// RNG [Mode]
     mode: Mode,
+    /// Predictable range, from 1..=`predictable_range`
     predictable_range: u16,
+    /// Next value in [Mode::Predictable]
     predictable_next: u16,
+    /// RNG
     rng: ChaCha8Rng,
 }
 
 impl ChaChaRng {
+    /// Constructor
     pub fn new() -> ChaChaRng {
         ChaChaRng {
             mode: Mode::Random,
