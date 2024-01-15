@@ -1,3 +1,4 @@
+//! Helper functions for the execution of instructions
 use crate::zmachine::ZMachine;
 use crate::{error::*, fatal_error};
 

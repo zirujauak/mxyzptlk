@@ -1,4 +1,4 @@
-//! [Object] (https://inform-fiction.org/zmachine/standards/z1point1/sect12.html) utility functions
+//! [Object](https://inform-fiction.org/zmachine/standards/z1point1/sect12.html) utility functions
 
 use crate::{
     error::*,
