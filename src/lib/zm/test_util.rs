@@ -3,7 +3,7 @@ use std::{
     collections::{HashMap, VecDeque},
 };
 
-use crate::{iff::Chunk, types::StoreResult};
+use crate::{iff::Chunk, instruction::StoreResult};
 
 use crate::{
     blorb::{Blorb, Entry, IFhd, Index, Loop, RIdx},
@@ -214,7 +214,7 @@ pub fn mock_zmachine(map: Vec<u8>) -> ZMachine {
     // let m = Memory::new(map);
     // let manager = Manager::mock();
     // assert!(manager.is_ok());
-    let z = ZMachine::new(map, Config::default(), "test", 24, 80);
+    let z = ZMachine::new(map, &Config::default(), "test", 24, 80);
     assert!(z.is_ok());
     z.unwrap()
 }
@@ -905,7 +905,7 @@ pub fn mock_blorb() -> Blorb {
     sounds.insert(0x200, Chunk::new_form(0x200, "AIFF", vec![]));
     Blorb::new(
         ridx,
-        Some(IFhd::new(0x1234, &[], 0x5678, 0x98abcd)),
+        Some(IFhd::new(0x1234, &[], 0x5678)),
         sounds,
         Some(sloop),
         None,

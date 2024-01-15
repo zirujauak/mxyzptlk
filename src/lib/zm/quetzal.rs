@@ -1,3 +1,4 @@
+//! [Quetzal](http://inform-fiction.org/zmachine/standards/quetzal/index.html) processing
 use std::fmt;
 
 use crate::{
@@ -7,14 +8,26 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
+/// The [game identifier](http://inform-fiction.org/zmachine/standards/quetzal/index.html#five) chunk
 pub struct IFhd {
+    /// The release number from the game header
     release_number: u16,
+    /// The 6-character ASCII serial number from the game header
     serial_number: Vec<u8>,
+    /// The checksum from the game header
     checksum: u16,
+    /// Initial PC
     pc: u32,
 }
 
 impl IFhd {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `release_number` - the header release number value
+    /// * `serial_number` - the header serial number value
+    /// * `checksum` - the header checksum value
+    /// * `pc` - Initial instruction address
     pub fn new(release_number: u16, serial_number: &[u8], checksum: u16, pc: u32) -> IFhd {
         IFhd {
             release_number,
@@ -24,18 +37,34 @@ impl IFhd {
         }
     }
 
+    /// Get the release number
+    ///
+    /// # Returns
+    /// Release number
     pub fn release_number(&self) -> u16 {
         self.release_number
     }
 
+    /// Get a reference to the serial number vector
+    ///
+    /// # Returns
+    /// Reference to the serial number vector
     pub fn serial_number(&self) -> &Vec<u8> {
         &self.serial_number
     }
 
+    /// Get the checksum
+    ///
+    /// # Returns
+    /// Checksum
     pub fn checksum(&self) -> u16 {
         self.checksum
     }
 
+    /// Get the initial program counter
+    ///
+    /// # Returns
+    /// Initial program counter address
     pub fn pc(&self) -> u32 {
         self.pc
     }
@@ -49,6 +78,7 @@ impl PartialEq for IFhd {
             && self.checksum == other.checksum
     }
 }
+
 impl fmt::Display for IFhd {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
@@ -93,8 +123,11 @@ impl From<IFhd> for Chunk {
     }
 }
 
+/// [Dynamic memory](http://inform-fiction.org/zmachine/standards/quetzal/index.html#three) - CMem and UMem
 pub struct Mem {
+    /// Is memory compressed?
     compressed: bool,
+    /// Saved dynamic memory state
     memory: Vec<u8>,
 }
 
@@ -110,14 +143,27 @@ impl fmt::Debug for Mem {
 }
 
 impl Mem {
+    /// Constructor
+    ///
+    /// Arguments
+    /// * `compressed` - `true` for `CMem``, `false` for `UMem`
+    /// * `memory` - Dynamic memory state
     pub fn new(compressed: bool, memory: Vec<u8>) -> Mem {
         Mem { compressed, memory }
     }
 
+    /// Get the compressed flag value
+    ///
+    /// # Returns
+    /// Compressed flag
     pub fn compressed(&self) -> bool {
         self.compressed
     }
 
+    /// Get a reference to the dynamic memory data, which may be compressed.
+    ///
+    /// # Returns
+    /// Reference to dynamic memory data
     pub fn memory(&self) -> &Vec<u8> {
         &self.memory
     }
@@ -142,16 +188,31 @@ impl From<Mem> for Chunk {
 }
 
 #[derive(Debug)]
+/// Stack frame element
 pub struct Stk {
+    /// Return address of the frame
     return_address: u32,
+    /// Frame flags
     flags: u8,
+    /// Store result location
     result_variable: u8,
+    /// Arguments bitmask
     arguments: u8,
+    /// Local variables
     variables: Vec<u16>,
+    /// Stack
     stack: Vec<u16>,
 }
 
 impl Stk {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `return_address` - return address
+    /// * `flags` - frame flags
+    /// * `arguments` - argument bitmask
+    /// * `variables` - local variable values
+    /// * `stack` - stack
     pub fn new(
         return_address: u32,
         flags: u8,
@@ -170,26 +231,58 @@ impl Stk {
         }
     }
 
+    /// Get the return address
+    ///
+    /// # Returns
+    /// Return address
     pub fn return_address(&self) -> u32 {
         self.return_address
     }
 
+    /// Get the frame flags
+    ///
+    /// # Returns
+    /// Flags: 000pvvvv: p = store indicator, vvvv = local variable count
     pub fn flags(&self) -> u8 {
         self.flags
     }
 
+    /// Get the variable the frame result will be stored to.
+    ///
+    /// If the routine does not store a result, this value should be 0.
+    ///
+    /// # Returns
+    /// Result variable
     pub fn result_variable(&self) -> u8 {
         self.result_variable
     }
 
+    /// Get the argument mask
+    ///
+    /// Each bit 0 - 6 indicates whether arguments (1 through 7) were passed
+    /// to the routine.
+    ///
+    /// # Returns
+    /// Argument mask
     pub fn arguments(&self) -> u8 {
         self.arguments
     }
 
+    /// Get a reference to the local variable values.
+    ///
+    /// Local variables are stored in a vector, with index 0 holding local
+    /// variable 1.
+    ///
+    /// # Returns
+    /// Reference to the local variable value
     pub fn variables(&self) -> &Vec<u16> {
         &self.variables
     }
 
+    /// Get a reference to the stack
+    ///
+    /// # Returns
+    /// Reference to the stack
     pub fn stack(&self) -> &Vec<u16> {
         &self.stack
     }
@@ -215,15 +308,25 @@ impl From<Stk> for Vec<u8> {
 }
 
 #[derive(Debug)]
+/// [Stks](http://inform-fiction.org/zmachine/standards/quetzal/index.html#four) chunk
 pub struct Stks {
+    /// Vector of stack frames, ordered from oldest to newest
     stks: Vec<Stk>,
 }
 
 impl Stks {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `stks` - Vector of `Stk ` data
     pub fn new(stks: Vec<Stk>) -> Stks {
         Stks { stks }
     }
 
+    /// Get a reference to the vector of `Stk ` elements
+    ///
+    /// # Returns
+    /// Reference to the `Stk ` vector
     pub fn stks(&self) -> &Vec<Stk> {
         &self.stks
     }
@@ -278,25 +381,47 @@ impl From<Stks> for Chunk {
 }
 
 #[derive(Debug)]
+/// Quetzal structure
 pub struct Quetzal {
+    /// Game information
     ifhd: IFhd,
+    /// Dynamic memory state
     mem: Mem,
+    /// Frame stack
     stks: Stks,
 }
 
 impl Quetzal {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `ifhd` - Game information
+    /// * `mem` - Dynamic memory state
+    /// * `stks` - Frame stack
     pub fn new(ifhd: IFhd, mem: Mem, stks: Stks) -> Quetzal {
         Quetzal { ifhd, mem, stks }
     }
 
+    /// Get a reference to the game information resource
+    ///
+    /// # Returns
+    /// Reference to the game information resource
     pub fn ifhd(&self) -> &IFhd {
         &self.ifhd
     }
 
+    /// Get a reference to the dynamic memory state
+    ///
+    /// # Returns
+    /// Reference to the dynamic memory data
     pub fn mem(&self) -> &Mem {
         &self.mem
     }
 
+    /// Get a reference to the stack frame vector
+    ///
+    /// # Returns
+    /// Reference to the stack frame vector
     pub fn stks(&self) -> &Stks {
         &self.stks
     }

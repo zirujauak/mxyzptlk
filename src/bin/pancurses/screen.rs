@@ -1,4 +1,3 @@
-use core::fmt;
 use std::{
     fs::{self, File},
     io::{Read, Write},
@@ -13,10 +12,12 @@ use regex::Regex;
 use zm::{
     config::Config,
     error::{ErrorCode, RuntimeError},
-    files, recoverable_error,
+    recoverable_error,
     sound::Manager,
     zmachine::{InputEvent, Interrupt},
 };
+
+use crate::files;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Color {
@@ -184,13 +185,13 @@ impl Screen {
         }
     }
 
-    pub fn default_colors(&self) -> (Color, Color) {
-        self.default_colors
-    }
+    // pub fn default_colors(&self) -> (Color, Color) {
+    //     self.default_colors
+    // }
 
-    pub fn selected_window(&self) -> u8 {
-        self.selected_window
-    }
+    // pub fn selected_window(&self) -> u8 {
+    //     self.selected_window
+    // }
 
     pub fn move_cursor(&mut self, row: u32, column: u32) {
         // Constrain the column between 1 and the width of the screen
@@ -377,6 +378,9 @@ impl Screen {
         if self.cursor_0.0 == self.rows {
             self.window.mv(self.window_0_top as i32 - 1, 0);
             self.window.insdelln(-1);
+            for i in 0..=self.columns {
+                self.print_at(&[' ' as u16], (self.rows, i), &CellStyle::new());
+            }
             self.window.refresh();
             self.cursor_0 = (self.rows, 1);
         } else {
@@ -532,10 +536,10 @@ impl Screen {
         }
     }
 
-    pub fn flush_buffer(&mut self) -> Result<(), RuntimeError> {
-        self.window.refresh();
-        Ok(())
-    }
+    // pub fn flush_buffer(&mut self) -> Result<(), RuntimeError> {
+    //     self.window.refresh();
+    //     Ok(())
+    // }
 
     pub fn key(&mut self, wait: bool) -> InputEvent {
         self.lines_since_input = 0;
@@ -599,11 +603,6 @@ impl Screen {
 
             let key = self.key(end == 0);
             if let Some(c) = key.zchar() {
-                // TBD
-                // if c == 253 || c == 254 {
-                //     self.mouse_data(&key)?;
-                // }
-
                 return Ok(key);
             }
 
@@ -618,7 +617,7 @@ impl Screen {
         terminators: &[u16],
         timeout: u16,
         mut sound: Option<&mut Manager>,
-    ) -> Result<Vec<u16>, RuntimeError> {
+    ) -> Result<(Vec<u16>, InputEvent), RuntimeError> {
         let mut input_buffer = text.to_vec();
 
         let end = if timeout > 0 {
@@ -628,12 +627,13 @@ impl Screen {
         };
 
         debug!(target: "app::screen", "Read until {}", end);
+        let mut terminator = InputEvent::no_input();
 
         loop {
             let now = self.now(None);
             if end > 0 && now > end {
                 debug!(target: "app::screen", "Read interrupted: timed out");
-                return Ok(input_buffer);
+                return Ok((input_buffer, InputEvent::no_input()));
             }
 
             let (routine, playing) = if let Some(ref mut s) = sound.as_deref_mut() {
@@ -644,7 +644,7 @@ impl Screen {
 
             if routine && !playing {
                 debug!(target: "app::screen", "Read interrupted: sound finished playing");
-                return Ok(input_buffer);
+                return Ok((input_buffer, InputEvent::no_input()));
             }
 
             let timeout = if end > 0 { end - now } else { 0 };
@@ -657,11 +657,7 @@ impl Screen {
                         // Terminator 255 means "any function key"
                         || (terminators.contains(&255) && ((129..155).contains(&key) || key > 251))
                     {
-                        // TBD
-                        // if key == 254 || key == 253 {
-                        //     self.mouse_data(&e)?;
-                        // }
-
+                        terminator = e;
                         input_buffer.push(key);
                         // Only print the terminator if it was the return key
                         if key == 0x0d {
@@ -682,7 +678,7 @@ impl Screen {
             }
         }
 
-        Ok(input_buffer)
+        Ok((input_buffer, terminator))
     }
 
     pub fn status_line(&mut self, left: &Vec<u16>, right: &Vec<u16>) -> Result<(), RuntimeError> {
@@ -851,7 +847,7 @@ impl Screen {
 
         self.print(&n);
 
-        let f = self.read_line(&n, 32, &['\r' as u16], 0, None)?;
+        let f = self.read_line(&n, 32, &['\r' as u16], 0, None)?.0;
         let filename = match String::from_utf16(&f) {
             Ok(s) => s.trim().to_string(),
             Err(e) => {

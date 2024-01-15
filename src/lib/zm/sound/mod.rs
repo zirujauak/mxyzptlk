@@ -362,7 +362,7 @@ mod tests {
         let sound = Sample::from((1, &aiff, Some(&5)));
         assert_eq!(sound.number, 1);
         assert!(sound.data.is_empty());
-        assert_some_eq!(sound.repeats, &5);
+        assert_some_eq!(sound.repeats, 5);
     }
 
     #[test]
@@ -372,7 +372,7 @@ mod tests {
         let snd = assert_some!(map.get(&1));
         assert_eq!(snd.number, 1);
         assert_eq!(snd.data, &[1, 1, 1, 1]);
-        assert_some_eq!(snd.repeats, &10);
+        assert_some_eq!(snd.repeats, 10);
         assert!(map.get(&2).is_none());
         let snd = assert_some!(map.get(&4));
         assert_eq!(snd.number, 4);

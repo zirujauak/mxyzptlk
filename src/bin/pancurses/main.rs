@@ -11,12 +11,12 @@ use screen::Screen;
 use zm::blorb::Blorb;
 use zm::config::Config;
 use zm::error::{ErrorCode, RuntimeError};
-use zm::files;
 use zm::sound::Manager;
 use zm::zmachine::{InterpreterResponse, Interrupt, RequestType, ZMachine};
 
 use crate::log::*;
 
+mod files;
 mod screen;
 
 fn initialize_sound_engine(
@@ -111,6 +111,9 @@ fn run(
                     RequestType::BufferMode => {
                         screen.buffer_mode(req.request().buffer_mode());
                     }
+                    RequestType::EraseLine => {
+                        screen.erase_line();
+                    }
                     RequestType::EraseWindow => {
                         screen.erase_window(req.request().window_erase() as i8)?;
                     }
@@ -165,7 +168,7 @@ fn run(
                             let (left, right) = zmachine.status_line()?;
                             screen.status_line(&left, &right)?;
                         }
-                        let input = screen.read_line(
+                        let (input, terminator) = screen.read_line(
                             req.request().input(),
                             req.request().length() as usize,
                             req.request().terminators(),
@@ -196,7 +199,7 @@ fn run(
                                 );
                             }
                         } else {
-                            response = InterpreterResponse::read_complete(input);
+                            response = InterpreterResponse::read_complete(input, terminator);
                         }
                     }
                     RequestType::ReadRedraw => {
@@ -287,7 +290,11 @@ fn run(
                         },
                     },
                     RequestType::SplitWindow => {
-                        screen.split_window(req.request().split_lines() as u32);
+                        if req.request().split_lines() > 0 {
+                            screen.split_window(req.request().split_lines() as u32);
+                        } else {
+                            screen.unsplit_window();
+                        }
                     }
                     _ => {
                         debug!("Interpreter directive: {:?}", req.request_type());

@@ -917,6 +917,8 @@ pub struct ResponsePayload {
 
     // READ
     input: Vec<u16>,
+    terminator: InputEvent,
+
     // ...interrupted
     interrupt: Interrupt,
 
@@ -988,11 +990,12 @@ impl InterpreterResponse {
     ///
     /// # Arguments
     /// * `input` - Interpreter input
-    pub fn read_complete(input: Vec<u16>) -> Option<InterpreterResponse> {
+    pub fn read_complete(input: Vec<u16>, terminator: InputEvent) -> Option<InterpreterResponse> {
         Some(InterpreterResponse {
             response_type: ResponseType::ReadComplete,
             response: ResponsePayload {
                 input,
+                terminator,
                 ..Default::default()
             },
         })
@@ -2326,6 +2329,33 @@ impl ZMachine {
         }
     }
 
+    pub fn new_line(
+        &mut self,
+        next_address: NextAddress,
+    ) -> Result<InstructionResult, RuntimeError> {
+        // Stream 3 halts output to any other stream
+        if self.is_stream_enabled(3) {
+            if let Some(s) = self.stream_3.last_mut() {
+                s.push(0xd);
+                InstructionResult::new(next_address)
+            } else {
+                fatal_error!(
+                    ErrorCode::Stream3Table,
+                    "Stream 3 enabled, but no table to write to"
+                )
+            }
+        } else if self.is_stream_enabled(1) {
+            // If this is a READ interrupt routine, set the redraw flag
+            if self.is_read_interrupt()? {
+                self.set_redraw_input()?;
+            }
+
+            InstructionResult::new_line(next_address)
+        } else {
+            InstructionResult::new(next_address)
+        }
+    }
+
     // Save/Restore
     /// Restore game state from a [Quetzal](http://inform-fiction.org/zmachine/standards/quetzal/index.html) state
     ///
@@ -2529,6 +2559,20 @@ impl ZMachine {
                 }
                 ResponseType::ReadComplete => {
                     let i = decoder::decode_instruction(self, self.pc()?)?;
+                    if res.response.terminator.zchar.unwrap() == 253
+                        || res.response.terminator.zchar.unwrap() == 254
+                    {
+                        header::set_extension(
+                            &mut self.memory,
+                            1,
+                            res.response.terminator.column.unwrap(),
+                        )?;
+                        header::set_extension(
+                            &mut self.memory,
+                            2,
+                            res.response.terminator.row.unwrap(),
+                        )?;
+                    }
                     let r = processor_var::read_post(self, &i, res.response.input.clone())?;
                     if let NextAddress::Address(a) = r.next_address() {
                         self.set_next_pc(*a)?;
@@ -2600,6 +2644,16 @@ impl ZMachine {
                             .zchar
                             .expect("Completed READ_CHAR should return a zchar"),
                     )?;
+                    if res.response.key.zchar.unwrap() == 253
+                        || res.response.key.zchar.unwrap() == 254
+                    {
+                        header::set_extension(
+                            &mut self.memory,
+                            1,
+                            res.response.key.column.unwrap(),
+                        )?;
+                        header::set_extension(&mut self.memory, 2, res.response.key.row.unwrap())?;
+                    }
                     Ok(None)
                 }
                 ResponseType::ReadCharInterrupted => {

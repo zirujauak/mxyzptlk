@@ -1,3 +1,4 @@
+//! [Instruction](https://inform-fiction.org/zmachine/standards/z1point1/sect04.html)
 use std::fmt;
 
 use crate::{error::RuntimeError, zmachine::InterpreterRequest};
@@ -23,7 +24,7 @@ pub enum OperandType {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-/// [Operands](https://inform-fiction.org/zmachine/standards/z1point1/sect04.html#five)
+/// [Operand](https://inform-fiction.org/zmachine/standards/z1point1/sect04.html#five)
 pub struct Operand {
     /// The [OperandType]
     operand_type: OperandType,

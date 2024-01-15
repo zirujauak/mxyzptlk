@@ -1,3 +1,4 @@
+//! The Z-Machine as a library
 #![crate_name = "zm"]
 
 #[macro_use]
@@ -6,7 +7,6 @@ extern crate log;
 pub mod blorb;
 pub mod config;
 pub mod error;
-pub mod files;
 pub mod iff;
 pub mod instruction;
 pub mod object;

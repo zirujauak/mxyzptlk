@@ -1,3 +1,4 @@
+//! [ZSCII](https://inform-fiction.org/zmachine/standards/z1point1/sect03.html) text encoding
 use std::cmp::Ordering;
 
 use crate::{
@@ -6,6 +7,7 @@ use crate::{
     zmachine::{header::HeaderField, ZMachine},
 };
 
+/// ZCode version 3+ [alphabets](https://inform-fiction.org/zmachine/standards/z1point1/sect03.html#two)
 const ALPHABET_V3: [[char; 26]; 3] = [
     [
         'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
@@ -21,14 +23,15 @@ const ALPHABET_V3: [[char; 26]; 3] = [
     ],
 ];
 
-/// Decode an abbreviation to a string
+/// Decode an [abbreviation](https://inform-fiction.org/zmachine/standards/z1point1/sect03.html#three) to a string
 ///
 /// # Arguments
+/// * `zmachine` - Reference to the Z-machine
+/// * `abbrev_table` - Abbreviation table index
+/// * `index` - Abbreviation index within the table
 ///
-/// * `m` - Memory map
-/// * `v` - Version (1-8)
-/// * `t` - Abbreviation table (1 - 3)
-/// * `i` - Abbreviation table index (0 - 31)
+/// # Returns
+/// [Result] containing the abbreviation text or a [RuntimeError]
 fn abbreviation(
     zmachine: &ZMachine,
     abbrev_table: u8,
@@ -40,13 +43,18 @@ fn abbreviation(
     as_text(zmachine, word_addr * 2, true)
 }
 
-/// Read ZSCII from an address and decode it to a string
+/// Read [ZSCII](https://inform-fiction.org/zmachine/standards/z1point1/sect03.html#one) from an address and decode it to a string
+///
+/// Note that it is illegal for an abbreviation to contain an abbreviation and a [Runtime] error will
+/// be returned.
 ///
 /// # Arguments
+/// * `zmachine` - Reference to the Z-machine
+/// * `address` - Address of the text
+/// * `is_abbreviation` - `true` when decoding an abbreviation, `false` if not.
 ///
-/// * `m` - Memory map
-/// * `v` - Version (1-8)
-/// * `a` - Address of the ZSCII-encoded string
+/// # Returns
+/// [Result] containing the decoded text or a [RuntimeError]
 pub fn as_text(
     zmachine: &ZMachine,
     address: usize,
@@ -61,11 +69,16 @@ pub fn as_text(
 
 /// Decode a vector of ZSCII words to a string
 ///
-/// # Arguments:
+/// Note that it is illegal for an abbreviation to contain an abbreviation and a [Runtime] error will
+/// be returned.
 ///
-/// * `m` - Memory map
-/// * `v` - Version (1-8)
-/// * `z` - Vector of ZSCII-encoded words
+/// # Arguments:
+/// * `zmachine` - Reference to the Z-machine
+/// * `ztext` - Vector of encoded ztext
+/// * `is_abbreviation` - `true` when decoding an abbreviation, `false` if not.
+///
+/// # Returns
+/// [Result] containing the decoded text or a [RuntimeError]
 pub fn from_vec(
     zmachine: &ZMachine,
     ztext: &Vec<u16>,
@@ -130,10 +143,15 @@ pub fn from_vec(
     Ok(s)
 }
 
-pub fn separators(
-    zmachine: &ZMachine,
-    dictionary_address: usize,
-) -> Result<Vec<char>, RuntimeError> {
+/// Get the set of word separators from a dictionary
+///
+/// # Arguments
+/// * `zmachine` - Reference to the Z-Machine
+/// * `dictionary_address` - Address of the dictionary
+///
+/// # Returns
+/// [Result] containing a vector of word separator characters or a [RuntimeError]
+fn separators(zmachine: &ZMachine, dictionary_address: usize) -> Result<Vec<char>, RuntimeError> {
     let separator_count = zmachine.read_byte(dictionary_address)?;
     let mut sep = Vec::new();
     for i in 1..=separator_count as usize {
@@ -144,6 +162,15 @@ pub fn separators(
     Ok(sep)
 }
 
+/// Find the ztext value of a character.
+///
+/// # Arguments
+/// * `zchar` - Character to look up
+///
+/// # Returns
+/// Vector cotaining the ztext value of the character with any required alphabet shift.
+/// If the character isn't part of the standard alphabet, a two-character 10-bit ZSCII
+/// sequence is returned.
 fn find_char(zchar: u16) -> Vec<u16> {
     let c = (zchar as u8) as char;
     if c == ' ' {
@@ -173,10 +200,30 @@ fn find_char(zchar: u16) -> Vec<u16> {
     vec![5, 6, z1 as u16, z2 as u16]
 }
 
+/// Encode 3 5-bit ztext characters into a word
+///
+/// # Arguments
+/// * `z1` - first character,
+/// * `z2` - second character,
+/// * `z3` - third character
+///
+/// # Return
+/// Word encoding of the sequence: 01111122 22233333
 fn as_word(z1: u16, z2: u16, z3: u16) -> u16 {
     ((z1 & 0x1F) << 10) | ((z2 & 0x1F) << 5) | z3 & 0x1F
 }
 
+/// Perform a binary search for a word in a sorted [dictionary](https://inform-fiction.org/zmachine/standards/z1point1/sect13.html#two)
+///
+/// # Arguments
+/// * `zmachine` - Reference to the z-machine
+/// * `address` - Address of the first entry in the dictionary
+/// * `entry_count` - Number of entries in the dictionary
+/// * `entry_size` - Dictionary entry size
+/// * `word` - Encoded ztext for the word to find
+///
+/// # Returns
+/// [Result] containing the address of the matching dictionary entry or 0 if not found or a [RuntimeError]
 fn search_entry(
     zmachine: &ZMachine,
     address: usize,
@@ -238,6 +285,16 @@ fn search_entry(
     Ok(0)
 }
 
+/// Perform a scan for a word in an unsorted dictionary
+///
+/// # Arguments
+/// * `zmachine` - Reference to the z-machine
+/// * `address` - Address of the first entry in the dictionary
+/// * `entry_count` - Number of entries in the dictionary
+/// * `entry_size` - Dictionary entry size
+/// * `word` - Encoded ztext for the word to find
+///
+/// [Result] containing the address of the matching dictionary entry or 0 if not found or a [RuntimeError]
 fn scan_entry(
     zmachine: &ZMachine,
     address: usize,
@@ -261,6 +318,14 @@ fn scan_entry(
     Ok(0)
 }
 
+/// [Encode](https://inform-fiction.org/zmachine/standards/z1point1/sect03.html#seven) a word
+///
+/// # Arguments
+/// * `word` - Word to encode as a vector of characters
+/// * `words` - the number of encoded words in the result-  2 for v3 (6 characters) and 3 for v4+ (9 characters)
+///
+/// # Returns
+/// Vector of encoded ztext words
 pub fn encode_text(word: &mut Vec<u16>, words: usize) -> Vec<u16> {
     let mut zchars = Vec::new();
 
@@ -289,7 +354,16 @@ pub fn encode_text(word: &mut Vec<u16>, words: usize) -> Vec<u16> {
     zwords
 }
 
-pub fn from_dictionary(
+/// Find the address of the dictionary entry for a word, if any.
+///
+/// # Argument
+/// * `zmachine` - Reference to the Z-Machine
+/// * `dictionary_address` - Address of the dictionary
+/// * `word` - Word to find as a vector of characters
+///
+/// # Returns
+/// [Result] containing the address of the matching dictionary entry or 0 if not found or a [RuntimeError]
+fn from_dictionary(
     zmachine: &ZMachine,
     dictionary_address: usize,
     word: &[char],
@@ -323,6 +397,19 @@ pub fn from_dictionary(
     }
 }
 
+/// Find a word in a dictionary and store the result into the parse buffer
+///
+/// # Arguments
+/// * `zmachine` - Reference to the Z-Machine
+/// * `dictionary` - byte address of the dictionary
+/// * `parse_buffer` - parse buffer address
+/// * `flag` - if `true`, the parse buffer is only updated if the word is in the dictionary
+/// * `parse_index` - index to the parse buffer
+/// * `(word count, word_start)` - the number of words parsed and the starting index of the word from the text buffer
+/// * `word` - Word to find
+///
+/// # Returns
+/// [Result] with a tuple (new parse_index, new parsed word_count) or a [RuntimeError]
 fn find_word(
     zmachine: &mut ZMachine,
     dictionary: usize,
@@ -367,6 +454,17 @@ fn find_word(
     }
 }
 
+/// Store a word entry to the parse buffer
+///
+/// # Arguments
+/// * `zmachine` - Reference to the Z-Machine
+/// * `word` - Word text
+/// * `word_start` - Index of the word position in the text buffer
+/// * `entry_address` - Parse buffer entry address
+/// * `entry` -  Dictionary entry address
+///
+/// # Returns
+/// Empty [Result] or a [RuntimeError]
 fn store_parsed_entry(
     zmachine: &mut ZMachine,
     word: &Vec<char>,
@@ -381,6 +479,17 @@ fn store_parsed_entry(
     Ok(())
 }
 
+/// Parse a text buffer into a parse buffer.
+///
+/// # Arguments
+/// * `zmachine` - Reference to the Z-Machine
+/// * `text_buffer` - Input text buffer address
+/// * `parse_buffer` - Parse buffer address
+/// * `dictionary` - Dictionary address
+/// * `flag` - If `true`, the parse buffer is not updated for words that aren't found in the dictionary
+///
+/// # Returns
+/// Empty [Result] or a [RuntimeError]
 pub fn parse_text(
     zmachine: &mut ZMachine,
     text_buffer: usize,

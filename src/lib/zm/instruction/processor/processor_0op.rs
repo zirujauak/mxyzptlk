@@ -250,10 +250,10 @@ pub fn quit(
 /// Result containing an [InstructionResult] with a [RequestType::NewLine] interpreter request
 /// or a [RuntimeError]
 pub fn new_line(
-    _zmachine: &mut ZMachine,
+    zmachine: &mut ZMachine,
     instruction: &Instruction,
 ) -> Result<InstructionResult, RuntimeError> {
-    InstructionResult::new_line(Address(instruction.next_address))
+    zmachine.new_line(Address(instruction.next_address))
 }
 
 /// [SHOW_STATUS](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#show_status): prints

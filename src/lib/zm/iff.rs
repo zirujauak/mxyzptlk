@@ -1,3 +1,4 @@
+//! [IFF](https://en.wikipedia.org/wiki/Interchange_File_Format) file processing
 use core::fmt;
 use std::{
     convert::TryFrom,
@@ -18,11 +19,17 @@ use std::{
 /// this length includes the 4-bytes `sub_id` value.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Chunk {
+    /// Offset of the chunk in the IFF file
     offset: u32,
+    /// Chunk ID
     id: Vec<u8>,
+    /// Chunk length
     length: u32,
+    /// Chunk `sub_id` (group chunks only)
     sub_id: Vec<u8>,
+    /// Child chunks (group chunks only)
     chunks: Vec<Chunk>,
+    /// Chunk data (non-group chunks only)
     data: Vec<u8>,
 }
 
@@ -30,6 +37,12 @@ pub struct Chunk {
 ///
 /// Pads the id to ensure it is at least 4 characters long, then returns
 /// a byte vector containing the first 4 characters.
+///
+/// # Arguments
+/// * `id` - No-more-than-4-character ID string
+///
+/// # Returns
+/// 4 byte array containing the id, left padded with spaces if the `id` is less than 4 characters.
 fn id_to_vec(id: &str) -> Vec<u8> {
     let mut id = String::from(id);
     id.push_str("    ");
@@ -37,12 +50,16 @@ fn id_to_vec(id: &str) -> Vec<u8> {
 }
 
 impl Chunk {
-    /// Create a new chunk
+    /// Create a new non-group chunk
     ///
-    /// Arguments:
+    /// # Arguments:
+    /// * `offset`: offset of the chunk in the IFF file
     /// * `id`: IFF Id of the chunk
     /// * `data`: The chunk data.  Data will be padded with a 0 if needed to ensure
     /// the vector is an even number of bytes
+    ///
+    /// # Returns
+    /// Chunk structure
     pub fn new_chunk(offset: u32, id: &str, data: Vec<u8>) -> Chunk {
         let length = data.len() as u32;
         // Pad data, if needed
@@ -64,6 +81,15 @@ impl Chunk {
         }
     }
 
+    /// Create a new FORM (group) chunk
+    ///
+    /// # Arguments:
+    /// * `offset`: offset of the chunk in the IFF file
+    /// * `sub_id`: Sub-id of the FORM
+    /// * `chunks`: Child chunks
+    ///
+    /// # Returns
+    /// Chunk structure
     pub fn new_form(offset: u32, sub_id: &str, chunks: Vec<Chunk>) -> Chunk {
         let length = chunks.iter().fold(4, |l, c| l + 8 + c.length);
         Chunk {
@@ -76,37 +102,62 @@ impl Chunk {
         }
     }
 
+    /// Get the chunk offset in the IFF file
+    ///
+    /// # Returns
+    /// Offset
     pub fn offset(&self) -> u32 {
         self.offset
     }
 
+    /// Get the chunk id as a string
+    ///
+    /// # Returns
+    /// Chunk id
     pub fn id(&self) -> String {
         self.id.iter().map(|x| *x as char).collect::<String>()
     }
 
+    /// Get the chunk length
+    ///
+    /// # Returns
+    /// Chunk length
     pub fn length(&self) -> u32 {
         self.length
     }
 
+    /// Get the chunk sub-id
+    ///
+    /// # Returns
+    /// Chunk sub-id
     pub fn sub_id(&self) -> String {
         self.sub_id.iter().map(|x| *x as char).collect::<String>()
     }
 
+    /// Get a reference to the child chunk vector
+    ///
+    /// # Returns
+    /// Reference to child chunk vector
     pub fn chunks(&self) -> &Vec<Chunk> {
         &self.chunks
     }
 
+    /// Get a reference to the chunk data
+    ///
+    /// # Returns
+    /// Reference to the chunk data
     pub fn data(&self) -> &Vec<u8> {
         &self.data
     }
 
     /// Finds the (first) direct child chunk with the matching id and sub id.
     ///
-    /// Arguments:
+    /// # Arguments:
     /// * `id`: IFF id of the chunk to find
     /// * `sub_id`: IFF sub id when id is "FORM", otherwise use an empty string ""
     ///
-    /// Returns an Option containing the first matched chunk, or None.
+    /// # Returns
+    /// [Option] containing the first matched chunk, or [None].
     pub fn find_chunk(&self, id: &str, sub_id: &str) -> Option<&Chunk> {
         let chunks: Vec<&Chunk> = self
             .chunks
@@ -124,10 +175,11 @@ impl Chunk {
     ///
     /// The search ends when the first match is found.
     ///
-    /// Arguments:
+    /// # Arguments:
     /// * `ids`: A list of id+sub_id values to search for.
     ///
-    /// Returns an Option containing the first matched chunk, or None.
+    /// # Returns
+    /// [Option] containing the first matched chunk, or [None].
     pub fn find_first_chunk(&self, ids: Vec<(&str, &str)>) -> Option<&Chunk> {
         for (id, sub_id) in ids {
             if let Some(c) = self.find_chunk(id, sub_id) {
@@ -139,11 +191,12 @@ impl Chunk {
     }
     /// Finds all direct child chunk with the matching id and sub id.
     ///
-    /// Arguments:
-    /// * id: IFF id of the chunk to find
-    /// * sub_id: IFF sub id when id is "FORM", otherwise use an empty string ""
+    /// # Arguments:
+    /// * `id`: IFF id of the chunk to find
+    /// * `sub_id`: IFF sub id when id is "FORM", otherwise use an empty string ""
     ///
-    /// Returns a vector of references to the matched Chunks.
+    /// # Returns
+    /// A vector of references to the matched Chunks.
     pub fn find_chunks(&self, id: &str, sub_id: &str) -> Vec<&Chunk> {
         let mut chunks = Vec::new();
         // Filter the chunks array by id and sub id
@@ -158,9 +211,11 @@ impl Chunk {
 
 /// Tranform a vector of bytes in big-ending order to a usize
 ///
-/// Arguments:
+/// # Arguments:
 /// * v: A vector of bytes
 ///
+/// # Returns
+/// usize value from the vector
 /// # Examples
 /// ```
 /// use iff::vec_as_unsigned;
@@ -177,14 +232,18 @@ pub fn vec_as_unsigned(v: &[u8]) -> usize {
 
 /// Transforms a usize to a vector of bytes in big-endian order.
 ///
-/// Arguments:
+/// # Arguments:
 /// * value: The usize value
 /// * length: The length of the result
+///
+/// # Returns
+/// A vector containing the usize value as bytes in big-endian order
 ///
 /// # Examples
 /// ```
 /// use iff::unsigned_as_vec;
-/// assert_eq!(unsigned_as_vec(0x123456, 3), vec![0x12, 0x34, 0x56]);
+/// assert_eq!(unsigned_as_vec(0x12345678, 4), vec![0x12, 0x34, 0x56, 0x78]);
+/// assert_eq!(unsigned_as_vec(0x12345678, 3), vec![0x34, 0x56, 0x78]);
 /// ```
 pub fn unsigned_as_vec(value: usize, length: usize) -> Vec<u8> {
     let mut v = Vec::new();

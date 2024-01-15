@@ -293,7 +293,11 @@ pub(in crate::zmachine) fn clear_flag2(
 ///
 /// # Returns
 /// Empty [Result] or a [RuntimeError]
-fn set_extension(memory: &mut Memory, index: usize, value: u16) -> Result<(), RuntimeError> {
+pub(in crate::zmachine) fn set_extension(
+    memory: &mut Memory,
+    index: usize,
+    value: u16,
+) -> Result<(), RuntimeError> {
     let extension_table_address = field_word(memory, HeaderField::ExtensionTable)? as usize;
     if extension_table_address > 0 {
         debug!(target: "app::state", "Set extension table word {} to {:04x}", index, value);
