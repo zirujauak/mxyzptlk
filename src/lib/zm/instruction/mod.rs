@@ -390,6 +390,16 @@ impl fmt::Display for Instruction {
 }
 
 impl Instruction {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `bytes` - Instruction bytes, including the opcode, any opcode type byte(s), branch descriptor and store result
+    /// * `address` - Address of the instruction
+    /// * `opcode` - Instruction opcode
+    /// * `operands` - Operands
+    /// * `store` - Optional store location information
+    /// * `branch` - Optional branch information
+    /// * `next_address` - Address of the next instruction
     pub fn new(
         bytes: &[u8],
         address: usize,
@@ -410,14 +420,18 @@ impl Instruction {
         }
     }
 
+    /// Get a reference to the store location
+    ///
+    /// # Returns
+    /// [Option] with a reference to the store location
     pub fn store(&self) -> Option<&StoreResult> {
         self.store.as_ref()
     }
 
-    fn branch(&self) -> Option<&Branch> {
-        self.branch.as_ref()
-    }
-
+    /// Get the address of the following instruction
+    ///
+    /// # Returns
+    /// Address of the following instruction
     pub fn next_address(&self) -> usize {
         self.next_address
     }

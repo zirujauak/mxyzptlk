@@ -41,7 +41,7 @@ pub fn operand_values(
     let mut v = Vec::new();
     let mut l = "Operand values: ".to_string();
     for o in &instruction.operands {
-        let value = operand_value(zmachine, &o)?;
+        let value = operand_value(zmachine, o)?;
         match o.operand_type {
             OperandType::SmallConstant => l.push_str(&format!(" #{:02x}", value as u8)),
             _ => l.push_str(&format!(" #{:04x}", value)),

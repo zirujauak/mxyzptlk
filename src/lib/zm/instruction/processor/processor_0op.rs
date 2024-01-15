@@ -2,10 +2,7 @@
 //! instructions: short form instructions that have no operands.
 
 use crate::error::{ErrorCode, RuntimeError};
-use crate::instruction::{
-    Instruction, InstructionResult,
-    NextAddress::{self, Address},
-};
+use crate::instruction::{Instruction, InstructionResult, NextAddress::Address};
 use crate::zmachine::header::HeaderField;
 use crate::zmachine::{RequestType, ZMachine};
 use crate::{fatal_error, text};

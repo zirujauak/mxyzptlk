@@ -4,10 +4,7 @@
 use crate::{
     error::{ErrorCode, RuntimeError},
     fatal_error,
-    instruction::{
-        Instruction, InstructionResult,
-        NextAddress::{self, Address},
-    },
+    instruction::{Instruction, InstructionResult, NextAddress::Address},
     object::{self, property},
     text,
     zmachine::{RequestType, ZMachine},
