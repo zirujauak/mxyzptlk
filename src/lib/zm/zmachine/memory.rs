@@ -1,11 +1,17 @@
+//! ZMachine [memory map](https://inform-fiction.org/zmachine/standards/z1point1/sect01.html)
 use std::{fmt, fs::File, io::Read};
 
 use crate::{error::*, fatal_error};
 
+/// Memory map
 pub struct Memory {
+    /// Memory map bytes
     map: Vec<u8>,
+    /// Byte address of the start of static memory
     static_mark: usize,
+    /// File length from the header
     file_length: usize,
+    /// Pristine copy of the dynamic memory region
     dynamic: Vec<u8>,
 }
 
@@ -15,10 +21,25 @@ impl fmt::Debug for Memory {
     }
 }
 
+/// Assembly a word from high- and low-byte balues
+///
+/// # Arguments
+/// * `hb` - high byte value
+/// * `lb` - low byte value
+///
+/// # Returns
+/// Word value
 pub fn word_value(hb: u8, lb: u8) -> u16 {
     (((hb as u16) << 8) & 0xFF00) + ((lb as u16) & 0xFF)
 }
 
+/// Break a word value down into high- and low-byte values
+///
+/// # Arguments
+/// * `w` - Word value
+///
+/// # Returns
+/// Tuple containing (high-byte, low-byte)
 fn byte_values(w: u16) -> (u8, u8) {
     let hb = (w >> 8) as u8;
     let lb = w as u8;
@@ -38,6 +59,10 @@ impl TryFrom<&mut File> for Memory {
 }
 
 impl Memory {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `map` - Vector of memory bytes
     pub fn new(map: Vec<u8>) -> Memory {
         let version = map[0];
         let static_mark = word_value(map[0x0e], map[0x0f]) as usize;
@@ -57,15 +82,33 @@ impl Memory {
         }
     }
 
-    pub fn size(&self) -> usize {
-        self.map.len()
+    /// Get the start of the [static](https://inform-fiction.org/zmachine/standards/z1point1/sect01.html#one) memory region
+    ///
+    /// # Returns
+    /// Byte address of the start of the static memory region
+    pub fn static_mark(&self) -> usize {
+        self.static_mark
     }
 
+    /// Copy a slice of the memory map
+    ///
+    /// # Arguments
+    /// * `start` - address of the start of the slice
+    /// * `length` - length of the slice
+    ///
+    /// # Returns
+    /// Vector containing a copy of the requested slice of memory
     pub fn slice(&self, start: usize, length: usize) -> Vec<u8> {
         let end = usize::min(start + length, self.map.len());
         self.map[start..end].to_vec()
     }
 
+    /// Calculate the checksum of the memory map.
+    ///
+    /// The pristine copy of dynamic memory is used for this calculation.
+    ///
+    /// # Returns
+    /// [Result] with the checksum value or a [RuntimeError]
     pub fn checksum(&self) -> Result<u16, RuntimeError> {
         let mut checksum = 0;
         for i in 0x40..self.dynamic.len() {
@@ -78,6 +121,13 @@ impl Memory {
         Ok(checksum)
     }
 
+    /// Read a byte from the memory map.
+    ///
+    /// # Arguments
+    /// * `address` - Address to read from
+    ///
+    /// # Returns
+    /// [Result] with the byte value at the requested `address` or a [RuntimeError]
     pub fn read_byte(&self, address: usize) -> Result<u8, RuntimeError> {
         if address < self.map.len() {
             Ok(self.map[address])
@@ -91,6 +141,13 @@ impl Memory {
         }
     }
 
+    /// Read a word from the memory map.
+    ///
+    /// # Arguments
+    /// * `address` - Address to read from
+    ///
+    /// # Returns
+    /// [Result] with the word value at the requested `address` or a [RuntimeError]
     pub fn read_word(&self, address: usize) -> Result<u16, RuntimeError> {
         if address < self.map.len() - 1 {
             Ok(word_value(self.map[address], self.map[address + 1]))
@@ -104,6 +161,14 @@ impl Memory {
         }
     }
 
+    /// Write a byte to the memory map.
+    ///
+    /// # Arguments
+    /// * `address` - Address to write to
+    /// * `value` - Byte value to write
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn write_byte(&mut self, address: usize, value: u8) -> Result<(), RuntimeError> {
         if address < self.map.len() {
             debug!(target: "app::state", "Write {:#02x} to ${:04x}", value, address);
@@ -119,6 +184,14 @@ impl Memory {
         }
     }
 
+    /// Write a word to the memory map.
+    ///
+    /// # Arguments
+    /// * `address` - Address to write to
+    /// * `value` - Word value to write
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]    
     pub fn write_word(&mut self, address: usize, value: u16) -> Result<(), RuntimeError> {
         if address < self.map.len() - 2 {
             debug!(target: "app::state", "Write {:#04x} to ${:04x}", value, address);
@@ -136,6 +209,10 @@ impl Memory {
         }
     }
 
+    /// Perform basic [RLE compression](http://inform-fiction.org/zmachine/standards/quetzal/index.html#three) of the current state of dynamic memory
+    ///
+    /// # Returns
+    /// Vector containing the compressed contents of the dynamic memory region
     pub fn compress(&self) -> Vec<u8> {
         let mut cdata: Vec<u8> = Vec::new();
         let mut run_length = 0;
@@ -168,10 +245,18 @@ impl Memory {
         cdata
     }
 
+    /// Reset dynamic memory back to the initial state
     pub fn reset(&mut self) {
         self.map[..][..self.dynamic.len()].copy_from_slice(&self.dynamic)
     }
 
+    /// Replace dynamic memory, presumably from a saved game state
+    ///
+    /// # Arguments
+    /// * `data` - Dynamic memory region to restore
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn restore(&mut self, data: &Vec<u8>) -> Result<(), RuntimeError> {
         if data.len() != self.dynamic.len() {
             fatal_error!(
@@ -186,6 +271,13 @@ impl Memory {
         }
     }
 
+    /// Decompress a compressed dynamic memory region
+    ///
+    /// # Arguments
+    /// * `cdata` - Compressed data, as per the [compress](#method.compress) function
+    ///
+    /// # returns
+    /// Vector containing uncompressed data
     fn decompress(&self, cdata: &[u8]) -> Vec<u8> {
         let mut data = Vec::new();
         let mut iter = cdata.iter();
@@ -212,6 +304,13 @@ impl Memory {
         data
     }
 
+    /// Restore the dynamic region from a compressed memory slice
+    ///
+    /// # Arguments
+    /// * `cdata` - Compressed data
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn restore_compressed(&mut self, cdata: &[u8]) -> Result<(), RuntimeError> {
         let data = self.decompress(cdata);
         self.restore(&data)
@@ -305,17 +404,17 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_size() {
-        let mut map = vec![0; 0x800];
-        map[0] = 5;
-        map[0xE] = 0x4;
-        for (i, b) in (0x40..0x800).enumerate() {
-            map[i + 0x40] = b as u8;
-        }
-        let m = Memory::new(map);
-        assert_eq!(m.size(), 0x800);
-    }
+    // #[test]
+    // fn test_size() {
+    //     let mut map = vec![0; 0x800];
+    //     map[0] = 5;
+    //     map[0xE] = 0x4;
+    //     for (i, b) in (0x40..0x800).enumerate() {
+    //         map[i + 0x40] = b as u8;
+    //     }
+    //     let m = Memory::new(map);
+    //     assert_eq!(m.size(), 0x800);
+    // }
 
     #[test]
     fn test_slice() {

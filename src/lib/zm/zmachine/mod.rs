@@ -1,3 +1,4 @@
+//! Infocom [Zmachine](https://inform-fiction.org/zmachine/standards/z1point1/index.html) implementation
 use std::{
     collections::{HashSet, VecDeque},
     fs::File,
@@ -10,7 +11,7 @@ use crate::{
     instruction::{
         decoder::{self, decode_instruction},
         processor::{self, operand_values, processor_var},
-        Instruction, InstructionResult, NextAddress, StoreResult,
+        InstructionResult, NextAddress, StoreResult,
     },
     object::property,
     quetzal::{IFhd, Mem, Quetzal, Stk, Stks},
@@ -30,20 +31,32 @@ mod memory;
 mod rng;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Error handling behavior for recoverable errors
 pub enum ErrorHandling {
+    /// Warn every time the error occurs and continue running
     ContinueWarnAlways,
+    /// Warn once per error type and continue running
     ContinueWarnOnce,
+    /// Ignore all recoverable errors
     Ignore,
+    /// Treat recoverable errors as fatal errors
     Abort,
 }
 
 #[derive(Debug)]
+/// Stream 3 memory table
 struct Stream3 {
+    /// Table address to write to when the strema is closed
     address: usize,
+    /// Stream buffer
     buffer: Vec<u16>,
 }
 
 impl Stream3 {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `address` - Address of table to write buffered output to when the stream is closed
     pub fn new(address: usize) -> Stream3 {
         Stream3 {
             address,
@@ -51,39 +64,48 @@ impl Stream3 {
         }
     }
 
-    pub fn address(&self) -> usize {
-        self.address
-    }
-
-    pub fn buffer(&self) -> &Vec<u16> {
-        &self.buffer
-    }
-
+    /// Push a value to the stream buffer
+    ///
+    /// # Arguments
+    /// * `c` - Character value to push
     pub fn push(&mut self, c: u16) {
         self.buffer.push(c);
     }
 }
 
 #[derive(Debug, Default, Eq, PartialEq)]
+/// Interrupt type
 pub enum Interrupt {
     #[default]
+    /// READ or READ_CHAR interrupt
     ReadTimeout,
+    /// SOUND_EFFECT end-of-playback interrupt
     Sound,
 }
 
 #[derive(Debug, Default, Eq, PartialEq)]
+/// Interpreter input event
 pub struct InputEvent {
+    /// Z character from keyboard input
     zchar: Option<u16>,
+    /// Row for mouse-click input
     row: Option<u16>,
+    /// Column for mouse-click input
     column: Option<u16>,
+    /// Interrupt type if input was interrupted
     interrupt: Option<Interrupt>,
 }
 
 impl InputEvent {
+    /// Constructor for a no-input event
     pub fn no_input() -> InputEvent {
         InputEvent::default()
     }
 
+    /// Constructor for a keypress input event
+    ///
+    /// # Arguments
+    /// * `zchar` - Z character value for the key that was pressed
     pub fn from_char(zchar: u16) -> InputEvent {
         InputEvent {
             zchar: Some(zchar),
@@ -91,6 +113,12 @@ impl InputEvent {
         }
     }
 
+    /// Constructor for a mouse-click input event
+    ///
+    /// # Arguments
+    /// * `zchar` - Mouse click character - 253 = double-click, 254 = single-click
+    /// * `row` - row position of the mouse pointer where the click occured
+    /// * `column` - column position of the mouse pointer where the click occured
     pub fn from_mouse(zchar: u16, row: u16, column: u16) -> InputEvent {
         InputEvent {
             zchar: Some(zchar),
@@ -100,6 +128,10 @@ impl InputEvent {
         }
     }
 
+    /// Constructor for an interrupted input event
+    ///
+    /// # Arguments
+    /// * `interrupt` - [Interrupt] type
     pub fn from_interrupt(interrupt: Interrupt) -> InputEvent {
         InputEvent {
             interrupt: Some(interrupt),
@@ -115,16 +147,17 @@ impl InputEvent {
         self.interrupt.as_ref()
     }
 
-    pub fn row(&self) -> Option<u16> {
-        self.row
-    }
+    // pub fn row(&self) -> Option<u16> {
+    //     self.row
+    // }
 
-    pub fn column(&self) -> Option<u16> {
-        self.column
-    }
+    // pub fn column(&self) -> Option<u16> {
+    //     self.column
+    // }
 }
 
 #[derive(Clone, Debug)]
+/// Interpreter request type
 pub enum RequestType {
     BufferMode,
     EraseLine,
@@ -157,6 +190,7 @@ pub enum RequestType {
 }
 
 #[derive(Clone, Debug, Default)]
+/// Interpreter request payload
 pub struct RequestPayload {
     // Messaging
     message: String,
@@ -184,10 +218,6 @@ pub struct RequestPayload {
     length: u8,
     terminators: Vec<u16>,
     input: Vec<u16>,
-
-    // ...interrupted
-    next_instruction_address: usize,
-    instruction_address: usize,
 
     // Read/ReadChar
     timeout: u16,
@@ -231,157 +261,269 @@ pub struct RequestPayload {
 }
 
 impl RequestPayload {
+    /// Get the message to display
+    ///
+    /// # Returns
+    /// Message string
     pub fn message(&self) -> &str {
         &self.message
     }
 
-    // EraseWindow
+    /// Get the window to erase
+    ///
+    /// # Returns
+    /// Window to erase
     pub fn window_erase(&self) -> i16 {
         self.window_erase
     }
 
-    // BufferMode
+    /// Get the buffer mode setting
+    ///
+    /// # Return
+    /// Buffer mode setting
     pub fn buffer_mode(&self) -> u16 {
         self.buffer_mode
     }
 
-    // Print/PrintRet
+    /// Get the text to print
+    ///
+    /// # Returns
+    /// Text to print
     pub fn text(&self) -> &Vec<u16> {
         &self.text
     }
 
-    // PrintTable
+    /// Get the table data to print
+    ///
+    /// # Returns
+    /// Table of text to print
     pub fn table(&self) -> &Vec<u16> {
         &self.table
     }
 
+    /// Get the table width
+    ///
+    /// # Returns
+    /// Table width in bytes
     pub fn width(&self) -> u16 {
         self.width
     }
 
+    /// Get the table height
+    ///
+    /// # Returns
+    /// Table height in lines
     pub fn height(&self) -> u16 {
         self.height
     }
 
+    /// Get the number of characters to skip between table lines
+    ///
+    /// # Returns
+    /// Characters to skip between lines
     pub fn skip(&self) -> u16 {
         self.skip
     }
 
-    // Read
+    /// Get the READ maximum input length
+    ///
+    /// # Returns
+    /// Maximum characters to READ, including the terminator
     pub fn length(&self) -> u8 {
         self.length
     }
 
+    /// Get the READ input terminators
+    ///
+    /// # Returns
+    /// Vector of input terminator characters
     pub fn terminators(&self) -> &Vec<u16> {
         &self.terminators
     }
 
+    /// Get the READ/READ_CHAR timeout
+    ///
+    /// # Returns
+    /// Read timeout, 0 for none
     pub fn timeout(&self) -> u16 {
         self.timeout
     }
 
+    /// Get the existing input for a READ
+    ///
+    /// # Returns
+    /// Existing input characters
     pub fn input(&self) -> &Vec<u16> {
         &self.input
     }
 
-    pub fn instruction_address(&self) -> usize {
-        self.instruction_address
+    /// Get the zcode base filename
+    ///
+    /// # Returns
+    /// Base filename
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
-    pub fn next_instruction_address(&self) -> usize {
-        self.next_instruction_address
-    }
-
-    // Save
+    /// Get the data to save
+    ///
+    /// # Returns
+    /// Vector of bytes to save
     pub fn save_data(&self) -> &Vec<u8> {
         &self.save_data
     }
 
-    // SetColour
+    /// Get the foreground colour
+    ///
+    /// # Returns
+    /// Foreground colour
     pub fn foreground(&self) -> u16 {
         self.foreground
     }
 
+    /// Get the background colour
+    ///
+    /// # Returns
+    /// Background colour
     pub fn background(&self) -> u16 {
         self.background
     }
 
-    // SetCursor
+    /// Gets the cursor row for SET_CURSOR
+    ///
+    /// # Returns
+    /// Row value
     pub fn row(&self) -> u16 {
         self.row
     }
 
-    // SetFont
-    pub fn font(&self) -> u16 {
-        self.font
-    }
-
+    /// Gets the cursor column for SET_CURSOR
+    ///
+    /// # Returns
+    /// Column value
     pub fn column(&self) -> u16 {
         self.column
     }
 
-    // SetTextStyle
+    /// Gets the font to set
+    ///
+    /// # Returns
+    /// Font
+    pub fn font(&self) -> u16 {
+        self.font
+    }
+
+    /// Gets the text style to set
+    ///
+    /// # Returns
+    /// Text style
     pub fn style(&self) -> u16 {
         self.style
     }
 
-    // SetWindow
+    /// Gets the window to select
+    ///
+    /// # Return
+    /// Window to select
     pub fn window_set(&self) -> u16 {
         self.window_set
     }
 
-    // ShowStatus
+    /// Gets the left side of the status line
+    ///
+    /// # Returns
+    /// Vector of text containing the left side of the status line
     pub fn status_left(&self) -> &Vec<u16> {
         &self.status_left
     }
 
+    /// Gets the right side of the status line
+    ///
+    /// # Returns
+    /// Vector of text containing the right side of the status line
     pub fn status_right(&self) -> &Vec<u16> {
         &self.status_right
     }
 
-    // SoundEffect
+    /// Gets the SOUND_EFFECT number
+    ///
+    /// # Returns
+    /// Number
     pub fn number(&self) -> u16 {
         self.number
     }
 
+    /// Gets the SOUND_EFFECT effect
+    ///
+    /// # Returns
+    /// Effect (sample number)
     pub fn effect(&self) -> u16 {
         self.effect
     }
 
+    /// Gets the SOUND_EFFECT volumn
+    ///
+    /// # Returns
+    /// Playback volume
     pub fn volume(&self) -> u8 {
         self.volume
     }
 
+    /// Gets the SOUND_EFFECT repeat count
+    ///
+    /// # Returns
+    /// Number of times to play the effect
     pub fn repeats(&self) -> u8 {
         self.repeats
     }
 
+    /// Gets the SOUND_EFFECT end-of-playback routine address
+    ///
+    /// # Returns
+    /// End-of-playback routine address or 0 if none
     pub fn routine(&self) -> usize {
         self.routine
     }
 
-    // SplitWindow
+    /// Gets the line where a window split should occur
+    ///
+    /// # Returns
+    /// Number of lines above the split
     pub fn split_lines(&self) -> u16 {
         self.split_lines
     }
 }
 
-/// Request for the interpreter (screen, sound) to do something
 #[derive(Clone, Debug)]
+/// Interpreter callback request
 pub struct InterpreterRequest {
+    /// Request type
     request_type: RequestType,
+    /// Requesty payload
     request: RequestPayload,
 }
 
 impl InterpreterRequest {
+    /// Gets the type of request
+    ///
+    /// # Returns
+    /// Request type
     pub fn request_type(&self) -> &RequestType {
         &self.request_type
     }
 
+    /// Gets the request payload
+    ///
+    /// # Returns
+    /// Request payload
     pub fn request(&self) -> &RequestPayload {
         &self.request
     }
 
+    /// Message constructor
+    ///
+    /// # Arguments
+    /// * `message` - Message string
     pub fn message(message: &str) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::Message,
@@ -392,6 +534,10 @@ impl InterpreterRequest {
         })
     }
 
+    /// BufferMode constructor
+    ///
+    /// # Arguments
+    /// * `mode` - buffer mode
     pub fn buffer_mode(mode: u16) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::BufferMode,
@@ -402,6 +548,7 @@ impl InterpreterRequest {
         })
     }
 
+    /// EraseLine constructor
     pub fn erase_line() -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::EraseLine,
@@ -409,6 +556,10 @@ impl InterpreterRequest {
         })
     }
 
+    /// EraseWindow constructor
+    ///
+    /// # Arguments
+    /// * `window` - window to erase
     pub fn erase_window(window: i16) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::EraseWindow,
@@ -419,6 +570,7 @@ impl InterpreterRequest {
         })
     }
 
+    /// GetCursor constructor
     pub fn get_cursor() -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::GetCursor,
@@ -426,6 +578,10 @@ impl InterpreterRequest {
         })
     }
 
+    /// InputStream constructor
+    ///
+    /// # Arguments
+    /// * `stream` - input stream number
     pub fn input_stream(stream: i16) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::InputStream,
@@ -436,6 +592,7 @@ impl InterpreterRequest {
         })
     }
 
+    /// NewLine constructor
     pub fn new_line() -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::NewLine,
@@ -445,6 +602,10 @@ impl InterpreterRequest {
         })
     }
 
+    /// OutputStream constructor
+    ///
+    /// # Arguments
+    /// * `stream` - output stream
     pub fn output_stream(stream: i16) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::OutputStream,
@@ -455,6 +616,11 @@ impl InterpreterRequest {
         })
     }
 
+    /// Print constructor
+    ///
+    /// # Arguments
+    /// * `text` - Decoded text to print
+    /// * `transcript` - If true, text should be echoed to the transcript file
     pub fn print(text: Vec<u16>, transcript: bool) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::Print,
@@ -466,6 +632,11 @@ impl InterpreterRequest {
         })
     }
 
+    /// PrintRet constructor
+    ///
+    /// # Arguments
+    /// * `text` - Decoded text to print
+    /// * `transcript` - If true, text should be echoed to the transcript file
     pub fn print_ret(text: Vec<u16>, transcript: bool) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::PrintRet,
@@ -477,6 +648,14 @@ impl InterpreterRequest {
         })
     }
 
+    /// PrintTable constructor
+    ///
+    /// # Arguments
+    /// * `table` - Table of decoded text to print
+    /// * `width` - Table width in characters
+    /// * `height` - Table height in lines
+    /// * `skip` - Number of characters to skip between lines
+    /// * `transcript` - If true, text should be echoed to the transcript file
     pub fn print_table(
         table: Vec<u16>,
         width: u16,
@@ -497,6 +676,7 @@ impl InterpreterRequest {
         })
     }
 
+    /// Quit constructor
     pub fn quit() -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::Quit,
@@ -504,12 +684,18 @@ impl InterpreterRequest {
         })
     }
 
+    /// Read constructor
+    ///
+    /// # Arguments
+    /// * `length` - Maxmium characters of input, including terminator
+    /// * `terminators` - Vector of input terminator characters
+    /// * `timeout` - Timeout, 0 if none
+    /// * `input` - Existing input
     pub fn read(
         length: u8,
         terminators: Vec<u16>,
         timeout: u16,
         input: Vec<u16>,
-        redraw: bool,
     ) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::Read,
@@ -523,28 +709,24 @@ impl InterpreterRequest {
         })
     }
 
-    pub fn read_abort(address: usize, next_address: usize) -> Option<InterpreterRequest> {
-        Some(InterpreterRequest {
-            request_type: RequestType::ReadAbort,
-            request: RequestPayload {
-                instruction_address: address,
-                next_instruction_address: next_address,
-                ..Default::default()
-            },
-        })
-    }
-
-    pub fn read_redraw(address: usize, input: Vec<u16>) -> Option<InterpreterRequest> {
+    /// ReadRedraw constructor
+    ///
+    /// # Arguments
+    /// * `input` - Input text to redraw
+    pub fn read_redraw(input: Vec<u16>) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::ReadRedraw,
             request: RequestPayload {
-                instruction_address: address,
                 input,
                 ..Default::default()
             },
         })
     }
 
+    /// ReadChar constructor
+    ///
+    /// # Arguments
+    /// * `timeout` - Timeout, 0 if none
     pub fn read_char(timeout: u16) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::ReadChar,
@@ -555,6 +737,7 @@ impl InterpreterRequest {
         })
     }
 
+    /// Restart constructor
     pub fn restart() -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::Restart,
@@ -562,6 +745,10 @@ impl InterpreterRequest {
         })
     }
 
+    /// Restore constructor
+    ///
+    /// # Arguments
+    /// * `name` - ZCode base filename
     pub fn restore(name: &str) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::Restore,
@@ -572,6 +759,11 @@ impl InterpreterRequest {
         })
     }
 
+    /// Save constructor
+    ///
+    /// # Arguments
+    /// * `name` - ZCode base filename
+    /// * `save_data` - Data to save
     pub fn save(name: &str, save_data: Vec<u8>) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::Save,
@@ -583,6 +775,11 @@ impl InterpreterRequest {
         })
     }
 
+    /// SetColour constructor
+    ///
+    /// # Arguments
+    /// * `foreground` - Foreground colour
+    /// * `background` - Background colour
     pub fn set_colour(foreground: u16, background: u16) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::SetColour,
@@ -594,6 +791,11 @@ impl InterpreterRequest {
         })
     }
 
+    /// SetCursor constructor
+    ///
+    /// # Arguments
+    /// * `row` - Cursor row
+    /// * `column` - Cursor column
     pub fn set_cursor(row: u16, column: u16) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::SetCursor,
@@ -605,6 +807,10 @@ impl InterpreterRequest {
         })
     }
 
+    /// SetFont constructor
+    ///
+    /// # Arguments
+    /// * `font` - Font to set
     pub fn set_font(font: u16) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::SetFont,
@@ -615,6 +821,10 @@ impl InterpreterRequest {
         })
     }
 
+    /// SetTextStyle constructor
+    ///
+    /// # Arguments
+    /// * `style` - Text style to set
     pub fn set_text_style(style: u16) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::SetTextStyle,
@@ -625,6 +835,10 @@ impl InterpreterRequest {
         })
     }
 
+    /// SetWindow constructor
+    ///
+    /// # Arguments
+    /// * `window` - Window to select
     pub fn set_window(window: u16) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::SetWindow,
@@ -635,6 +849,11 @@ impl InterpreterRequest {
         })
     }
 
+    /// ShowStatus constructor
+    ///
+    /// # Arguments
+    /// * `left` - Decoded text for the left side of the status line
+    /// * `right` - Decoded text for the right side of the status line
     pub fn show_status(left: Vec<u16>, right: Vec<u16>) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::ShowStatus,
@@ -646,6 +865,14 @@ impl InterpreterRequest {
         })
     }
 
+    /// SoundEffect constructor
+    ///
+    /// # Arguments
+    /// * `number` - SOUND_EFFECT number
+    /// * `effect` - Sample number
+    /// * `volume` - Playback volume
+    /// * `repeats` - Number of times to play the sample
+    /// * `routine` - End-of-playback interrupt routine, or 0 for none
     pub fn sound_effect(
         number: u16,
         effect: u16,
@@ -666,6 +893,10 @@ impl InterpreterRequest {
         })
     }
 
+    /// SplitWindow constructor
+    ///
+    /// # Arguments
+    /// * `lines` - Number of lines for the upper window
     pub fn split_window(lines: u16) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::SplitWindow,
@@ -678,6 +909,7 @@ impl InterpreterRequest {
 }
 
 #[derive(Default)]
+/// Interpreter callback response payload
 pub struct ResponsePayload {
     // GET_CURSOR
     row: u16,
@@ -704,16 +936,17 @@ pub struct ResponsePayload {
     routine: usize,
 }
 
-impl ResponsePayload {
-    pub fn key(&self) -> &InputEvent {
-        &self.key
-    }
+// impl ResponsePayload {
+//     // pub fn key(&self) -> &InputEvent {
+//     //     &self.key
+//     // }
 
-    pub fn input(&self) -> &Vec<u16> {
-        &self.input
-    }
-}
+//     // pub fn input(&self) -> &Vec<u16> {
+//     //     &self.input
+//     // }
+// }
 
+/// Interpeter callback response type
 pub enum ResponseType {
     GetCursor,
     ReadComplete,
@@ -726,21 +959,20 @@ pub enum ResponseType {
     SoundInterrupt,
 }
 
-// Response from the interpreter to an InterpreterRequest
+/// Interpreter callback response
 pub struct InterpreterResponse {
+    /// Callback response type
     response_type: ResponseType,
+    /// Response payload
     response: ResponsePayload,
 }
 
 impl InterpreterResponse {
-    pub fn response_type(&self) -> &ResponseType {
-        &self.response_type
-    }
-
-    pub fn response(&self) -> &ResponsePayload {
-        &self.response
-    }
-
+    /// GetCursor constructor
+    ///
+    /// # Arguments
+    /// * `row` - Cursor position row
+    /// * `column` - Cursor position column
     pub fn get_cursor(row: u16, column: u16) -> Option<InterpreterResponse> {
         Some(InterpreterResponse {
             response_type: ResponseType::GetCursor,
@@ -752,6 +984,10 @@ impl InterpreterResponse {
         })
     }
 
+    /// ReadComplete constructor
+    ///
+    /// # Arguments
+    /// * `input` - Interpreter input
     pub fn read_complete(input: Vec<u16>) -> Option<InterpreterResponse> {
         Some(InterpreterResponse {
             response_type: ResponseType::ReadComplete,
@@ -762,6 +998,10 @@ impl InterpreterResponse {
         })
     }
 
+    /// ReadCharComplete constructor
+    ///
+    /// # Arguments
+    /// * `key` - Input event
     pub fn read_char_complete(key: InputEvent) -> Option<InterpreterResponse> {
         Some(InterpreterResponse {
             response_type: ResponseType::ReadCharComplete,
@@ -772,6 +1012,12 @@ impl InterpreterResponse {
         })
     }
 
+    /// ReadInterrupted constructor
+    ///
+    /// # Arguments
+    /// * `input` - Input buffer at the time of the interrupt
+    /// * `interrupt` - Interrupt type
+    /// * `routine` - For [Interrupt::Sound], the address of the routine to call.  Ignored for [Interrupt::ReadTimeout]
     pub fn read_interrupted(
         input: Vec<u16>,
         interrupt: Interrupt,
@@ -788,6 +1034,10 @@ impl InterpreterResponse {
         })
     }
 
+    /// ReadCharInterrupted constructor
+    ///
+    /// # Arguments
+    /// * `interrupt` - Interrupt type
     pub fn read_char_interrupted(interrupt: Interrupt) -> Option<InterpreterResponse> {
         Some(InterpreterResponse {
             response_type: ResponseType::ReadCharInterrupted,
@@ -798,6 +1048,10 @@ impl InterpreterResponse {
         })
     }
 
+    /// Restore constructor
+    ///
+    /// # Arguments
+    /// * `save_data` - Saved data
     pub fn restore(save_data: Vec<u8>) -> Option<InterpreterResponse> {
         Some(InterpreterResponse {
             response_type: ResponseType::RestoreComplete,
@@ -808,6 +1062,10 @@ impl InterpreterResponse {
         })
     }
 
+    /// Save constructor
+    ///
+    /// # Arguments
+    /// * `success` - `true` if the save succeeded, `false` if not
     pub fn save(success: bool) -> Option<InterpreterResponse> {
         Some(InterpreterResponse {
             response_type: ResponseType::SaveComplete,
@@ -818,6 +1076,10 @@ impl InterpreterResponse {
         })
     }
 
+    /// SetFont constructor
+    ///
+    /// # Arguments
+    /// * `font` - Previous font number
     pub fn set_font(font: u16) -> Option<InterpreterResponse> {
         Some(InterpreterResponse {
             response_type: ResponseType::SetFont,
@@ -828,6 +1090,10 @@ impl InterpreterResponse {
         })
     }
 
+    /// SoundInterrupt constructor
+    ///
+    /// # Arguments
+    /// * `routine` - Address of the sound end-of-playback routine to execute
     pub fn sound_interrupt(routine: usize) -> Option<InterpreterResponse> {
         Some(InterpreterResponse {
             response_type: ResponseType::SoundInterrupt,
@@ -839,19 +1105,30 @@ impl InterpreterResponse {
     }
 }
 
+/// The Z-Machine!
 pub struct ZMachine {
+    ///Base ZCode filename - the filename minus any extension
     name: String,
+    /// ZCode version
     version: u8,
+    /// Memory map
     memory: Memory,
+    /// RNG
     rng: Box<dyn ZRng>,
+    /// Frame stack
     frames: Vec<Frame>,
+    /// Undo stack
     undo_stack: VecDeque<Quetzal>,
+    /// Set of recoverable error codes during execution
     errors: HashSet<ErrorCode>,
+    /// Recoverable error handling directive
     error_handling: ErrorHandling,
+    /// Output stream bitmask
     output_streams: u8,
+    /// Stream 2 (TBD - the interpreter should hold this)
     stream_2: Option<File>,
+    /// Stream 3 stack
     stream_3: Vec<Stream3>,
-    instruction_count: usize,
 }
 
 impl TryFrom<(&ZMachine, usize)> for Quetzal {
@@ -948,6 +1225,14 @@ impl TryFrom<&ZMachine> for Stks {
 }
 
 impl ZMachine {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `zcode` - ZCode program to execute
+    /// * `config` - Runtime configuration
+    /// * `name` - Base filename
+    /// * `rows` - Screen rows
+    /// * `columns` - Screen columns
     pub fn new(
         zcode: Vec<u8>,
         config: &Config,
@@ -971,7 +1256,6 @@ impl ZMachine {
             output_streams: 0x1,
             stream_2: None,
             stream_3: Vec::new(),
-            instruction_count: 0,
         };
 
         zm.initialize(
@@ -983,14 +1267,32 @@ impl ZMachine {
         Ok(zm)
     }
 
+    /// Get the Zcode version
+    ///
+    /// # Returns
+    /// Zcode version
     pub fn version(&self) -> u8 {
         self.version
     }
 
+    /// Get the Zcode base filename
+    ///
+    /// # Returns
+    /// Base name
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Initialize (or re-initialize) the Z-Machine state
+    ///
+    /// # Arguments
+    /// * `rows` - Screen rows
+    /// * `columns` - Screen columns,
+    /// * `default_colours` - Default (foreground, background) colours
+    /// * `sound` - Is sound playback enabled?
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn initialize(
         &mut self,
         rows: u8,
@@ -998,11 +1300,6 @@ impl ZMachine {
         default_colors: (u8, u8),
         sound: bool,
     ) -> Result<(), RuntimeError> {
-        // Clear any pending interrupt
-        // self.read_interrupt_pending = false;
-        // self.read_interrupt_result = None;
-        // self.sound_interrupt = None;
-
         // Set V3 flags
         if self.version < 4 {
             header::clear_flag1(&mut self.memory, Flags1v3::StatusLineNotAvailable as u8)?;
@@ -1076,97 +1373,123 @@ impl ZMachine {
     }
 
     // Managed memory access (read/write dynamic, read static, no access to high)
+    /// Read a byte from the memory map.
+    ///
+    /// Access is limited to dynamic and static memory.  Accessing high memory with
+    /// this function will result in a [RuntimeError].
+    ///
+    /// # Arguments
+    /// * `address` - Address to read from
+    ///
+    /// # Returns
+    /// [Result] containing the byte value or a [RuntimeError]
     pub fn read_byte(&self, address: usize) -> Result<u8, RuntimeError> {
-        self.memory.read_byte(address)
+        if address < 0x10000 {
+            self.memory.read_byte(address)
+        } else {
+            fatal_error!(
+                ErrorCode::IllegalMemoryAccess,
+                "Read from byte address in high memory: {:#06x}",
+                address
+            )
+        }
     }
 
+    /// Read a word from the memory map.
+    ///
+    /// Access is limited to dynamic and static memory.  Accessing high memory with
+    /// this function will result in a [RuntimeError].
+    ///
+    /// # Arguments
+    /// * `address` - Address to read from
+    ///
+    /// # Returns
+    /// [Result] containing the word value or a [RuntimeError]
     pub fn read_word(&self, address: usize) -> Result<u16, RuntimeError> {
-        self.memory.read_word(address)
+        if address < 0xFFFF {
+            self.memory.read_word(address)
+        } else {
+            fatal_error!(
+                ErrorCode::IllegalMemoryAccess,
+                "Read from word address in hight memory: {:#06x}",
+                address
+            )
+        }
     }
 
+    // TODO: handle flipping the transcript bit
+
+    /// Write a byte to the memory map
+    ///
+    /// Access is limited to dynamic memory.  Attempting to write to static or high memory
+    /// will result in a [RuntimeError]
+    ///
+    /// Writes to [HeaderField::Flags2] that change the [Flags2::Transcripting] bit will toggle
+    /// transcripting.
+    ///
+    /// # Arguments
+    /// * `address` - address to write to
+    /// * `value` - byte value to write
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn write_byte(&mut self, address: usize, value: u8) -> Result<(), RuntimeError> {
-        self.memory.write_byte(address, value)
+        if address < self.memory.static_mark() {
+            self.memory.write_byte(address, value)
+        } else {
+            fatal_error!(
+                ErrorCode::IllegalMemoryAccess,
+                "Write to byte address above dynamic memory {:04x}: {:04x}",
+                self.memory.static_mark() - 1,
+                address,
+            )
+        }
     }
 
+    /// Write a word to the memory map
+    ///
+    /// Access is limited to dynamic memory.  Attempting to write to static or high memory
+    /// will result in a [RuntimeError]
+    ///
+    /// Writes to [HeaderField::Flags2] that change the [Flags2::Transcripting] bit will toggle
+    /// transcripting.
+    ///
+    /// # Arguments
+    /// * `address` - address to write to
+    /// * `value` - word value to write
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn write_word(&mut self, address: usize, value: u16) -> Result<(), RuntimeError> {
-        self.memory.write_word(address, value)
+        if address < self.memory.static_mark() - 1 {
+            self.memory.write_word(address, value)?;
+            Ok(())
+        } else {
+            fatal_error!(
+                ErrorCode::IllegalMemoryAccess,
+                "Write to word address above dynamic memory {:04x}: {:04x}",
+                self.memory.static_mark() - 1,
+                address,
+            )
+        }
     }
 
+    /// Calculate the checksum of the Zcode file
+    ///
+    /// # Returns
+    /// [Result] containing the checksum value or a [RuntimeError]
     pub fn checksum(&self) -> Result<u16, RuntimeError> {
         self.memory.checksum()
     }
 
     // Save/restore
-    pub fn save(&self, pc: usize) -> Result<(), RuntimeError> {
-        let quetzal = Quetzal::try_from((self, pc))?;
-        debug!(target: "app::state", "Game state encoded");
-        Err(RuntimeError::fatal(
-            ErrorCode::UnimplementedInstruction,
-            "Save TBD".to_string(),
-        ))
-        // Ok(())
-        //self.prompt_and_write("Save to: ", "ifzs", &Vec::from(quetzal), false)
-
-        // Ok(Vec::from(quetzal))
-    }
-
-    // fn restore_state(&mut self, quetzal: Quetzal) -> Result<Option<usize>, RuntimeError> {
-    //     // Capture flags 2, default colors, rows, and columns from header
-    //     let flags2 = header::field_word(&self.memory, HeaderField::Flags2)?;
-    //     let fg = header::field_byte(&self.memory, HeaderField::DefaultForeground)?;
-    //     let bg = header::field_byte(&self.memory, HeaderField::DefaultBackground)?;
-    //     let rows = header::field_byte(&self.memory, HeaderField::ScreenLines)?;
-    //     let columns = header::field_byte(&self.memory, HeaderField::ScreenColumns)?;
-
-    //     // Overwrite dynamic memory
-    //     if quetzal.mem().compressed() {
-    //         self.memory.restore_compressed(quetzal.mem().memory())?
-    //     } else {
-    //         self.memory.restore(quetzal.mem().memory())?
-    //     }
-
-    //     // Reset the frame stack
-    //     self.frames = Vec::from(quetzal.stks());
-
-    //     // Re-initialize the state, which will set the default colors, rows, and columns
-    //     // Ignore sound (for now), since it's in Flags2
-    //     self.initialize(rows, columns, (fg, bg), false)?;
-
-    //     // Restore flags 2
-    //     self.write_word(HeaderField::Flags2 as usize, flags2)?;
-
-    //     Ok(Some(quetzal.ifhd().pc() as usize))
-    // }
-
-    // pub fn restore(&mut self) -> Result<Option<usize>, RuntimeError> {
-    //     Err(RuntimeError::fatal(
-    //         ErrorCode::UnimplementedInstruction,
-    //         "Restore TBD".to_string(),
-    //     ))
-    //     // match self.prompt_and_read("Restore from: ", "ifzs") {
-    //     //     Ok(save_data) => {
-    //     //         let quetzal = Quetzal::try_from(save_data)?;
-    //     //         debug!(target: "app::state", "Restoring game state");
-    //     //         // trace!(target: "app::quetzal", "{}", quetzal);
-    //     //         // &*self is an immutable ref, necessary for try_from
-    //     //         let ifhd = IFhd::try_from((&*self, 0))?;
-    //     //         if &ifhd != quetzal.ifhd() {
-    //     //             error!(target: "app::state", "Restore state was created from a different story file");
-    //     //             recoverable_error!(
-    //     //                 ErrorCode::Restore,
-    //     //                 "Save file was created from a different story file"
-    //     //             )
-    //     //         } else {
-    //     //             self.restore_state(quetzal)
-    //     //         }
-    //     //             },
-    //     //     Err(e) => {
-    //     //         error!(target: "app::state", "Error restoring state: {}", e);
-    //     //         Err(e)
-    //     //     }
-    //     // }
-    // }
-
+    /// Save the current game state to the undo stack
+    ///
+    /// # Arguments
+    /// * `pc` - address of the SAVE_UNDO instruction store location byte
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn save_undo(&mut self, pc: usize) -> Result<(), RuntimeError> {
         let quetzal = Quetzal::try_from((&*self, pc))?;
         debug!(target: "app::state", "Storing undo state");
@@ -1178,6 +1501,11 @@ impl ZMachine {
         Ok(())
     }
 
+    /// Restore game state from the undo stack
+    ///
+    /// # Returns
+    /// [Result] containing an [Option] with the address to resume execution if the restore succeeds, else [None]
+    /// or a [RuntimeError]
     pub fn restore_undo(&mut self) -> Result<Option<usize>, RuntimeError> {
         if let Some(quetzal) = self.undo_stack.pop_back() {
             debug!(target: "app::state", "Restoring undo state");
@@ -1188,25 +1516,49 @@ impl ZMachine {
         }
     }
 
+    /// Restart game execution
+    ///
+    /// # Returns
+    /// [Result] containing the address of the initial instruction to execute or a [RuntimeError]
     pub fn restart(&mut self) -> Result<usize, RuntimeError> {
+        // Reset the RNG
         self.rng.seed(0);
 
+        // Header fields that should be preserved:
+        // Flags2
         let flags2 = header::field_word(&self.memory, HeaderField::Flags2)?;
+        // Default foreground
         let fg = header::field_byte(&self.memory, HeaderField::DefaultForeground)?;
+        // Default background
         let bg = header::field_byte(&self.memory, HeaderField::DefaultBackground)?;
+        // Screen rows
         let rows = header::field_byte(&self.memory, HeaderField::ScreenLines)?;
+        // Screen columns
         let columns = header::field_byte(&self.memory, HeaderField::ScreenColumns)?;
 
+        // Reset the memory map
         self.memory.reset();
+        // Empty the frame stack
         self.frames.clear();
 
+        // Re-initialize
         self.initialize(rows, columns, (fg, bg), false)?;
+        // Put the Flags2 value back
         self.write_word(HeaderField::Flags2 as usize, flags2)?;
 
         Ok(self.current_frame()?.pc())
     }
 
     // Unmanaged memory access: string literals, routines
+
+    /// Get a string literal from an address that may reside in high memory that is normally
+    /// off limits.
+    ///
+    /// # Arguments
+    /// * `address` - Address of the literal
+    ///
+    /// # Returns
+    /// Encoded ztext string data
     pub fn string_literal(&self, address: usize) -> Result<Vec<u16>, RuntimeError> {
         let mut d = Vec::new();
         // Read until bit 15 of the word is set
@@ -1219,6 +1571,13 @@ impl ZMachine {
         }
     }
 
+    /// Get instruction bytes that may reside in high memory
+    ///
+    /// # Arguments
+    /// * `address` - Address of the instruction
+    ///
+    /// # Returns
+    /// A vector containing 23 bytes from the `address`, which is the longest instruction possible.
     pub fn instruction(&self, address: usize) -> Vec<u8> {
         // An instruction may be up to 23 bytes long, excluding literal strings
         // Opcode: up to 2 bytes
@@ -1229,6 +1588,13 @@ impl ZMachine {
         self.memory.slice(address, 23)
     }
 
+    /// Decode a routine header from an address that may reside in high memory
+    ///
+    /// # Arguments
+    /// * `address` - Address of the routine header
+    ///
+    /// # Returns
+    /// [Result] containing a tuple of (instruction address, local variables) for the routine or a [RuntimeError]
     fn routine_header(&self, address: usize) -> Result<(usize, Vec<u16>), RuntimeError> {
         let variable_count = self.memory.read_byte(address)? as usize;
         if variable_count > 15 {
@@ -1255,10 +1621,18 @@ impl ZMachine {
     }
 
     // Packed addresses
+
+    /// Unpack a routine address
+    ///
+    /// # Arguments
+    /// * `address` - Packed address
+    ///
+    /// # Returns
+    /// [Result] with the unpacked byte address of the routine header or a [RuntimeError]
     pub fn packed_routine_address(&self, address: u16) -> Result<usize, RuntimeError> {
         match self.version {
             3 => Ok(address as usize * 2),
-            4 | 5 => Ok(address as usize * 4),
+            4..=5 => Ok(address as usize * 4),
             7 => Ok((address as usize * 4)
                 + (self
                     .memory
@@ -1273,14 +1647,20 @@ impl ZMachine {
         }
     }
 
+    /// Unpack a string address
+    ///
+    /// # Arguments
+    /// * `address` - Packed address
+    ///
+    /// # Returns
+    /// [Result] with the unpacked byte address of the string data or a [RuntimeError]
     pub fn packed_string_address(&self, address: u16) -> Result<usize, RuntimeError> {
         match self.version {
-            1 | 2 | 3 => Ok(address as usize * 2),
-            4 | 5 => Ok(address as usize * 4),
+            1..=3 => Ok(address as usize * 2),
+            4..=5 => Ok(address as usize * 4),
             7 => Ok((address as usize * 4)
                 + (self.memory.read_word(HeaderField::StringsOffset as usize)? as usize * 8)),
             8 => Ok(address as usize * 8),
-            // TODO: error
             _ => fatal_error!(
                 ErrorCode::UnsupportedVersion,
                 "Unsupported version: {}",
@@ -1290,19 +1670,41 @@ impl ZMachine {
     }
 
     // Header
+    /// Reads a byte field from the header
+    ///
+    /// # Arguments
+    /// * `field` - Field to read
+    ///
+    /// # Returns
+    /// [Result] with the byte value from the header or a [RuntimeError]
     pub fn header_byte(&self, field: HeaderField) -> Result<u8, RuntimeError> {
         header::field_byte(&self.memory, field)
     }
 
+    /// Reads a word field from the header
+    ///
+    /// # Arguments
+    /// * `field` - Field to read
+    ///
+    /// # Returns
+    /// [Result] with the word value from the header or a [RuntimeError]
     pub fn header_word(&self, field: HeaderField) -> Result<u16, RuntimeError> {
         header::field_word(&self.memory, field)
     }
 
     // Frame stack
+    /// Get the frame pointer
+    ///
+    /// # Returns
+    /// Frame pointer (which is the current depth of the frame stack)
     pub fn frame_count(&self) -> usize {
         self.frames.len()
     }
 
+    /// Get a reference to the current frame
+    ///
+    /// # Returns
+    /// [Result] with a reference to the current frame or a [RuntimeError]
     fn current_frame(&self) -> Result<&Frame, RuntimeError> {
         if let Some(frame) = self.frames.last() {
             Ok(frame)
@@ -1311,6 +1713,10 @@ impl ZMachine {
         }
     }
 
+    /// Get a mutable reference to the current frame
+    ///
+    /// # Returns
+    /// [Result] with a mutable reference to the current frame or a [RuntimeError]
     fn current_frame_mut(&mut self) -> Result<&mut Frame, RuntimeError> {
         if let Some(frame) = self.frames.last_mut() {
             Ok(frame)
@@ -1320,6 +1726,16 @@ impl ZMachine {
     }
 
     // Routines
+    /// Call a routine
+    ///
+    /// # Arguments
+    /// * `address` - (unpacked) address of the routine header
+    /// * `arguments` - vector of any arguments passed to the routine
+    /// * `result` - store location for the return value of the routine
+    /// * `return_address` - address to resume execution at when the routine returns
+    ///
+    /// # Returns
+    /// [Result] with the address of the first instruction of the routine or a [RuntimeError]
     pub fn call_routine(
         &mut self,
         address: usize,
@@ -1349,18 +1765,23 @@ impl ZMachine {
         }
     }
 
+    /// Call a READ interrupt routine
+    ///
+    /// # Arguments
+    /// * `address` - (unpacked) address of the routine header
+    /// * `arguments` - vector of any arguments passed to the routine
+    /// * `return_address` - address to resume execution at when the routine returns
+    ///
+    /// # Returns
+    /// [Result] with the address of the first instruction of the routine or a [RuntimeError]
     pub fn call_read_interrupt(
         &mut self,
         address: usize,
         arguments: &Vec<u16>,
-        result: Option<StoreResult>,
         return_address: usize,
     ) -> Result<NextAddress, RuntimeError> {
         // Call to address 0 results in FALSE
         if address == 0 {
-            if let Some(r) = result {
-                self.set_variable(r.variable(), 0)?;
-            }
             Ok(NextAddress::Address(return_address))
         } else {
             let (initial_pc, local_variables) = self.routine_header(address)?;
@@ -1369,7 +1790,7 @@ impl ZMachine {
                 initial_pc,
                 arguments,
                 local_variables,
-                result,
+                None,
                 return_address,
             )?;
             frame.set_read_interrupt();
@@ -1379,18 +1800,23 @@ impl ZMachine {
         }
     }
 
+    /// Call a READ_CHAR interrupt routine
+    ///
+    /// # Arguments
+    /// * `address` - (unpacked) address of the routine header
+    /// * `arguments` - vector of any arguments passed to the routine
+    /// * `return_address` - address to resume execution at when the routine returns
+    ///
+    /// # Returns
+    /// [Result] with the address of the first instruction of the routine or a [RuntimeError]
     pub fn call_read_char_interrupt(
         &mut self,
         address: usize,
         arguments: &Vec<u16>,
-        result: Option<StoreResult>,
         return_address: usize,
     ) -> Result<NextAddress, RuntimeError> {
         // Call to address 0 results in FALSE
         if address == 0 {
-            if let Some(r) = result {
-                self.set_variable(r.variable(), 0)?;
-            }
             Ok(NextAddress::Address(return_address))
         } else {
             let (initial_pc, local_variables) = self.routine_header(address)?;
@@ -1399,7 +1825,7 @@ impl ZMachine {
                 initial_pc,
                 arguments,
                 local_variables,
-                result,
+                None,
                 return_address,
             )?;
             frame.set_read_char_interrupt();
@@ -1409,19 +1835,41 @@ impl ZMachine {
         }
     }
 
+    /// Is the current frame a READ interrupt?
+    ///
+    /// # Returns
+    /// `true` if the current frame is a READ interrupt, false if not
     pub fn is_read_interrupt(&self) -> Result<bool, RuntimeError> {
         Ok(self.current_frame()?.read_interrupt())
     }
 
-    pub fn is_read_char_interrupt(&self) -> Result<bool, RuntimeError> {
-        Ok(self.current_frame()?.read_char_interrupt())
-    }
+    // /// Is the current frame a READ_CHAR interrupt?
+    // ///
+    // /// # Returns
+    // /// `true` if the current frame is a READ_CAR interrupt, false if not
+    // pub fn is_read_char_interrupt(&self) -> Result<bool, RuntimeError> {
+    //     Ok(self.current_frame()?.read_char_interrupt())
+    // }
 
+    /// Set the redraw input flag on the current frame.
+    ///
+    /// This is called when a READ interrupt routine prints text to the screen.  If the READ is
+    /// resumed, it will need to print any input the player had entered prior to the interrupt
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn set_redraw_input(&mut self) -> Result<(), RuntimeError> {
         self.current_frame_mut()?.set_redraw_input();
         Ok(())
     }
 
+    /// Return from a routine
+    ///
+    /// # Arguments
+    /// * `value` - Return value, which may or may not be stored
+    ///
+    /// # Returns
+    /// [Result] with the return address to resume execution at or a [RuntimeError]
     pub fn return_routine(&mut self, value: u16) -> Result<NextAddress, RuntimeError> {
         if let Some(f) = self.frames.pop() {
             debug!(target: "app::state", "Return {:04x} => {:?} to ${:06x}, redraw: {}", value, f.result(), f.return_address(), f.redraw_input());
@@ -1432,6 +1880,7 @@ impl ZMachine {
             let n = self.current_frame_mut()?;
             n.set_next_pc(f.return_address());
 
+            // If this was a READ interrupt, include the return value (which will not be stored) and redraw-input values
             if f.read_interrupt() {
                 debug!(target: "app::screen", "Return from READ interrupt");
                 Ok(NextAddress::ReadInterrupt(
@@ -1439,6 +1888,7 @@ impl ZMachine {
                     value,
                     f.redraw_input(),
                 ))
+            // If this was a READ_CHAR interrupt, include the return value (which will not be stored)
             } else if f.read_char_interrupt() {
                 debug!(target: "app::screen", "Return from READ_CHAR interrupt");
                 Ok(NextAddress::ReadCharInterrupt(f.return_address(), value))
@@ -1453,22 +1903,48 @@ impl ZMachine {
         }
     }
 
+    /// Gets the count of arguments passed to the executing routine
+    ///
+    /// # Returns
+    /// Count of arguments to the current routine
     pub fn argument_count(&self) -> Result<u8, RuntimeError> {
         Ok(self.current_frame()?.argument_count())
     }
 
+    /// Throws execution, returning to an arbitrary frame pointer and throwing away any intermediary frames
+    ///
+    /// # Arguments
+    /// * `depth` - Frame pointer to throw to
+    /// * `value` - Return value to the frame thrown to
+    ///
+    /// # Returns
+    /// [Result] with the address of the next instruction to execute or a [RuntimeError]
     pub fn throw(&mut self, depth: u16, result: u16) -> Result<NextAddress, RuntimeError> {
         self.frames.truncate(depth as usize);
         self.return_routine(result)
     }
 
     // Variables
+    /// Get the address of a [global variable](https://inform-fiction.org/zmachine/standards/z1point1/sect06.html#two)
+    ///
+    /// # Arguments
+    /// * `varibale` - Global variable, which should be 16..=255
+    ///
+    /// # Returns
+    /// [Result] with the address of the global variable in memory or a [RuntimeError]
     fn global_variable_address(&self, variable: u8) -> Result<usize, RuntimeError> {
         let table = header::field_word(&self.memory, HeaderField::GlobalTable)? as usize;
         let index = (variable as usize - 16) * 2;
         Ok(table + index)
     }
 
+    /// Get the value of a variable.
+    ///
+    /// # Arguments
+    /// * `variable` - Variable number
+    ///
+    /// # Returns
+    /// [Result] with the variable value or a [RuntimeError]
     pub fn variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
         if variable < 16 {
             self.current_frame_mut()?.local_variable(variable)
@@ -1478,6 +1954,15 @@ impl ZMachine {
         }
     }
 
+    /// Peek at the value of a variable.
+    ///
+    /// If variable 0 is requested, this function does not change the stack.
+    ///
+    /// # Arguments
+    /// * `variable` - Variable number
+    ///
+    /// # Returns
+    /// [Result] with the variable value or a [RuntimeError]
     pub fn peek_variable(&mut self, variable: u8) -> Result<u16, RuntimeError> {
         if variable < 16 {
             self.current_frame()?.peek_local_variable(variable)
@@ -1487,6 +1972,16 @@ impl ZMachine {
         }
     }
 
+    /// Set the value of a variable
+    ///
+    /// If the `variable` number is 0, the `value` is pushed to the stack.
+    ///
+    /// # Arguments
+    /// * `variable` - Variable number
+    /// * `value` - Value to set
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn set_variable(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
         debug!(target: "app::state", "Set variable {:02x} to {:04x}", variable, value);
         if variable < 16 {
@@ -1498,6 +1993,16 @@ impl ZMachine {
         }
     }
 
+    /// Sets the value of a variable indirectly
+    ///
+    /// If the `variable` number is 0, the top of the stack is replaced with the `value`.
+    ///
+    /// # Arguments
+    /// * `variable` - Variable number
+    /// * `value` - Value to set
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn set_variable_indirect(&mut self, variable: u8, value: u16) -> Result<(), RuntimeError> {
         debug!(target: "app::state", "Set variable indirect {:02x} to {:04x}", variable, value);
         if variable < 16 {
@@ -1509,20 +2014,35 @@ impl ZMachine {
         }
     }
 
+    /// Push a value to the stack
+    ///
+    /// # Arguments
+    /// * `value` - Value to push
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn push(&mut self, value: u16) -> Result<(), RuntimeError> {
         self.current_frame_mut()?.set_local_variable(0, value)
     }
 
     // Status line
+    /// Get the left and right side of the status line.
+    ///
+    /// The left side is typically the short name of the current room object.  The right
+    /// side is either the current score and turn, or a time, depending on [Flags1v3::StatusLineType].
+    ///
+    /// # Returns
+    /// [Result] with a tuple (left, right) vectors of text or a [RuntimeError]
     pub fn status_line(&mut self) -> Result<(Vec<u16>, Vec<u16>), RuntimeError> {
         let status_type = header::flag1(&self.memory, Flags1v3::StatusLineType as u8)?;
         let object = self.variable(16)? as usize;
-        let mut left = text::from_vec(self, &property::short_name(self, object)?, false)?;
-        let mut right: Vec<u16> = if status_type == 0 {
+        let left = text::from_vec(self, &property::short_name(self, object)?, false)?;
+        let right: Vec<u16> = if status_type == 0 {
             // Score is between -99 and 999 inclusive
             let score = i16::min(999, i16::max(-99, self.variable(17)? as i16));
             // Turns is between 0 and 9999 inclusive
             let turns = u16::min(9999, self.variable(18)?);
+            // Combine score and turns, padding to 8 characters
             format!("{:<8}", format!("{:}/{:}", score, turns))
                 .as_bytes()
                 .iter()
@@ -1551,23 +2071,41 @@ impl ZMachine {
         };
 
         Ok((left, right))
-        // self.io.status_line(&mut left, &mut right)
     }
 
     // RNG
+    /// Get a random number
+    ///
+    /// # Arguments
+    /// * `range` - Upper limit of the number to generate
+    ///
+    /// # Returns
+    /// Random number in the range 1..=`range``
     pub fn random(&mut self, range: u16) -> u16 {
         self.rng.random(range)
     }
 
+    /// Seed the RNG.
+    ///
+    /// Sets the RNG to random mode.
+    ///
+    /// # Arguments
+    /// * `seed` value
     pub fn seed(&mut self, seed: u16) {
         self.rng.seed(seed)
     }
 
+    /// Set the RNG to predictable mode
+    ///
+    /// # Arguments
+    /// * `seed` - Upper limit of the predictable range
     pub fn predictable(&mut self, seed: u16) {
         self.rng.predictable(seed)
     }
 
     // Streams
+
+    // Stream 2 functions should be moved to the interpreter
     fn is_stream_2_open(&self) -> bool {
         self.stream_2.is_some()
     }
@@ -1581,6 +2119,18 @@ impl ZMachine {
         self.output_streams & mask == mask
     }
 
+    /// Enable an [output stream](https://inform-fiction.org/zmachine/standards/z1point1/sect07.html#one)
+    ///
+    /// Stream 3 can stack ... enabling stream 3 when already enabled creates a new buffer
+    /// that is written to until closed, at which time output is directed to the previous stream 3
+    /// buffer.
+    ///
+    /// # Arguments
+    /// * `stream` - stream to enable
+    /// * `table` - Optional table address, required if `stream` is 3
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     fn enable_output_stream(
         &mut self,
         stream: u8,
@@ -1617,6 +2167,15 @@ impl ZMachine {
         }
     }
 
+    /// Disable an output stream
+    ///
+    /// When stream 3 is disabled, the contents of the stream buffer are written to its table.
+    ///
+    /// # Arguments
+    /// * `stream` - stream to enable
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     fn disable_output_stream(&mut self, stream: u8) -> Result<(), RuntimeError> {
         let mask = (1 << (stream - 1)) & 0xF;
         debug!(target: "app::stream", "Disable output stream {} => {:04b}", stream, self.output_streams);
@@ -1628,10 +2187,10 @@ impl ZMachine {
             3 => {
                 if let Some(s) = self.stream_3.pop() {
                     let len = s.buffer.len();
-                    self.memory.write_word(s.address(), len as u16)?;
+                    self.memory.write_word(s.address, len as u16)?;
                     for i in 0..len {
                         self.memory
-                            .write_byte(s.address + 2 + i, s.buffer()[i] as u8)?;
+                            .write_byte(s.address + 2 + i, s.buffer[i] as u8)?;
                     }
                     if self.stream_3.is_empty() {
                         self.output_streams &= !mask;
@@ -1653,6 +2212,7 @@ impl ZMachine {
         }
     }
 
+    // TODO: Move to interpreter
     fn start_stream_2(&mut self) -> Result<(), RuntimeError> {
         Err(RuntimeError::recoverable(
             ErrorCode::UnimplementedInstruction,
@@ -1662,6 +2222,14 @@ impl ZMachine {
         // self.io.set_stream_2(file);
     }
 
+    /// Enable or disable an output stream
+    ///
+    /// # Arguments
+    /// * `stream` - the stream to enable or disable; if positive, the stream is enabled, if negative it is disabled
+    /// * `table` - optional table address, required if stream 3 is being enabled
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn output_stream(&mut self, stream: i16, table: Option<usize>) -> Result<(), RuntimeError> {
         match stream {
             1..=4 => {
@@ -1702,12 +2270,24 @@ impl ZMachine {
         }
     }
 
+    /// Helper function to output text to output streams to be called by [processor] instructions.
+    ///
+    /// If stream 3 is enabled, output to other streams is halted.
+    ///
+    /// # Arguments
+    /// * `text` - decoded text array to output
+    /// * `next_address` - address of the next instruction to execute
+    /// * `request_type` - the interpreter request type for the print operation
+    ///
+    /// # Returns
+    /// [Result] with an instruction result that will contain an interpreter callback if output is to be sent to streams 1, 2, or 4, or a [RuntimeError]
     pub fn output(
         &mut self,
         text: &[u16],
         next_address: NextAddress,
         request_type: RequestType,
     ) -> Result<InstructionResult, RuntimeError> {
+        // Stream 3 halts output to any other stream
         if self.is_stream_enabled(3) {
             if let Some(s) = self.stream_3.last_mut() {
                 for c in text {
@@ -1725,6 +2305,7 @@ impl ZMachine {
                 )
             }
         } else if self.is_stream_enabled(1) {
+            // If this is a READ interrupt routine, set the redraw flag
             if self.is_read_interrupt()? {
                 self.set_redraw_input()?;
             }
@@ -1746,6 +2327,13 @@ impl ZMachine {
     }
 
     // Save/Restore
+    /// Restore game state from a [Quetzal](http://inform-fiction.org/zmachine/standards/quetzal/index.html) state
+    ///
+    /// # Arguments
+    /// * `quetzal` - Quetzal state
+    ///
+    /// # Returns
+    /// [Result] with an [Option] containing the address to resume execution at when the restore succeeds, [None] if it fails, or a [RuntimeError]
     pub fn restore_state(&mut self, quetzal: Quetzal) -> Result<Option<usize>, RuntimeError> {
         // Capture flags 2, default colors, rows, and columns from header
         let flags2 = header::field_word(&self.memory, HeaderField::Flags2)?;
@@ -1774,34 +2362,17 @@ impl ZMachine {
         Ok(Some(quetzal.ifhd().pc() as usize))
     }
 
-    // pub fn restore_post(
-    //     &mut self,
-    //     instruction: &Instruction,
-    //     data: Vec<u8>,
-    // ) -> Result<InstructionResult, RuntimeError> {
-    //     if self.version < 5 {
-    //         processor_0op::restore_post(self, instruction, data)
-    //     } else {
-    //         processor_ext::restore_post(self, instruction, data)
-    //     }
-    // }
-
+    /// Return a byte array containing the current game state in Quetzal format
+    ///
+    /// # Argument
+    /// * `pc` - address of the branch or store result descriptor for the SAVE instruction
+    ///
+    /// # Returns
+    /// [Result] containing the save data or a [RuntimeError]
     pub fn save_state(&self, pc: usize) -> Result<Vec<u8>, RuntimeError> {
         let quetzal = Quetzal::try_from((self, pc))?;
         Ok(Vec::from(quetzal))
     }
-
-    // pub fn save_post(
-    //     &mut self,
-    //     instruction: &Instruction,
-    //     success: bool,
-    // ) -> Result<InstructionResult, RuntimeError> {
-    //     if self.version < 5 {
-    //         processor_0op::save_post(self, instruction, success)
-    //     } else {
-    //         processor_ext::save_post(self, instruction, success)
-    //     }
-    // }
 
     // Runtime
 
@@ -1814,6 +2385,12 @@ impl ZMachine {
     ///
     /// If no directive is returned, the program counter is updated as the
     /// interpreter will generally just turn around and run the next instruction
+    ///
+    /// # Arguments
+    /// * `response` - [Option] with the interpreter's response to a callback
+    ///
+    /// # Returns
+    /// [Result] with an [Option] containing any interpreter callback or [None] or a [RuntimeError]
     pub fn execute(
         &mut self,
         response: Option<&InterpreterResponse>,
@@ -1874,7 +2451,6 @@ impl ZMachine {
                                             Ok(None)
                                         }
                                     }
-
                                     NextAddress::ReadInterrupt(address, value, redraw) => {
                                         let i = decoder::decode_instruction(self, *address)?;
                                         let text_buffer = operand_values(self, &i)?[0] as usize;
@@ -1903,7 +2479,7 @@ impl ZMachine {
                                                         );
                                                     }
                                                 }
-                                                Ok(InterpreterRequest::read_redraw(*address, input))
+                                                Ok(InterpreterRequest::read_redraw(input))
                                             } else {
                                                 self.set_next_pc(*address)?;
                                                 Ok(None)
@@ -1935,7 +2511,6 @@ impl ZMachine {
                                             Ok(None)
                                         }
                                     }
-                                    _ => Ok(Some(InterpreterRequest::quit().unwrap())),
                                 }
                             }
                         }
@@ -1943,18 +2518,18 @@ impl ZMachine {
                     Err(e) => Err(e),
                 }
             }
-            Some(res) => match res.response_type() {
+            Some(res) => match res.response_type {
                 ResponseType::GetCursor => {
                     let i = decode_instruction(self, self.pc()?)?;
                     let operands = processor::operand_values(self, &i)?;
-                    self.write_word(operands[0] as usize, res.response().row)?;
-                    self.write_word(operands[0] as usize + 2, res.response().column)?;
+                    self.write_word(operands[0] as usize, res.response.row)?;
+                    self.write_word(operands[0] as usize + 2, res.response.column)?;
                     self.set_next_pc(i.next_address())?;
                     Ok(None)
                 }
                 ResponseType::ReadComplete => {
                     let i = decoder::decode_instruction(self, self.pc()?)?;
-                    let r = processor_var::read_post(self, &i, res.response().input().clone())?;
+                    let r = processor_var::read_post(self, &i, res.response.input.clone())?;
                     if let NextAddress::Address(a) = r.next_address() {
                         self.set_next_pc(*a)?;
                         Ok(None)
@@ -1969,26 +2544,26 @@ impl ZMachine {
                     let i = decoder::decode_instruction(self, self.pc()?)?;
                     let operands = processor::operand_values(self, &i)?;
                     let text_buffer = operands[0] as usize;
-                    let routine = if res.response().routine > 0 {
-                        res.response().routine
+                    let routine = if res.response.routine > 0 {
+                        res.response.routine
                     } else {
                         self.packed_routine_address(operands[3])?
                     };
 
                     if self.version < 5 {
-                        for (i, c) in res.response().input.iter().enumerate() {
+                        for (i, c) in res.response.input.iter().enumerate() {
                             self.write_byte(text_buffer + 1 + i, *c as u8)?
                         }
                     } else {
-                        self.write_byte(text_buffer + 1, res.response().input.len() as u8)?;
-                        for (i, c) in res.response().input.iter().enumerate() {
+                        self.write_byte(text_buffer + 1, res.response.input.len() as u8)?;
+                        for (i, c) in res.response.input.iter().enumerate() {
                             self.write_byte(text_buffer + 2 + i, *c as u8)?
                         }
                     }
-                    match res.response().interrupt {
+                    match res.response.interrupt {
                         Interrupt::ReadTimeout => {
                             if let NextAddress::Address(a) =
-                                self.call_read_interrupt(routine, &Vec::new(), None, self.pc()?)?
+                                self.call_read_interrupt(routine, &Vec::new(), self.pc()?)?
                             {
                                 self.set_next_pc(a)?;
                                 Ok(None)
@@ -2020,9 +2595,9 @@ impl ZMachine {
                         i.store()
                             .expect("READ_CHAR should have a store location")
                             .variable(),
-                        res.response()
-                            .key()
-                            .zchar()
+                        res.response
+                            .key
+                            .zchar
                             .expect("Completed READ_CHAR should return a zchar"),
                     )?;
                     Ok(None)
@@ -2032,7 +2607,7 @@ impl ZMachine {
                     let operands = processor::operand_values(self, &i)?;
                     let routine = self.packed_routine_address(operands[2])? as usize;
                     if let NextAddress::Address(a) =
-                        self.call_read_interrupt(routine, &Vec::new(), None, self.pc()?)?
+                        self.call_read_char_interrupt(routine, &Vec::new(), self.pc()?)?
                     {
                         self.set_next_pc(a)?;
                         Ok(None)
@@ -2045,7 +2620,7 @@ impl ZMachine {
                 }
                 ResponseType::RestoreComplete => {
                     let i = decoder::decode_instruction(self, self.pc()?)?;
-                    let quetzal = Quetzal::try_from(res.response().save_data.clone())?;
+                    let quetzal = Quetzal::try_from(res.response.save_data.clone())?;
                     let ifhd = IFhd::try_from((&*self, 0))?;
                     if &ifhd != quetzal.ifhd() {
                         error!(target: "app::state", "Restore state was created from a different zcode program");
@@ -2062,7 +2637,7 @@ impl ZMachine {
                             4..=8 => match i.store() {
                                 Some(v) => {
                                     self.set_variable(v.variable(), 0)?;
-                                    self.set_next_pc(i.next_address());
+                                    self.set_next_pc(i.next_address())?;
                                 }
                                 None => {
                                     return fatal_error!(
@@ -2169,7 +2744,7 @@ impl ZMachine {
                 ResponseType::SaveComplete => {
                     let i = decoder::decode_instruction(self, self.pc()?)?;
                     match self.version {
-                        3 => match processor::branch(self, &i, res.response().success)? {
+                        3 => match processor::branch(self, &i, res.response.success)? {
                             NextAddress::Address(a) => self.set_next_pc(a)?,
                             _ => {
                                 return fatal_error!(
@@ -2182,9 +2757,9 @@ impl ZMachine {
                             Some(v) => {
                                 self.set_variable(
                                     v.variable(),
-                                    if res.response().success { 1 } else { 0 },
+                                    if res.response.success { 1 } else { 0 },
                                 )?;
-                                self.set_next_pc(i.next_address());
+                                self.set_next_pc(i.next_address())?;
                             }
                             None => {
                                 return fatal_error!(
@@ -2209,12 +2784,12 @@ impl ZMachine {
                         i.store()
                             .expect("SET_FONT should have a store location")
                             .variable(),
-                        res.response().font,
+                        res.response.font,
                     )?;
                     Ok(None)
                 }
                 ResponseType::SoundInterrupt => {
-                    let r = self.call_routine(res.response().routine, &vec![], None, self.pc()?)?;
+                    let r = self.call_routine(res.response.routine, &vec![], None, self.pc()?)?;
                     match r {
                         NextAddress::Address(a) => self.set_next_pc(a)?,
                         _ => {
@@ -2230,85 +2805,41 @@ impl ZMachine {
         }
     }
 
-    // // Store cursor position
-    // pub fn get_cursor_post(
-    //     &mut self,
-    //     instruction: &Instruction,
-    //     row: u16,
-    //     column: u16,
-    // ) -> Result<InstructionResult, RuntimeError> {
-    //     processor_var::get_cursor_post(self, instruction, row, column)
-    // }
-
-    // // Process input
-    // pub fn read_post(
-    //     &mut self,
-    //     instruction: &Instruction,
-    //     input: Vec<u16>,
-    // ) -> Result<InstructionResult, RuntimeError> {
-    //     processor_var::read_post(self, instruction, input)
-    // }
-
-    // // Read timed out
-    // pub fn read_interrupted(
-    //     &mut self,
-    //     instruction: &Instruction,
-    //     input: &[u16],
-    // ) -> Result<InstructionResult, RuntimeError> {
-    //     processor_var::read_interrupted(self, instruction, input)
-    // }
-
-    // // Read aborted after interrupt
-    // pub fn read_abort(
-    //     &mut self,
-    //     instruction: &Instruction,
-    // ) -> Result<InstructionResult, RuntimeError> {
-    //     processor_var::read_abort(self, instruction)
-    // }
-
-    // pub fn read_char_post(
-    //     &mut self,
-    //     instruction: &Instruction,
-    //     key: InputEvent,
-    // ) -> Result<InstructionResult, RuntimeError> {
-    //     processor_var::read_char_post(self, instruction, key)
-    // }
-
-    // pub fn read_char_interrupted(
-    //     &mut self,
-    //     instruction: &Instruction,
-    // ) -> Result<InstructionResult, RuntimeError> {
-    //     processor_var::read_char_interrupted(self, instruction)
-    // }
-
-    // pub fn read_char_abort(
-    //     &mut self,
-    //     instruction: &Instruction,
-    // ) -> Result<InstructionResult, RuntimeError> {
-    //     processor_var::read_char_abort(self, instruction)
-    // }
-
-    // pub fn set_font_post(
-    //     &mut self,
-    //     instruction: &Instruction,
-    //     old_font: u8,
-    // ) -> Result<InstructionResult, RuntimeError> {
-    //     processor_ext::set_font_post(self, instruction, old_font)
-    // }
-
+    /// Get the address of the currently executing instruction
+    ///
+    /// # Returns
+    /// [Result] with the current pc or a [RuntimeError]
     pub fn pc(&self) -> Result<usize, RuntimeError> {
         Ok(self.current_frame()?.pc())
     }
 
+    /// Set the address of the currently executing instruction
+    ///
+    /// # Arguments
+    /// * `pc` - Address of the currently executing instruction
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn set_pc(&mut self, pc: usize) -> Result<(), RuntimeError> {
         self.current_frame_mut()?.set_pc(pc);
         Ok(())
     }
 
+    /// Get the address of the next instruction to execute
+    ///
+    /// # Returns
+    /// [Result] with the next pc or a [RuntimeError]
     pub fn next_pc(&self) -> Result<usize, RuntimeError> {
         Ok(self.current_frame()?.next_pc())
     }
 
+    /// Set the address of the next instruction to execute
+    ///
+    /// # Arguments
+    /// * `pc` - Address of the next instruction to execute
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn set_next_pc(&mut self, next_pc: usize) -> Result<(), RuntimeError> {
         self.current_frame_mut()?.set_next_pc(next_pc);
         Ok(())

@@ -206,7 +206,6 @@ pub fn read_pre(
         terminators,
         timeout,
         preload,
-        false,
     )
 }
 

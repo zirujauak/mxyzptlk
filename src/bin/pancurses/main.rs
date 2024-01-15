@@ -228,14 +228,17 @@ fn run(
                     }
                     RequestType::Restore => {
                         // Prompt for filename and read data
-                        let data =
-                            screen.prompt_and_read("Restore from: ", zmachine.name(), "ifzs")?;
+                        let data = screen.prompt_and_read(
+                            "Restore from: ",
+                            req.request().name(),
+                            "ifzs",
+                        )?;
                         response = InterpreterResponse::restore(data)
                     }
                     RequestType::Save => {
                         let r = screen.prompt_and_write(
                             "Save to: ",
-                            zmachine.name(),
+                            req.request().name(),
                             "ifzs",
                             req.request().save_data(),
                             false,

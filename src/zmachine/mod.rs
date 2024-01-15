@@ -1,3 +1,4 @@
+//! Infocom [ZMachine](https://inform-fiction.org/zmachine/standards/z1point1/index.html) implementation
 pub mod io;
 mod rng;
 pub mod state;
@@ -120,12 +121,63 @@ impl ZMachine {
 
     // Runtime state
     pub fn read_byte(&self, address: usize) -> Result<u8, RuntimeError> {
-        self.state.read_byte(address)
+        if address < 0x10000 {
+            self.memory.read_byte(address)
+        } else {
+            fatal_error!(
+                ErrorCode::IllegalMemoryAccess,
+                "Read from byte address in high memory: {:#06x}",
+                address
+            )
+        }
     }
 
     pub fn read_word(&self, address: usize) -> Result<u16, RuntimeError> {
-        self.state.read_word(address)
+        if address < 0xFFFF {
+            self.memory.read_word(address)
+        } else {
+            fatal_error!(
+                ErrorCode::IllegalMemoryAccess,
+                "Read from word address in hight memory: {:#06x}",
+                address
+            )
+        }
     }
+
+    pub fn write_byte(&mut self, address: usize, value: u8) -> Result<(), RuntimeError> {
+        if address < self.memory.static_mark {
+            self.memory.write_byte(address, value)
+        } else {
+            fatal_error!(
+                ErrorCode::IllegalMemoryAccess,
+                "Write to byte address above dynamic memory {:04x}: {:04x}",
+                self.static_mark - 1,
+                address,
+            )
+        }
+    }
+
+    pub fn write_word(&mut self, address: usize, value: u16) -> Result<(), RuntimeError> {
+        if address < self.memory.static_mark - 1 {
+            self.memory.write_word(address, value)?;
+            Ok(())
+        } else {
+            fatal_error!(
+                ErrorCode::IllegalMemoryAccess,
+                "Write to word address above dynamic memory {:04x}: {:04x}",
+                self.static_mark - 1,
+                address,
+            )
+        }
+    }
+
+    // pub fn read_byte(&self, address: usize) -> Result<u8, RuntimeError> {
+    //     self.state.read_byte(address)
+    // }
+
+    // pub fn read_word(&self, address: usize) -> Result<u16, RuntimeError> {
+    //     self.state.read_word(address)
+    // }
 
     fn update_transcript_bit(&mut self, old: u16, new: u16) -> Result<(), RuntimeError> {
         if old & 0x1 != new & 0x1 {
@@ -156,7 +208,7 @@ impl ZMachine {
                 .is_err()
         {
             // Starting the transcript failed, so skip writing to memory
-            warn!(target: "app::stream", "Staring transcript failed, not setting transcript bit");
+            warn!(target: "app::stream", "Starting transcript failed, not setting transcript bit");
             return self.state.write_byte(address, value & 0xFE);
         }
 

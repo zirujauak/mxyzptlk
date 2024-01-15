@@ -1,71 +1,131 @@
+//! [Header](https://inform-fiction.org/zmachine/standards/z1point1/sect11.html) [(see also)](https://inform-fiction.org/zmachine/standards/z1point1/appb.html) utility functions
 use crate::error::RuntimeError;
 
 use super::memory::Memory;
 
+/// Header field offsets
 pub enum HeaderField {
+    /// ZCode version byte
     Version = 0x00,
+    /// Flags 1 byte
     Flags1 = 0x01,
+    /// Release word
     Release = 0x02,
+    /// Byte address of the start of high memory
     HighMark = 0x04,
+    /// Byte address of the initial instruction
     InitialPC = 0x06,
+    /// Byte address of the dictionary
     Dictionary = 0x08,
+    /// Byte address of the object table
     ObjectTable = 0x0A,
+    /// Byte address of the global variable table
     GlobalTable = 0x0C,
+    /// Byte address of the start of static memory
     StaticMark = 0x0E,
+    /// Flags 2 word
     Flags2 = 0x10,
+    /// 6 byte ASCII serial number
     Serial = 0x12,
+    /// Byte address of the abbreviations table
     AbbreviationsTable = 0x18,
+    /// Packed file length (file may be longer, but must not be shorter)
     FileLength = 0x1A,
+    /// Checksum of the (unmodified) ZCode data
     Checksum = 0x1C,
+    /// Interpreter number byte
     InterpreterNumber = 0x1E,
+    /// Interpreter version byte
     InterpreterVersion = 0x1F,
+    /// Number of lines in the screen
     ScreenLines = 0x20,
+    /// Number of columns in the screen
     ScreenColumns = 0x21,
+    /// Screen width in units
     ScreenWidth = 0x22,
+    /// Screen height in units
     ScreenHeight = 0x24,
+    /// Width of a unit
     FontWidth = 0x26,
+    /// Height of a unit
     FontHeight = 0x27,
+    /// V7 packed routine address offset
     RoutinesOffset = 0x28,
+    /// V7 packed string address offset
     StringsOffset = 0x2A,
+    /// Default background color
     DefaultBackground = 0x2C,
+    /// Default foreground color
     DefaultForeground = 0x2D,
+    /// Byte address of input terminator table
     TerminatorTable = 0x2E,
+    /// Word containing the ZMachine standard revision the interpreter supports
     Revision = 0x32,
+    /// Byte address of the optional alphabet table
     AlphabetTable = 0x34,
+    /// Byte address of the header extension table
     ExtensionTable = 0x36,
+    /// 4 byte ASCII Inform compiler version
     InformVersion = 0x3C,
 }
 
+/// Flags 1 bits for ZCode version 3
 pub enum Flags1v3 {
-    // V3 flags
-    StatusLineType = 0x02,         // bit 1
+    /// 0: score/turns, 1: time
+    StatusLineType = 0x02, // bit 1
+    /// 1 if the interpreter cannot display a status line
     StatusLineNotAvailable = 0x10, // bit 4
-    ScreenSplitAvailable = 0x20,   // bit 5
-    VariablePitchDefault = 0x40,   // bit 6
+    /// 1 if the interpreter can split the screen
+    ScreenSplitAvailable = 0x20, // bit 5
+    /// 1 if a variable pitch font is the default
+    VariablePitchDefault = 0x40, // bit 6
 }
 
+/// Flags 1 bits for ZCode version 4+
 pub enum Flags1v4 {
-    // V4+ flags
-    ColoursAvailable = 0x01,      // bit 0
-    PicturesAvailable = 0x02,     // bit 1
-    BoldfaceAvailable = 0x04,     // bit 2
-    ItalicAvailable = 0x08,       // bit 3
-    FixedSpaceAvailable = 0x10,   // bit 4
+    /// 1 if coloured text is supported
+    ColoursAvailable = 0x01, // bit 0
+    /// 1 if pictures (graphics font?) is supported
+    PicturesAvailable = 0x02, // bit 1
+    /// 1 if boldface text is supported
+    BoldfaceAvailable = 0x04, // bit 2
+    /// 1 is italic (or underline) text is supported
+    ItalicAvailable = 0x08, // bit 3
+    /// 1 if fixed-space text is supported
+    FixedSpaceAvailable = 0x10, // bit 4
+    /// 1 if sound effects are supported
     SoundEffectsAvailable = 0x20, // bit 5
-    TimedInputAvailable = 0x80,   // bit 7
+    /// 1 if timed input is supported
+    TimedInputAvailable = 0x80, // bit 7
 }
 
 #[derive(Debug)]
+/// Flags 2 bits
 pub enum Flags2 {
-    Transcripting = 0x0001,       // bit 0
-    ForceFixedPitch = 0x0002,     // bit 1
-    RequestPictures = 0x0008,     // bit 3
-    RequestUndo = 0x0010,         // bit 4
-    RequestMouse = 0x0020,        // bit 5
-    RequestColours = 0x0040,      // bit 6
+    /// When set, transcripting is enabled
+    Transcripting = 0x0001, // bit 0
+    /// When set, a fixed pitch font should be used
+    ForceFixedPitch = 0x0002, // bit 1
+    /// Set if the game wants to use pictures (graphic font), interpreter will unset if not supported
+    RequestPictures = 0x0008, // bit 3
+    /// Set if the game wants to use undo, interpreter will unset if not supported
+    RequestUndo = 0x0010, // bit 4
+    /// Set if the game wants to use mouse input, interpreter will unset if not supported
+    RequestMouse = 0x0020, // bit 5
+    /// Set if the game wants to use coloured text, interpreter will unset if not supported
+    RequestColours = 0x0040, // bit 6
+    /// Set if the game wants to use sound effects, interpreter will unset if not supported
     RequestSoundEffects = 0x0080, // bit 7
 }
 
+/// Gets a byte field value
+///
+/// # Arguments
+/// * `memory` - Reference to the [Memory] map
+/// * `field` - [HeaderField] to get
+///
+/// # Returns
+/// [Result] with the field byte value, or [None]
 pub(in crate::zmachine) fn field_byte(
     memory: &Memory,
     field: HeaderField,
@@ -73,6 +133,14 @@ pub(in crate::zmachine) fn field_byte(
     memory.read_byte(field as usize)
 }
 
+/// Gets a word field value
+///
+/// # Arguments
+/// * `memory` - Reference to the [Memory] map
+/// * `field` - [HeaderField] to get
+///
+/// # Returns
+/// [Result] with the field word value, or [None]
 pub(in crate::zmachine) fn field_word(
     memory: &Memory,
     field: HeaderField,
@@ -80,6 +148,15 @@ pub(in crate::zmachine) fn field_word(
     memory.read_word(field as usize)
 }
 
+/// Sets a byte field value
+///
+/// # Arguments
+/// * `memory` - Mutable reference to the [Memory] map
+/// * `field` - [HeaderField] to set
+/// * `value` - byte value
+///
+/// # Returns
+/// Empty [Result] or a [RuntimeError]
 pub(in crate::zmachine) fn set_byte(
     memory: &mut Memory,
     field: HeaderField,
@@ -88,6 +165,15 @@ pub(in crate::zmachine) fn set_byte(
     memory.write_byte(field as usize, value)
 }
 
+/// Sets a word field value
+///
+/// # Arguments
+/// * `memory` - Mutable reference to the [Memory] map
+/// * `field` - [HeaderField] to set
+/// * `value` - word value
+///
+/// # Returns
+/// Empty [Result] or a [RuntimeError]
 pub(in crate::zmachine) fn set_word(
     memory: &mut Memory,
     field: HeaderField,
@@ -96,6 +182,14 @@ pub(in crate::zmachine) fn set_word(
     memory.write_word(field as usize, value)
 }
 
+/// Gets the value of a Flags 1 bit
+///
+/// # Arguments
+/// * `memory` - Reference to the [Memory] map
+/// * `flag` - Flag bitmask
+///
+/// # Returns
+/// `1` if the flag is set, `0` if unset
 pub(in crate::zmachine) fn flag1(memory: &Memory, flag: u8) -> Result<u8, RuntimeError> {
     let flags = field_byte(memory, HeaderField::Flags1)?;
     if flags & flag > 0 {
@@ -105,6 +199,14 @@ pub(in crate::zmachine) fn flag1(memory: &Memory, flag: u8) -> Result<u8, Runtim
     }
 }
 
+/// Gets the value of a Flags 2 bit
+///
+/// # Arguments
+/// * `memory` - Reference to the [Memory] map
+/// * `flag` - [Flags2] flag
+///
+/// # Returns
+/// `1` if the flag is set, `0` if unset
 pub(in crate::zmachine) fn flag2(memory: &Memory, flag: Flags2) -> Result<u8, RuntimeError> {
     let flags = field_word(memory, HeaderField::Flags2)?;
     if flags & flag as u16 > 0 {
@@ -114,6 +216,14 @@ pub(in crate::zmachine) fn flag2(memory: &Memory, flag: Flags2) -> Result<u8, Ru
     }
 }
 
+/// Sets a Flags 1 bit
+///
+/// # Arguments
+/// * `memory` - Mutable reference to [Memory] map
+/// * `flag` - Flag bitmask
+///
+/// # Returns
+/// Empty [Result] or a [RuntimeError]
 pub(in crate::zmachine) fn set_flag1(memory: &mut Memory, flag: u8) -> Result<(), RuntimeError> {
     let flags = field_byte(memory, HeaderField::Flags1)?;
     let new = flags | flag;
@@ -121,6 +231,14 @@ pub(in crate::zmachine) fn set_flag1(memory: &mut Memory, flag: u8) -> Result<()
     memory.write_byte(HeaderField::Flags1 as usize, new)
 }
 
+/// Sets a Flags 2 bit
+///
+/// # Arguments
+/// * `memory` - Mutable reference to [Memory] map
+/// * `flag` - [Flags2] flag
+///
+/// # Returns
+/// Empty [Result] or a [RuntimeError]
 pub(in crate::zmachine) fn set_flag2(
     memory: &mut Memory,
     flag: Flags2,
@@ -132,6 +250,14 @@ pub(in crate::zmachine) fn set_flag2(
     memory.write_word(HeaderField::Flags2 as usize, new)
 }
 
+/// Clears a Flags 1 bit
+///
+/// # Arguments
+/// * `memory` - Mutable reference to [Memory] map
+/// * `flag` - Flag bitmask
+///
+/// # Returns
+/// Empty [Result] or a [RuntimeError]
 pub(in crate::zmachine) fn clear_flag1(memory: &mut Memory, flag: u8) -> Result<(), RuntimeError> {
     let flags = field_byte(memory, HeaderField::Flags1)?;
     let new = flags & !flag;
@@ -139,6 +265,14 @@ pub(in crate::zmachine) fn clear_flag1(memory: &mut Memory, flag: u8) -> Result<
     memory.write_byte(HeaderField::Flags1 as usize, new)
 }
 
+/// Sets a Flags 1 bit
+///
+/// # Arguments
+/// * `memory` - Mutable reference to [Memory] map
+/// * `flag` - [Flags2]] flag
+///
+/// # Returns
+/// Empty [Result] or a [RuntimeError]
 pub(in crate::zmachine) fn clear_flag2(
     memory: &mut Memory,
     flag: Flags2,
@@ -150,6 +284,15 @@ pub(in crate::zmachine) fn clear_flag2(
     memory.write_word(HeaderField::Flags2 as usize, new)
 }
 
+/// Sets a word in the header extension table
+///
+/// # Arguments
+/// * `memory` - Mutable reference to the [Memory] map
+/// * `index` - Word index of the word to write to
+/// * `value` - Value to write
+///
+/// # Returns
+/// Empty [Result] or a [RuntimeError]
 fn set_extension(memory: &mut Memory, index: usize, value: u16) -> Result<(), RuntimeError> {
     let extension_table_address = field_word(memory, HeaderField::ExtensionTable)? as usize;
     if extension_table_address > 0 {

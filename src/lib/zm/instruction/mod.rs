@@ -661,17 +661,10 @@ impl InstructionResult {
         terminators: Vec<u16>,
         timeout: u16,
         input: Vec<u16>,
-        redraw: bool,
     ) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
-            interpreter_request: InterpreterRequest::read(
-                length,
-                terminators,
-                timeout,
-                input,
-                redraw,
-            ),
+            interpreter_request: InterpreterRequest::read(length, terminators, timeout, input),
         })
     }
 
