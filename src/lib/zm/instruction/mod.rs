@@ -568,10 +568,13 @@ impl InstructionResult {
     ///
     /// # Arguments:
     /// * `next_address` - [NextAddress] to execute
-    pub fn new_line(next_address: NextAddress) -> Result<InstructionResult, RuntimeError> {
+    pub fn new_line(
+        next_address: NextAddress,
+        transcript: bool,
+    ) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
-            interpreter_request: InterpreterRequest::new_line(),
+            interpreter_request: InterpreterRequest::new_line(transcript),
         })
     }
 
@@ -583,10 +586,11 @@ impl InstructionResult {
     pub fn output_stream(
         next_address: NextAddress,
         stream: i16,
+        name: &str,
     ) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
-            interpreter_request: InterpreterRequest::output_stream(stream),
+            interpreter_request: InterpreterRequest::output_stream(stream, name),
         })
     }
 
@@ -669,17 +673,24 @@ impl InstructionResult {
     /// * `terminators` - vector of input terminators
     /// * `timeout` - read timeout
     /// * `input` - existing input
-    /// * `redraw` - if true, existing input should be printed to the screen
+    /// * `transcript` - transcripting flag
     pub fn read(
         next_address: NextAddress,
         length: u8,
         terminators: Vec<u16>,
         timeout: u16,
         input: Vec<u16>,
+        transcript: bool,
     ) -> Result<InstructionResult, RuntimeError> {
         Ok(InstructionResult {
             next_address,
-            interpreter_request: InterpreterRequest::read(length, terminators, timeout, input),
+            interpreter_request: InterpreterRequest::read(
+                length,
+                terminators,
+                timeout,
+                input,
+                transcript,
+            ),
         })
     }
 

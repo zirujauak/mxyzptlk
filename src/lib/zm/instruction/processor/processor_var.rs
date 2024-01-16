@@ -54,7 +54,18 @@ pub fn storew(
     let operands = operand_values(zmachine, instruction)?;
     let address = operands[0] as isize + (operands[1] as i16 * 2) as isize;
     zmachine.write_word(address as usize, operands[2])?;
-    InstructionResult::new(Address(instruction.next_address))
+    // If storing to Flags2, bit 0 is used to enable/disable transcripting
+    if address == 0x10 {
+        if operands[2] & 1 == 1 {
+            zmachine.output_stream(2, None)?;
+            InstructionResult::output_stream(Address(instruction.next_address), 2, zmachine.name())
+        } else {
+            zmachine.output_stream(-2, None)?;
+            InstructionResult::output_stream(Address(instruction.next_address), -2, zmachine.name())
+        }
+    } else {
+        InstructionResult::new(Address(instruction.next_address))
+    }
 }
 
 /// [STOREB](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#storeb): writes the
@@ -73,7 +84,18 @@ pub fn storeb(
     let operands = operand_values(zmachine, instruction)?;
     let address = operands[0] as isize + (operands[1] as i16) as isize;
     zmachine.write_byte(address as usize, operands[2] as u8)?;
-    InstructionResult::new(Address(instruction.next_address))
+    // If storing to the low byte of Flags2, bit 0 is used to enable/disable transcripting
+    if address == 0x11 {
+        if operands[2] & 1 == 1 {
+            zmachine.output_stream(2, None)?;
+            InstructionResult::output_stream(Address(instruction.next_address), 2, zmachine.name())
+        } else {
+            zmachine.output_stream(-2, None)?;
+            InstructionResult::output_stream(Address(instruction.next_address), -2, zmachine.name())
+        }
+    } else {
+        InstructionResult::new(Address(instruction.next_address))
+    }
 }
 
 /// [PUT_PROP](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#put_prop): sets the 1-
@@ -206,6 +228,7 @@ pub fn read_pre(
         terminators,
         timeout,
         preload,
+        zmachine.is_stream_enabled(2),
     )
 }
 
@@ -598,7 +621,7 @@ pub fn output_stream(
     };
 
     zmachine.output_stream(stream, table)?;
-    InstructionResult::output_stream(Address(instruction.next_address), stream)
+    InstructionResult::output_stream(Address(instruction.next_address), stream, zmachine.name())
 }
 
 /// [INPUT_STREAM](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html#input_stream): enable or

@@ -3,9 +3,9 @@ extern crate log;
 
 use std::env;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::panic;
-use std::process::exit;
+use std::process::{exit, ExitCode};
 
 use screen::Screen;
 use zm::blorb::Blorb;
@@ -18,6 +18,317 @@ use crate::log::*;
 
 mod files;
 mod screen;
+
+struct Runtime {
+    zmachine: ZMachine,
+    screen: Screen,
+    sound: Manager,
+    stream_2: Option<File>,
+}
+
+impl Runtime {
+    pub fn new(
+        zcode: Vec<u8>,
+        config: &Config,
+        name: &str,
+        blorb: Option<Blorb>,
+    ) -> Result<Runtime, RuntimeError> {
+        let screen = Screen::new(zcode[0], config)?;
+        let zmachine = ZMachine::new(
+            zcode,
+            config,
+            name,
+            screen.rows() as u8,
+            screen.columns() as u8,
+        )?;
+        let sound = initialize_sound_engine(&zmachine, config.volume_factor(), blorb)?;
+
+        Ok(Runtime {
+            zmachine,
+            screen,
+            sound,
+            stream_2: None,
+        })
+    }
+
+    fn transcript(&mut self, text: &[u16]) {
+        match self.stream_2.as_mut() {
+            Some(f) => {
+                let t: Vec<u8> = text
+                    .iter()
+                    .map(|x| if *x as u8 == b'\r' { b'\n' } else { *x as u8 })
+                    .collect();
+                if let Err(r) = f.write_all(&t) {
+                    error!("Error writing to transcript: {}", r)
+                }
+            }
+            None => {
+                warn!("Transcript requested but no transcript file has been opened")
+            }
+        }
+    }
+
+    pub fn run(&mut self) -> Result<(), RuntimeError> {
+        let mut n = 0;
+        let mut response = None;
+        loop {
+            n += 1;
+            if self.sound.routine() > 0 && !self.sound.is_playing() {
+                debug!(target: "app::sound", "Sound interrupt ${:05x}", self.sound.routine());
+                response = InterpreterResponse::sound_interrupt(self.sound.routine());
+                self.sound.clear_routine();
+            } else {
+                log_mdc::insert("instruction_count", format!("{:8x}", n));
+                // TODO: Recoverable error handling
+                let result = self.zmachine.execute(response.as_ref())?;
+                // Reset the interpreter response
+                response = None;
+                if let Some(req) = result {
+                    match req.request_type() {
+                        RequestType::BufferMode => {
+                            self.screen.buffer_mode(req.request().buffer_mode());
+                        }
+                        RequestType::EraseLine => {
+                            self.screen.erase_line();
+                        }
+                        RequestType::EraseWindow => {
+                            self.screen
+                                .erase_window(req.request().window_erase() as i8)?;
+                        }
+                        RequestType::GetCursor => {
+                            let (row, column) = self.screen.cursor();
+                            response = InterpreterResponse::get_cursor(row as u16, column as u16);
+                        }
+                        RequestType::Message => {
+                            self.screen.print_str(req.request().message());
+                        }
+                        RequestType::NewLine => {
+                            self.screen.new_line();
+                            if req.request().transcript() {
+                                self.transcript(&[b'\n' as u16]);
+                            }
+                        }
+                        RequestType::OutputStream => {
+                            if req.request().stream() == 2 && self.stream_2.is_none() {
+                                let file = self.screen.prompt_and_create(
+                                    "Transcript file name: ",
+                                    req.request().name(),
+                                    "txt",
+                                    false,
+                                )?;
+                                self.stream_2 = Some(file);
+                            }
+                        }
+                        RequestType::Print => {
+                            self.screen.print(req.request().text());
+                            if req.request().transcript() {
+                                self.transcript(req.request().text());
+                            }
+                        }
+                        RequestType::PrintRet => {
+                            self.screen.print(req.request().text());
+                            self.screen.new_line();
+                            if req.request().transcript() {
+                                self.transcript(req.request().text());
+                                self.transcript(&[b'\n' as u16]);
+                            }
+                        }
+                        RequestType::PrintTable => {
+                            let origin = self.screen.cursor();
+                            let rows = self.screen.rows();
+                            let effective_width =
+                                req.request().width() as usize + req.request().skip() as usize;
+
+                            for i in 0..req.request().height() as usize {
+                                if origin.0 + i as u32 > rows {
+                                    self.screen.new_line();
+                                    self.screen.move_cursor(rows, origin.1);
+                                } else {
+                                    self.screen.move_cursor(origin.0 + i as u32, origin.1);
+                                }
+                                let mut text = Vec::new();
+                                let offset = i * effective_width;
+                                for j in 0..req.request().width() as usize {
+                                    text.push(req.request().table()[offset + j])
+                                }
+                                debug!(target: "app::screen", "PRINT_TABLE: '{}'", text.iter().map(|x| (*x as u8) as char).collect::<String>());
+                                self.screen.print(&text);
+                            }
+                        }
+                        RequestType::Quit => {
+                            self.quit();
+                            return Ok(());
+                        }
+                        RequestType::Read => {
+                            if self.zmachine.version() == 3 {
+                                let (left, right) = self.zmachine.status_line()?;
+                                self.screen.status_line(&left, &right)?;
+                            }
+                            let (input, terminator) = self.screen.read_line(
+                                req.request().input(),
+                                req.request().length() as usize,
+                                req.request().terminators(),
+                                req.request().timeout(),
+                                Some(&mut self.sound),
+                            )?;
+                            // If no input was returned, or the last character in the buffer is not a terminator,
+                            // then the read must have timed out.
+                            if input.is_empty()
+                                || !req.request().terminators().contains(input.last().unwrap())
+                            {
+                                if self.sound.routine() > 0 && !self.sound.is_playing() {
+                                    debug!(target: "app::screen", "Sound playback finished, dispatching sound routine");
+                                    response = InterpreterResponse::read_interrupted(
+                                        input,
+                                        Interrupt::Sound,
+                                        self.sound.routine(),
+                                    );
+                                    self.sound.clear_routine();
+                                    // zmachine.call_routine(sound.routine(), &Vec::new(), None, pc)?;
+                                    // sound.clear_routine();
+                                } else {
+                                    debug!(target: "app::screen", "Read timed out, dispatching read routine");
+                                    response = InterpreterResponse::read_interrupted(
+                                        input,
+                                        Interrupt::ReadTimeout,
+                                        0,
+                                    );
+                                }
+                            } else {
+                                if req.request().transcript() {
+                                    self.transcript(&input);
+                                }
+
+                                response = InterpreterResponse::read_complete(input, terminator);
+                            }
+                        }
+                        RequestType::ReadRedraw => {
+                            // Print the input
+                            self.screen.print(req.request().input());
+                        }
+                        RequestType::ReadChar => {
+                            let key = self.screen.read_key(req.request().timeout())?;
+                            if key.interrupt().is_some() {
+                                if self.sound.routine() > 0 && !self.sound.is_playing() {
+                                    debug!(target: "app::screen", "Sound playback finished, dispatching sound routine");
+                                    response = InterpreterResponse::read_char_interrupted(
+                                        Interrupt::Sound,
+                                    );
+                                } else {
+                                    debug!(target: "app::screen", "Read character timed out, dispatching read routine");
+                                    response = InterpreterResponse::read_char_interrupted(
+                                        Interrupt::ReadTimeout,
+                                    );
+                                }
+                            } else {
+                                response = InterpreterResponse::read_char_complete(key);
+                            }
+                        }
+                        RequestType::Restart => {
+                            self.screen.reset();
+                            self.sound.stop_sound();
+                        }
+                        RequestType::Restore => {
+                            // Prompt for filename and read data
+                            let data = self.screen.prompt_and_read(
+                                "Restore from: ",
+                                req.request().name(),
+                                "ifzs",
+                            )?;
+                            response = InterpreterResponse::restore(data)
+                        }
+                        RequestType::Save => {
+                            let r = self.screen.prompt_and_write(
+                                "Save to: ",
+                                req.request().name(),
+                                "ifzs",
+                                req.request().save_data(),
+                                false,
+                            );
+                            response = InterpreterResponse::save(r.is_ok())
+                        }
+
+                        RequestType::SetCursor => {
+                            self.screen.move_cursor(
+                                req.request().row() as u32,
+                                req.request().column() as u32,
+                            );
+                        }
+                        RequestType::SetColour => {
+                            self.screen.set_colors(
+                                req.request().foreground(),
+                                req.request().background(),
+                            )?;
+                        }
+                        RequestType::SetFont => {
+                            let old_font = self.screen.set_font(req.request().font() as u8);
+                            response = InterpreterResponse::set_font(old_font as u16);
+                        }
+                        RequestType::SetTextStyle => {
+                            self.screen.set_style(req.request().style() as u8)?;
+                        }
+                        RequestType::SetWindow => {
+                            self.screen
+                                .select_window(req.request().window_set() as u8)?;
+                        }
+                        RequestType::ShowStatus => {
+                            self.screen.status_line(
+                                req.request().status_left(),
+                                req.request().status_right(),
+                            )?;
+                        }
+                        RequestType::SoundEffect => match req.request().number() {
+                            1 | 2 => self.screen.beep(),
+                            _ => match req.request().effect() {
+                                1 => (),
+                                2 => {
+                                    self.sound.play_sound(
+                                        req.request().number(),
+                                        req.request().volume(),
+                                        Some(req.request().repeats()),
+                                        req.request().routine(),
+                                    )?;
+                                }
+                                3 | 4 => self.sound.stop_sound(),
+                                _ => (),
+                            },
+                        },
+                        RequestType::SplitWindow => {
+                            if req.request().split_lines() > 0 {
+                                self.screen.split_window(req.request().split_lines() as u32);
+                            } else {
+                                self.screen.unsplit_window();
+                            }
+                        }
+                        _ => {
+                            debug!("Interpreter directive: {:?}", req.request_type());
+                            return Err(RuntimeError::fatal(
+                                ErrorCode::UnimplementedInstruction,
+                                format!("{:?}", req.request_type()).to_string(),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn quit(&mut self) {
+        self.screen.quit();
+        self.screen
+            .print(&"Press any key".chars().map(|x| (x as u8) as u16).collect());
+        self.screen.key(true);
+        if cfg!(target_os = "macos") {
+            let _ = std::process::Command::new("/usr/bin/reset").status();
+            let _ = std::process::Command::new("/usr/bin/tput")
+                .arg("rmcup")
+                .status();
+        } else if cfg!(target_os = "linux") {
+            let _ = std::process::Command::new("/usr/bin/reset").status();
+        }
+        exit(-1);
+    }
+}
 
 fn initialize_sound_engine(
     zmachine: &ZMachine,
@@ -72,244 +383,7 @@ fn initialize_config() -> Config {
     }
 }
 
-fn quit(screen: &mut Screen) {
-    screen.quit();
-    screen.print(&"Press any key".chars().map(|x| (x as u8) as u16).collect());
-    screen.key(true);
-    if cfg!(target_os = "macos") {
-        let _ = std::process::Command::new("/usr/bin/reset").status();
-        let _ = std::process::Command::new("/usr/bin/tput")
-            .arg("rmcup")
-            .status();
-    } else if cfg!(target_os = "linux") {
-        let _ = std::process::Command::new("/usr/bin/reset").status();
-    }
-    exit(-1);
-}
-
-fn run(
-    zmachine: &mut ZMachine,
-    screen: &mut Screen,
-    sound: &mut Manager,
-) -> Result<(), RuntimeError> {
-    let mut n = 0;
-    let mut response = None;
-    loop {
-        n += 1;
-        if sound.routine() > 0 && !sound.is_playing() {
-            debug!(target: "app::sound", "Sound interrupt ${:05x}", sound.routine());
-            response = InterpreterResponse::sound_interrupt(sound.routine());
-            sound.clear_routine();
-        } else {
-            log_mdc::insert("instruction_count", format!("{:8x}", n));
-            // TODO: Recoverable error handling
-            let result = zmachine.execute(response.as_ref())?;
-            // Reset the interpreter response
-            response = None;
-            if let Some(req) = result {
-                match req.request_type() {
-                    RequestType::BufferMode => {
-                        screen.buffer_mode(req.request().buffer_mode());
-                    }
-                    RequestType::EraseLine => {
-                        screen.erase_line();
-                    }
-                    RequestType::EraseWindow => {
-                        screen.erase_window(req.request().window_erase() as i8)?;
-                    }
-                    RequestType::GetCursor => {
-                        let (row, column) = screen.cursor();
-                        response = InterpreterResponse::get_cursor(row as u16, column as u16);
-                    }
-                    RequestType::Message => {
-                        screen.print_str(req.request().message());
-                    }
-                    RequestType::NewLine => {
-                        screen.new_line();
-                    }
-                    RequestType::OutputStream => {
-                        // TBD: Remove this RequestType?
-                    }
-                    RequestType::Print => {
-                        screen.print(req.request().text());
-                    }
-                    RequestType::PrintRet => {
-                        screen.print(req.request().text());
-                        screen.new_line();
-                    }
-                    RequestType::PrintTable => {
-                        let origin = screen.cursor();
-                        let rows = screen.rows();
-                        let effective_width =
-                            req.request().width() as usize + req.request().skip() as usize;
-
-                        for i in 0..req.request().height() as usize {
-                            if origin.0 + i as u32 > rows {
-                                screen.new_line();
-                                screen.move_cursor(rows, origin.1);
-                            } else {
-                                screen.move_cursor(origin.0 + i as u32, origin.1);
-                            }
-                            let mut text = Vec::new();
-                            let offset = i * effective_width;
-                            for j in 0..req.request().width() as usize {
-                                text.push(req.request().table()[offset + j])
-                            }
-                            debug!(target: "app::screen", "PRINT_TABLE: '{}'", text.iter().map(|x| (*x as u8) as char).collect::<String>());
-                            screen.print(&text);
-                        }
-                    }
-                    RequestType::Quit => {
-                        quit(screen);
-                        return Ok(());
-                    }
-                    RequestType::Read => {
-                        if zmachine.version() == 3 {
-                            let (left, right) = zmachine.status_line()?;
-                            screen.status_line(&left, &right)?;
-                        }
-                        let (input, terminator) = screen.read_line(
-                            req.request().input(),
-                            req.request().length() as usize,
-                            req.request().terminators(),
-                            req.request().timeout(),
-                            Some(sound),
-                        )?;
-                        // If no input was returned, or the last character in the buffer is not a terminator,
-                        // then the read must have timed out.
-                        if input.is_empty()
-                            || !req.request().terminators().contains(input.last().unwrap())
-                        {
-                            if sound.routine() > 0 && !sound.is_playing() {
-                                debug!(target: "app::screen", "Sound playback finished, dispatching sound routine");
-                                response = InterpreterResponse::read_interrupted(
-                                    input,
-                                    Interrupt::Sound,
-                                    sound.routine(),
-                                );
-                                sound.clear_routine();
-                                // zmachine.call_routine(sound.routine(), &Vec::new(), None, pc)?;
-                                // sound.clear_routine();
-                            } else {
-                                debug!(target: "app::screen", "Read timed out, dispatching read routine");
-                                response = InterpreterResponse::read_interrupted(
-                                    input,
-                                    Interrupt::ReadTimeout,
-                                    0,
-                                );
-                            }
-                        } else {
-                            response = InterpreterResponse::read_complete(input, terminator);
-                        }
-                    }
-                    RequestType::ReadRedraw => {
-                        // Print the input
-                        screen.print(req.request().input());
-                    }
-                    RequestType::ReadChar => {
-                        let key = screen.read_key(req.request().timeout())?;
-                        if key.interrupt().is_some() {
-                            if sound.routine() > 0 && !sound.is_playing() {
-                                debug!(target: "app::screen", "Sound playback finished, dispatching sound routine");
-                                response =
-                                    InterpreterResponse::read_char_interrupted(Interrupt::Sound);
-                                // zmachine.call_routine(sound.routine(), &Vec::new(), None, pc)?;
-                                // sound.clear_routine();
-                            } else {
-                                debug!(target: "app::screen", "Read character timed out, dispatching read routine");
-                                response = InterpreterResponse::read_char_interrupted(
-                                    Interrupt::ReadTimeout,
-                                );
-                            }
-                        } else {
-                            response = InterpreterResponse::read_char_complete(key);
-                        }
-                    }
-                    RequestType::Restart => {
-                        screen.reset();
-                        sound.stop_sound();
-                    }
-                    RequestType::Restore => {
-                        // Prompt for filename and read data
-                        let data = screen.prompt_and_read(
-                            "Restore from: ",
-                            req.request().name(),
-                            "ifzs",
-                        )?;
-                        response = InterpreterResponse::restore(data)
-                    }
-                    RequestType::Save => {
-                        let r = screen.prompt_and_write(
-                            "Save to: ",
-                            req.request().name(),
-                            "ifzs",
-                            req.request().save_data(),
-                            false,
-                        );
-                        response = InterpreterResponse::save(r.is_ok())
-                    }
-
-                    RequestType::SetCursor => {
-                        screen
-                            .move_cursor(req.request().row() as u32, req.request().column() as u32);
-                    }
-                    RequestType::SetColour => {
-                        screen
-                            .set_colors(req.request().foreground(), req.request().background())?;
-                    }
-                    RequestType::SetFont => {
-                        let old_font = screen.set_font(req.request().font() as u8);
-                        response = InterpreterResponse::set_font(old_font as u16);
-                    }
-                    RequestType::SetTextStyle => {
-                        screen.set_style(req.request().style() as u8)?;
-                    }
-                    RequestType::SetWindow => {
-                        screen.select_window(req.request().window_set() as u8)?;
-                    }
-                    RequestType::ShowStatus => {
-                        screen.status_line(
-                            req.request().status_left(),
-                            req.request().status_right(),
-                        )?;
-                    }
-                    RequestType::SoundEffect => match req.request().number() {
-                        1 | 2 => screen.beep(),
-                        _ => match req.request().effect() {
-                            1 => (),
-                            2 => {
-                                sound.play_sound(
-                                    req.request().number(),
-                                    req.request().volume(),
-                                    Some(req.request().repeats()),
-                                    req.request().routine(),
-                                )?;
-                            }
-                            3 | 4 => sound.stop_sound(),
-                            _ => (),
-                        },
-                    },
-                    RequestType::SplitWindow => {
-                        if req.request().split_lines() > 0 {
-                            screen.split_window(req.request().split_lines() as u32);
-                        } else {
-                            screen.unsplit_window();
-                        }
-                    }
-                    _ => {
-                        debug!("Interpreter directive: {:?}", req.request_type());
-                        return Err(RuntimeError::fatal(
-                            ErrorCode::UnimplementedInstruction,
-                            format!("{:?}", req.request_type()).to_string(),
-                        ));
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn main() {
+fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
     // full_name includes any path info and will be used to look for Blorb resources
@@ -412,22 +486,18 @@ fn main() {
         None => data,
     };
 
-    // let memory = Memory::new(zcode);
-    let mut screen = Screen::new(zcode[0], &config).expect("Error creating screen");
-    let mut zmachine = ZMachine::new(
-        zcode,
-        &config,
-        &name,
-        screen.rows() as u8,
-        screen.columns() as u8,
-    )
-    .expect("Error creating zmachine");
-    let mut sound = initialize_sound_engine(&zmachine, config.volume_factor(), blorb)
-        .expect("Error initializing sound engine");
+    match Runtime::new(zcode, &config, &name, blorb) {
+        Err(r) => {
+            error!("{}", r);
+            ExitCode::FAILURE
+        }
+        Ok(mut runtime) => {
+            trace!("Begining execution");
+            if let Err(r) = runtime.run() {
+                error!("{}", r);
+            }
 
-    trace!("Begining execution");
-    if let Err(r) = run(&mut zmachine, &mut screen, &mut sound) {
-        error!("{}", r);
-        quit(&mut screen);
+            ExitCode::SUCCESS
+        }
     }
 }

@@ -1,8 +1,5 @@
 //! Infocom [Zmachine](https://inform-fiction.org/zmachine/standards/z1point1/index.html) implementation
-use std::{
-    collections::{HashSet, VecDeque},
-    fs::File,
-};
+use std::collections::{HashSet, VecDeque};
 
 use crate::{
     config::Config,
@@ -293,6 +290,14 @@ impl RequestPayload {
         &self.text
     }
 
+    /// Get the transcript flag
+    ///
+    /// # Returns
+    /// Transcript flag
+    pub fn transcript(&self) -> bool {
+        self.transcript
+    }
+
     /// Get the table data to print
     ///
     /// # Returns
@@ -492,6 +497,14 @@ impl RequestPayload {
     pub fn split_lines(&self) -> u16 {
         self.split_lines
     }
+
+    /// Gets the stream number
+    ///
+    /// # Returns
+    /// Stream number
+    pub fn stream(&self) -> i16 {
+        self.stream
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -593,10 +606,14 @@ impl InterpreterRequest {
     }
 
     /// NewLine constructor
-    pub fn new_line() -> Option<InterpreterRequest> {
+    ///
+    /// # Arguments
+    /// * `transcript` - transcripting flag
+    pub fn new_line(transcript: bool) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::NewLine,
             request: RequestPayload {
+                transcript,
                 ..Default::default()
             },
         })
@@ -606,11 +623,13 @@ impl InterpreterRequest {
     ///
     /// # Arguments
     /// * `stream` - output stream
-    pub fn output_stream(stream: i16) -> Option<InterpreterRequest> {
+    /// * `name` - Base filename
+    pub fn output_stream(stream: i16, name: &str) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::OutputStream,
             request: RequestPayload {
                 stream,
+                name: name.to_string(),
                 ..Default::default()
             },
         })
@@ -691,11 +710,13 @@ impl InterpreterRequest {
     /// * `terminators` - Vector of input terminator characters
     /// * `timeout` - Timeout, 0 if none
     /// * `input` - Existing input
+    /// * `transcript` - transcripting flag
     pub fn read(
         length: u8,
         terminators: Vec<u16>,
         timeout: u16,
         input: Vec<u16>,
+        transcript: bool,
     ) -> Option<InterpreterRequest> {
         Some(InterpreterRequest {
             request_type: RequestType::Read,
@@ -704,6 +725,7 @@ impl InterpreterRequest {
                 terminators,
                 timeout,
                 input,
+                transcript,
                 ..Default::default()
             },
         })
@@ -1128,8 +1150,6 @@ pub struct ZMachine {
     error_handling: ErrorHandling,
     /// Output stream bitmask
     output_streams: u8,
-    /// Stream 2 (TBD - the interpreter should hold this)
-    stream_2: Option<File>,
     /// Stream 3 stack
     stream_3: Vec<Stream3>,
 }
@@ -1257,7 +1277,6 @@ impl ZMachine {
             errors: HashSet::new(),
             error_handling,
             output_streams: 0x1,
-            stream_2: None,
             stream_3: Vec::new(),
         };
 
@@ -1529,7 +1548,10 @@ impl ZMachine {
 
         // Header fields that should be preserved:
         // Flags2
-        let flags2 = header::field_word(&self.memory, HeaderField::Flags2)?;
+        let flags2 = self.read_word(0x10)?;
+        debug!(target: "app::instruction", "Flags2: {:016b}", flags2);
+        debug!(target: "app::instruction", "Streams: {:04b}", self.output_streams);
+
         // Default foreground
         let fg = header::field_byte(&self.memory, HeaderField::DefaultForeground)?;
         // Default background
@@ -1546,8 +1568,13 @@ impl ZMachine {
 
         // Re-initialize
         self.initialize(rows, columns, (fg, bg), false)?;
-        // Put the Flags2 value back
+        // Put the Flags2 value back and reset the output streams
         self.write_word(HeaderField::Flags2 as usize, flags2)?;
+        self.output_streams &= 0x3;
+        self.stream_3.clear();
+
+        debug!(target: "app::instruction", "Flags2: {:016b}", self.read_word(0x10)?);
+        debug!(target: "app::instruction", "Streams: {:04b}", self.output_streams);
 
         Ok(self.current_frame()?.pc())
     }
@@ -2108,15 +2135,6 @@ impl ZMachine {
 
     // Streams
 
-    // Stream 2 functions should be moved to the interpreter
-    fn is_stream_2_open(&self) -> bool {
-        self.stream_2.is_some()
-    }
-
-    fn set_stream_2(&mut self, file: File) {
-        self.stream_2 = Some(file)
-    }
-
     pub fn is_stream_enabled(&self, stream: u8) -> bool {
         let mask = (1 << (stream - 1)) & 0xF;
         self.output_streams & mask == mask
@@ -2215,16 +2233,6 @@ impl ZMachine {
         }
     }
 
-    // TODO: Move to interpreter
-    fn start_stream_2(&mut self) -> Result<(), RuntimeError> {
-        Err(RuntimeError::recoverable(
-            ErrorCode::UnimplementedInstruction,
-            "Stream 2 not implemented yet".to_string(),
-        ))
-        // let file = self.prompt_and_create("Transcript file name: ", "txt", false)?;
-        // self.io.set_stream_2(file);
-    }
-
     /// Enable or disable an output stream
     ///
     /// # Arguments
@@ -2238,16 +2246,6 @@ impl ZMachine {
             1..=4 => {
                 debug!(target: "app::stream", "Enabling output stream {}", stream);
                 if stream == 2 {
-                    if !self.is_stream_2_open() {
-                        if let Err(e) = self.start_stream_2() {
-                            error!(target: "app::stream", "Error starting stream 2: {}", e);
-                            return recoverable_error!(
-                                ErrorCode::Transcript,
-                                "Error creating transcript file: {}",
-                                e
-                            );
-                        }
-                    }
                     // Set the transcript bit
                     let f2 = self.read_word(0x10)?;
                     self.memory.write_word(0x10, f2 | 1)?;
@@ -2313,6 +2311,8 @@ impl ZMachine {
                 self.set_redraw_input()?;
             }
 
+            debug!(target: "app::screen", "output(): {}", self.is_stream_enabled(2));
+
             match request_type {
                 RequestType::PrintRet => InstructionResult::print_ret(
                     next_address,
@@ -2350,7 +2350,7 @@ impl ZMachine {
                 self.set_redraw_input()?;
             }
 
-            InstructionResult::new_line(next_address)
+            InstructionResult::new_line(next_address, self.is_stream_enabled(2))
         } else {
             InstructionResult::new(next_address)
         }
