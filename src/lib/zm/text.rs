@@ -113,7 +113,7 @@ pub fn from_vec(
             } else {
                 match b {
                     0 => s.push(0x20),
-                    1 | 2 | 3 => {
+                    1..=3 => {
                         if !is_abbreviation {
                             abbrev = b
                         } else {

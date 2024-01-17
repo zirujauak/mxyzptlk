@@ -1,6 +1,8 @@
 //! Runtime errors
 use std::fmt;
 
+use crate::instruction::NextAddress;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ErrorCode {
     BlorbMissingChunk,
@@ -59,6 +61,8 @@ pub struct RuntimeError {
     code: ErrorCode,
     /// Error message
     message: String,
+    /// Next address, for recoverable errors
+    next_address: Option<NextAddress>,
 }
 
 impl RuntimeError {
@@ -67,11 +71,13 @@ impl RuntimeError {
     /// # Arguments
     /// * `code` - Error code
     /// * `message` - Error message
+    /// * `next_address` - Next address to execute if the error is ignored
     pub fn recoverable(code: ErrorCode, message: String) -> RuntimeError {
         RuntimeError {
             recoverable: true,
             code,
             message,
+            next_address: None,
         }
     }
 
@@ -85,7 +91,12 @@ impl RuntimeError {
             recoverable: false,
             code,
             message,
+            next_address: None,
         }
+    }
+
+    pub fn set_next_address(&mut self, next_address: NextAddress) {
+        self.next_address = Some(next_address);
     }
 
     /// Get the error code
@@ -110,6 +121,10 @@ impl RuntimeError {
     /// `true` if the error is _potentially_ recoverable, `false` if not
     pub fn is_recoverable(&self) -> bool {
         self.recoverable
+    }
+
+    pub fn next_address(&self) -> Option<&NextAddress> {
+        self.next_address.as_ref()
     }
 }
 

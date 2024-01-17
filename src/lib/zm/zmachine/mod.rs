@@ -1,5 +1,5 @@
 //! Infocom [Zmachine](https://inform-fiction.org/zmachine/standards/z1point1/index.html) implementation
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 
 use crate::{
     config::Config,
@@ -1144,10 +1144,6 @@ pub struct ZMachine {
     frames: Vec<Frame>,
     /// Undo stack
     undo_stack: VecDeque<Quetzal>,
-    /// Set of recoverable error codes during execution
-    errors: HashSet<ErrorCode>,
-    /// Recoverable error handling directive
-    error_handling: ErrorHandling,
     /// Output stream bitmask
     output_streams: u8,
     /// Stream 3 stack
@@ -1266,7 +1262,6 @@ impl ZMachine {
         let memory = Memory::new(zcode);
         let version = header::field_byte(&memory, HeaderField::Version)?;
         let rng = ChaChaRng::new();
-        let error_handling = config.error_handling();
         let mut zm = ZMachine {
             name: name.to_string(),
             version,
@@ -1274,8 +1269,6 @@ impl ZMachine {
             rng: Box::new(rng),
             frames: Vec::new(),
             undo_stack: VecDeque::new(),
-            errors: HashSet::new(),
-            error_handling,
             output_streams: 0x1,
             stream_3: Vec::new(),
         };
@@ -2545,7 +2538,13 @@ impl ZMachine {
                             }
                         }
                     }
-                    Err(e) => Err(e),
+                    Err(mut e) => {
+                        if e.is_recoverable() {
+                            e.set_next_address(NextAddress::Address(instruction.next_address()));
+                        }
+
+                        Err(e)
+                    }
                 }
             }
             Some(res) => match res.response_type {

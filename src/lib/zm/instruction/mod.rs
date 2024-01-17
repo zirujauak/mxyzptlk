@@ -451,6 +451,17 @@ pub enum NextAddress {
     Quit,
 }
 
+impl NextAddress {
+    pub fn address(&self) -> usize {
+        match self {
+            NextAddress::Address(a) => *a,
+            NextAddress::ReadCharInterrupt(a, _) => *a,
+            NextAddress::ReadInterrupt(a, _, _) => *a,
+            NextAddress::Quit => 0,
+        }
+    }
+}
+
 #[derive(Debug)]
 /// Instruction result
 pub struct InstructionResult {
