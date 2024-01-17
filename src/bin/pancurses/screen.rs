@@ -602,7 +602,7 @@ impl Screen {
             }
 
             let key = self.key(end == 0);
-            if let Some(c) = key.zchar() {
+            if key.zchar().is_some() {
                 return Ok(key);
             }
 
@@ -627,7 +627,7 @@ impl Screen {
         };
 
         debug!(target: "app::screen", "Read until {}", end);
-        let mut terminator = InputEvent::no_input();
+        let terminator;
 
         loop {
             let now = self.now(None);
@@ -775,8 +775,6 @@ impl Screen {
             _ => 0,
         }
     }
-
-    pub fn output_stream(&mut self, mask: u8, table: Option<usize>) {}
 
     pub fn reset(&mut self) {
         self.window.clear();
