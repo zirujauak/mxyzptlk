@@ -1,3 +1,4 @@
+//! Terminal I/O ... screen and keyboard input
 use std::{
     fs::{self, File},
     io::{Read, Write},
@@ -20,7 +21,8 @@ use zm::{
 use crate::files;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Color {
+/// Z-Machine colour constants
+pub enum Colour {
     Black = 2,
     Red = 3,
     Green = 4,
@@ -31,6 +33,7 @@ pub enum Color {
     White = 9,
 }
 
+/// Z-Machine text styles
 pub enum Style {
     Roman = 0,
     Reverse = 1,
@@ -40,6 +43,7 @@ pub enum Style {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+/// Current text styling
 pub struct CellStyle {
     mask: u8,
 }
@@ -51,10 +55,19 @@ impl Default for CellStyle {
 }
 
 impl CellStyle {
+    /// Constructor
+    ///
+    /// Defaults to unstyled (plain text)
     pub fn new() -> CellStyle {
         CellStyle { mask: 0 }
     }
 
+    /// Additively sets a style.
+    ///
+    /// [Style::Roman] clears the style.
+    ///
+    /// # Arguments
+    /// * `style` - Style mask bit to add
     pub fn set(&mut self, style: u8) {
         match style {
             0 => self.mask = 0,
@@ -62,62 +75,106 @@ impl CellStyle {
         }
     }
 
+    /// Removes a style
+    ///
+    /// # Arguments
+    /// * `style` - Style mask bit to remove
     pub fn clear(&mut self, style: u8) {
         let mask = !(style & 0xF);
         self.mask &= mask;
     }
 
+    /// Tests if the style has a style attribute
+    ///
+    /// # Arguments
+    /// * `style` - Style to test
+    ///
+    /// # Returns
+    /// `true` if the style includes the attribute, `false` if not
     pub fn is_style(&self, style: Style) -> bool {
         let s = style as u8;
         self.mask & s == s
     }
 }
 
-fn map_color(color: u8) -> Result<Color, RuntimeError> {
-    match color {
-        2 => Ok(Color::Black),
-        3 => Ok(Color::Red),
-        4 => Ok(Color::Green),
-        5 => Ok(Color::Yellow),
-        6 => Ok(Color::Blue),
-        7 => Ok(Color::Magenta),
-        8 => Ok(Color::Cyan),
-        9 => Ok(Color::White),
-        _ => recoverable_error!(ErrorCode::InvalidColor, "Invalid color {}", color),
+/// Map a colour number to a [Colour] enum value
+///
+/// # Arguments
+/// * `colour` - Colour value
+///
+/// # Returns
+/// [Result] containing the [Colour] enum or a [RuntimeError] if the `colour`` is invalid.
+fn map_colour(colour: u8) -> Result<Colour, RuntimeError> {
+    match colour {
+        2 => Ok(Colour::Black),
+        3 => Ok(Colour::Red),
+        4 => Ok(Colour::Green),
+        5 => Ok(Colour::Yellow),
+        6 => Ok(Colour::Blue),
+        7 => Ok(Colour::Magenta),
+        8 => Ok(Colour::Cyan),
+        9 => Ok(Colour::White),
+        _ => recoverable_error!(ErrorCode::InvalidColor, "Invalid color {}", colour),
     }
 }
 
-fn map_colors(foreground: u8, background: u8) -> Result<(Color, Color), RuntimeError> {
-    Ok((map_color(foreground)?, map_color(background)?))
+/// Map a foreground and background colour to a Colour enum tuple
+///
+/// # Arguments
+/// * `foreground` - foreground colour value
+/// * `background` - background colour value
+///
+/// # Returns
+/// [Result] containing a (foreground, background) tuple or a [RuntimeError] if either colour is invalid.
+fn map_colours(foreground: u8, background: u8) -> Result<(Colour, Colour), RuntimeError> {
+    Ok((map_colour(foreground)?, map_colour(background)?))
 }
 
 #[derive(Debug)]
+/// Screen state
 pub struct Screen {
+    /// ZCode version
     version: u8,
-    // Window setup
+    /// Window height
     rows: u32,
+    /// Window width
     columns: u32,
+    /// Top row - if there is a status line, this will be the _second_ line in the window
     top: u32,
+    /// Top row of window 1 when split, will be equal to `top`
     window_1_top: Option<u32>,
+    /// Bottom row of window 1 when split
     window_1_bottom: Option<u32>,
+    /// Top of window 0, will be equal to `top` or `window_1_bottom` + 1
     window_0_top: u32,
+    /// The currently selected window
     selected_window: u8,
-    // Text styling
+    /// Text buffering and word wrapping
     buffer_mode: u16,
-    // foreground, background
-    default_colors: (Color, Color),
-    current_colors: (Color, Color),
+    /// Default (foreground, background) colours
+    default_colors: (Colour, Colour),
+    /// Current (foreground, background) colours
+    current_colors: (Colour, Colour),
+    /// Current text styling
     current_style: CellStyle,
+    /// Current font
     font: u8,
-    // Cursor
-    // row, column with 1,1 as origin
+    /// Window 0 cursor position (row, column) relative to the upper left corner of the window (1,1)
     cursor_0: (u32, u32),
+    /// Window 0 cursor position (row, column) when split
     cursor_1: Option<(u32, u32)>,
+    /// Pancurses Window
     window: Window,
+    /// Lines printed since the last keyboard input, used to pause output
     lines_since_input: u32,
 }
 
 impl Screen {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `version` - ZCode version
+    /// * `config` - Reference to configuration
     pub fn new(version: u8, config: &Config) -> Result<Screen, RuntimeError> {
         info!(target: "app::screen", "Initialize pancurses terminal");
         let window = pancurses::initscr();
@@ -132,19 +189,23 @@ impl Screen {
         window.clear();
         window.refresh();
 
-        // Initialize fg/bg color pairs
+        // Initialize the curses fg/bg colour pairs
         for fg in 0..8 {
             for bg in 0..8 {
                 pancurses::init_pair(cp(fg, bg), fg, bg);
             }
         }
 
+        // Get window (height, width)
         let (y, x) = window.get_max_yx();
         let (rows, columns) = (y as u32, x as u32);
 
-        let colors = map_colors(config.foreground(), config.background())?;
+        // Map the default (foreground, background) colours
+        let colors = map_colours(config.foreground(), config.background())?;
 
+        // V3 has a status line, so drop the top row to the second line
         let top = if version == 3 { 2 } else { 1 };
+        // Window 0 cursor position is (bottom, left) for V3, V4 and (top, left) for V5+
         let cursor_0 = if version > 4 { (1, 1) } else { (rows, 1) };
         Ok(Screen {
             version,
@@ -167,14 +228,28 @@ impl Screen {
         })
     }
 
+    /// Get the window height
+    ///
+    /// # Returns
+    /// Window height in rows
     pub fn rows(&self) -> u32 {
         self.rows
     }
 
+    /// Get the window width
+    ///
+    /// # Returns
+    /// Window width in columns
     pub fn columns(&self) -> u32 {
         self.columns
     }
 
+    /// Get the cursor position for the selected windows.
+    ///
+    /// The window origin is at the top left of the screen (1,1).
+    ///
+    /// # Returns
+    /// Tuple (row, column) with the currently selected window's cursor position.
     pub fn cursor(&self) -> (u32, u32) {
         if self.selected_window == 0 {
             self.cursor_0
@@ -185,14 +260,14 @@ impl Screen {
         }
     }
 
-    // pub fn default_colors(&self) -> (Color, Color) {
-    //     self.default_colors
-    // }
-
-    // pub fn selected_window(&self) -> u8 {
-    //     self.selected_window
-    // }
-
+    /// Move the cursor in the currently selected window.
+    ///
+    /// The cursor position is constrained to the window.  Moving the cursor out of bounds places
+    /// it at the edge(s) of the screen.
+    ///
+    /// # Arguments
+    /// * `row` - Row
+    /// * `column` - Column
     pub fn move_cursor(&mut self, row: u32, column: u32) {
         // Constrain the column between 1 and the width of the screen
         let c = u32::max(1, u32::min(self.columns, column));
@@ -213,29 +288,62 @@ impl Screen {
         }
     }
 
-    fn map_color(&self, color: u8, current: Color, default: Color) -> Result<Color, RuntimeError> {
+    /// Maps a Z-Machine colour to a Colour enum value.
+    ///
+    /// `colour` 0 is the current colour, 1 is the default colour.
+    ///
+    /// # Arguments
+    /// * `colour` - colour value
+    /// * `current` - the current colour
+    /// * `dafault` - the default colour
+    ///
+    /// # Returns
+    /// [Result] containing the Colour enum value, or a [RuntimeError] if the `colour` is invalid
+    fn map_color(
+        &self,
+        color: u8,
+        current: Colour,
+        default: Colour,
+    ) -> Result<Colour, RuntimeError> {
         match color {
             0 => Ok(current),
             1 => Ok(default),
-            2 => Ok(Color::Black),
-            3 => Ok(Color::Red),
-            4 => Ok(Color::Green),
-            5 => Ok(Color::Yellow),
-            6 => Ok(Color::Blue),
-            7 => Ok(Color::Magenta),
-            8 => Ok(Color::Cyan),
-            9 => Ok(Color::White),
+            2 => Ok(Colour::Black),
+            3 => Ok(Colour::Red),
+            4 => Ok(Colour::Green),
+            5 => Ok(Colour::Yellow),
+            6 => Ok(Colour::Blue),
+            7 => Ok(Colour::Magenta),
+            8 => Ok(Colour::Cyan),
+            9 => Ok(Colour::White),
             _ => recoverable_error!(ErrorCode::InvalidColor, "Invalid color {}", color),
         }
     }
 
-    fn map_colors(&self, foreground: u8, background: u8) -> Result<(Color, Color), RuntimeError> {
+    /// Maps a foreground and background Z-Machine colour values.
+    ///
+    /// # Arguments
+    /// * `foreground` - foreground colour value
+    /// * `background` - background colour value
+    ///
+    /// # Returns
+    /// [Result] containing a tuple (foreground, background) with the Colour enum values,
+    /// or a [RuntimeError] if the either colour value is invalid
+    fn map_colors(&self, foreground: u8, background: u8) -> Result<(Colour, Colour), RuntimeError> {
         Ok((
             self.map_color(foreground, self.current_colors.0, self.default_colors.0)?,
             self.map_color(background, self.current_colors.1, self.default_colors.1)?,
         ))
     }
 
+    /// Set the current text colours
+    ///
+    /// # Arguments
+    /// * `foreground` - Foreground colour
+    /// * `background` - Background colour
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError] if either colour value is invalid
     pub fn set_colors(&mut self, foreground: u16, background: u16) -> Result<(), RuntimeError> {
         self.current_colors = self.map_colors(foreground as u8, background as u8)?;
         let cp = cp(
@@ -246,6 +354,12 @@ impl Screen {
         Ok(())
     }
 
+    /// Split the window.
+    ///
+    /// Window 1 will occupy the screen from `top` down for the number of `lines` specified.
+    ///
+    /// # Arguments
+    /// * `lines` - number of lines for window 1
     pub fn split_window(&mut self, lines: u32) {
         let bottom = self.top + lines - 1;
         self.window_1_top = Some(self.top);
@@ -257,6 +371,9 @@ impl Screen {
         }
     }
 
+    /// Unsplit the window
+    ///
+    /// Removes window 1, but does not change the screen contents
     pub fn unsplit_window(&mut self) {
         self.window_0_top = self.top;
         self.window_1_top = None;
@@ -265,6 +382,14 @@ impl Screen {
         self.selected_window = 0;
     }
 
+    /// Select a window
+    ///
+    /// # Arguments
+    /// * `window` - Window to select - 0 or 1.
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError] if an invalid window is selected, or if window
+    /// 1 is selected but hasn't been split.
     pub fn select_window(&mut self, window: u8) -> Result<(), RuntimeError> {
         self.lines_since_input = 0;
         if window == 0 {
@@ -279,6 +404,19 @@ impl Screen {
         }
     }
 
+    /// Erase a window
+    ///
+    /// Valid `window` values:
+    /// * 0 - Window 0
+    /// * 1 - Window 1 (if split)
+    /// * -1 - Unsplits the screen and then erases it
+    /// * -2 - Erases the screen without unsplitting it
+    ///
+    /// # Arguments
+    /// * `window` - Window to erase
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError] if the `window` value is invalid.
     pub fn erase_window(&mut self, window: i8) -> Result<(), RuntimeError> {
         match window {
             0 => {
@@ -320,7 +458,7 @@ impl Screen {
                 self.window_1_top = None;
                 self.window_1_bottom = None;
                 self.cursor_1 = None;
-                self.window_0_top = 1;
+                self.window_0_top = self.top;
                 for i in self.window_0_top..=self.rows {
                     for j in 1..=self.columns {
                         self.print_char_at(0x20, i, j, self.current_colors, &CellStyle::new(), 1);
@@ -360,6 +498,7 @@ impl Screen {
         }
     }
 
+    /// Erase from the current cursor position to the end of the line
     pub fn erase_line(&mut self) {
         let (row, col) = if self.selected_window == 0 {
             self.cursor_0
@@ -373,6 +512,11 @@ impl Screen {
         }
     }
 
+    /// Advance the cursor to the next line.
+    ///
+    /// The function will scroll the screen when advancing past the bottom of the screen.  If a full screen
+    /// has been printed since the last user input, a prompt is provided to allow the player to finish reading
+    /// the screen before continuing.
     fn next_line(&mut self) {
         self.lines_since_input += 1;
         if self.cursor_0.0 == self.rows {
@@ -409,6 +553,12 @@ impl Screen {
         }
     }
 
+    /// Advance the cursor to the next position.
+    ///
+    /// If the cursor is advance past the right edge of the current window, it is:
+    /// * Moved to the next line, scrolling if necessary when window 0 is selected
+    /// * Moved to the next line unless already at the bottom when window 1 is selected,
+    /// in which case the cursor is left at the bottom right corner of the window
     fn advance_cursor(&mut self) {
         if self.selected_window == 0 {
             if self.cursor_0.1 == self.columns {
@@ -435,11 +585,22 @@ impl Screen {
         }
     }
 
+    /// Print a string starting at the cursor position of the currently selected window.
+    ///
+    /// # Arguments
+    /// * `str` - String to print.
     pub fn print_str(&mut self, str: &str) {
         let v: Vec<u16> = str.chars().map(|x| (x as u8) as u16).collect();
         self.print(&v);
     }
 
+    /// Print a vector of characters starting at the cursor position of the currently selected window.
+    ///
+    /// If window 0 is selected and buffering is enabled, text will be wrapped to the next line if a word
+    /// would not fit in the space remaining.
+    ///
+    /// # Arguments
+    /// * `text` - Vector of characters to print
     pub fn print(&mut self, text: &Vec<u16>) {
         if self.selected_window == 0 && self.buffer_mode == 1 {
             let words = text.split_inclusive(|c| *c == 0x20);
@@ -462,6 +623,10 @@ impl Screen {
         self.window.refresh();
     }
 
+    /// Print a character to the cursor position of the currentl selected window, then advance the cursor.
+    ///
+    /// # Arguments
+    /// `zchar` - Character to print
     fn print_char(&mut self, zchar: u16) {
         if zchar == 0xd {
             self.new_line();
@@ -479,6 +644,12 @@ impl Screen {
         }
     }
 
+    /// Print a vector of characters to a specific position on the screen
+    ///
+    /// # Arguments
+    /// * `text` - Array of characters to print
+    /// * `at` - (row, column) cursor position to start printing at
+    /// * `style` - Text style
     pub fn print_at(&mut self, text: &[u16], at: (u32, u32), style: &CellStyle) {
         for (i, c) in text.iter().enumerate() {
             self.print_char_at(
@@ -493,12 +664,21 @@ impl Screen {
         self.window.refresh();
     }
 
+    /// Print a character to a specific position on the screen.  The underlying pancurses cursor position is advanced.
+    ///
+    /// # Arguments
+    /// * `zchar` - Character to print
+    /// * `row` - Row offset of the position to print to
+    /// * `column` - Column offset of the position to print to
+    /// * `colors` - (foreground, background) colour tuple
+    /// * `style` - Text style
+    /// * `font` - Text font
     fn print_char_at(
         &mut self,
         zchar: u16,
         row: u32,
         column: u32,
-        colors: (Color, Color),
+        colors: (Colour, Colour),
         style: &CellStyle,
         font: u8,
     ) {
@@ -524,6 +704,9 @@ impl Screen {
         self.window.chgat(1, attributes, cp);
     }
 
+    /// Print a new line, advance the cursor to the start of the next line.
+    ///
+    /// In window 0, this will scroll the screen if the cursor is on the bottom line of the screen.
     pub fn new_line(&mut self) {
         if self.selected_window == 0 {
             self.next_line();
@@ -536,11 +719,13 @@ impl Screen {
         }
     }
 
-    // pub fn flush_buffer(&mut self) -> Result<(), RuntimeError> {
-    //     self.window.refresh();
-    //     Ok(())
-    // }
-
+    /// Poll for a keypress
+    ///
+    /// # Arguments
+    /// * `wait` - When `true`, blocks until a key is returned
+    ///
+    /// # Returns
+    /// The input event, which may be "no event" if `wait` is false.
     pub fn key(&mut self, wait: bool) -> InputEvent {
         self.lines_since_input = 0;
         if self.selected_window == 0 {
@@ -571,6 +756,13 @@ impl Screen {
         }
     }
 
+    /// Gets the current timestamp, offset by an optional timeout period
+    ///
+    /// # Arguments
+    /// * `timeout` - Optional timeout in 10ths of a second.
+    ///
+    /// # Returns
+    /// Current timestamp, offset by the timeout if provided.
     fn now(&self, timeout: Option<u16>) -> u128 {
         match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(t) => {
@@ -587,6 +779,13 @@ impl Screen {
         }
     }
 
+    /// Read a keypress
+    ///
+    /// # Arguments
+    /// * `timeout` - Timeout in 10ths of a second, 0 for none
+    ///
+    /// # Returns
+    /// [Result] containing the keypress event or timeout or a [RuntimeError]
     pub fn read_key(&mut self, timeout: u16) -> Result<InputEvent, RuntimeError> {
         let end = if timeout > 0 {
             self.now(Some(timeout))
@@ -610,6 +809,20 @@ impl Screen {
         }
     }
 
+    /// Read a line of input.
+    ///
+    /// Normally, input is read until a terminator character is typed.  If a `timeout`
+    /// is provided, or an end-of-sound routine is triggered, input may be interrupted.
+    ///
+    /// # Arguments
+    /// * `text` - Existing input that can be added to or deleted
+    /// * `len` - Maximum number of characters, including the terminator
+    /// * `terminators` - Keys that terminate input
+    /// * `timeout` - Timeout in 10ths of a second or 0 for none
+    /// * `sound` - Sound manager.
+    ///
+    /// # Returns
+    /// * [Result] containing a tuple (input buffer, terminator) or a [RuntimeError]
     pub fn read_line(
         &mut self,
         text: &[u16],
@@ -681,6 +894,14 @@ impl Screen {
         Ok((input_buffer, terminator))
     }
 
+    /// Prints the status line in a V3 game.  The status line occupies the topmost line on the screen.
+    ///
+    /// # Arguments
+    /// * `left` - Left side of the status line, typically the room occupied by the player
+    /// * `right` - right side of the status line, either the current score/turns or time of day
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn status_line(&mut self, left: &Vec<u16>, right: &Vec<u16>) -> Result<(), RuntimeError> {
         let width = self.columns() as usize;
         let available_for_left = width - right.len() - 1;
@@ -706,6 +927,13 @@ impl Screen {
         Ok(())
     }
 
+    /// Backspace
+    ///
+    /// If the cursor is not at the left edge of the screen, move it to the left and clear
+    /// any text at that location.
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn backspace(&mut self) -> Result<(), RuntimeError> {
         if self.selected_window == 0 && self.cursor_0.1 > 1 {
             let attributes = self
@@ -737,19 +965,29 @@ impl Screen {
         Ok(())
     }
 
+    /// Set the current text style
+    ///
+    /// # Arguments
+    /// * `style` - text style bitmap
     pub fn set_style(&mut self, style: u8) -> Result<(), RuntimeError> {
         self.current_style.set(style);
         Ok(())
     }
 
+    /// Set the text buffering mode
+    ///
+    /// # Arguments
+    /// * `mode` - 0 to disabled buffering, 1 to enable
     pub fn buffer_mode(&mut self, mode: u16) {
         self.buffer_mode = mode;
     }
 
+    /// Play a simple beep
     pub fn beep(&mut self) {
         pancurses::beep();
     }
 
+    /// Reset the current screen cursor to the selected window cursor position
     pub fn reset_cursor(&mut self) {
         if self.selected_window == 0 {
             self.window
@@ -764,6 +1002,13 @@ impl Screen {
         }
     }
 
+    /// Set the text font.
+    ///
+    /// # Arguments
+    /// * `font` - Font to set
+    ///
+    /// # Returns
+    /// Previous font value
     pub fn set_font(&mut self, font: u8) -> u8 {
         match font {
             0 => self.font,
@@ -776,10 +1021,12 @@ impl Screen {
         }
     }
 
+    /// Reset the screen.
     pub fn reset(&mut self) {
         self.window.clear();
     }
 
+    /// Clean up curses
     pub fn quit(&mut self) {
         info!(target: "app::screen", "Closing pancurses terminal");
         self.window.keypad(false);
@@ -790,6 +1037,18 @@ impl Screen {
         pancurses::reset_prog_mode();
     }
 
+    /// Display an error message
+    ///
+    /// If the message is recoverable and the error handling strategy allows, permit the user to opt
+    /// to continue execution or exit.
+    ///
+    /// # Arguments
+    /// * `instruction` - address of the instruction where the error occurred
+    /// * `message` - error message
+    /// * `recoverable` - true if the error is recoverable
+    ///
+    /// # Returns
+    /// `true` if execution should continue, false if not.
     pub fn error(&mut self, instruction: &str, message: &str, recoverable: bool) -> bool {
         let (rows, cols) = self.window.get_max_yx();
         let height = 7;
@@ -828,6 +1087,19 @@ impl Screen {
         }
     }
 
+    /// Prompt the player for a filename
+    ///
+    /// Provides a suggested filename, which may be an existing filename (as when restoring) or a new filename (as when saving)
+    ///
+    /// # Arguments
+    /// * `prompt` - Prompt message
+    /// * `name` - Base filename suggestion
+    /// * `suffix` - File extension suggestion
+    /// * `overwrite` - True if an existing filename is allowed
+    /// * `first` - When true, the default is the first available filename, otherwise the last existing filename
+    ///
+    /// # Returns
+    /// [Result] containing the file name or a [RuntimeError]
     pub fn prompt_filename(
         &mut self,
         prompt: &str,
@@ -899,6 +1171,16 @@ impl Screen {
         }
     }
 
+    /// Prompt for a filename, then create and open it.
+    ///
+    /// # Arguments
+    /// * `prompt` - Prompt message
+    /// * `name` - Base filename
+    /// * `suffix` - File extension
+    /// * `overwrite` - if false, an existing filename will be rejected
+    ///
+    /// # Returns
+    /// [Result] containing a file opened for writing or a [RuntimeError]
     pub fn prompt_and_create(
         &mut self,
         prompt: &str,
@@ -923,6 +1205,17 @@ impl Screen {
         }
     }
 
+    /// Prompt for a filename, create, open it, write to it, then flush and close it.
+    ///
+    /// # Arguments
+    /// * `prompt` - Prompt message
+    /// * `name` - Base filename
+    /// * `suffix` - File extension
+    /// * `data` - Vector of bytes to write to the file
+    /// * `overwrite` - if false, an existing filename will be rejected
+    ///
+    /// # Returns
+    /// Empty [Result] or a [RuntimeError]
     pub fn prompt_and_write(
         &mut self,
         prompt: &str,
@@ -943,6 +1236,15 @@ impl Screen {
         }
     }
 
+    /// Prompt for an existing filename, open it, read it, then close it.
+    ///
+    /// # Arguments
+    /// * `prompt` - Prompt message
+    /// * `name` - Base filename
+    /// * `suffix` - File extension
+    ///
+    /// # Returns
+    /// [Result] containing the file data or a [RuntimeError]    
     pub fn prompt_and_read(
         &mut self,
         prompt: &str,
@@ -960,19 +1262,33 @@ impl Screen {
         }
     }
 
-    fn as_color(&self, color: Color) -> i16 {
-        match color {
-            Color::Black => pancurses::COLOR_BLACK,
-            Color::Red => pancurses::COLOR_RED,
-            Color::Green => pancurses::COLOR_GREEN,
-            Color::Yellow => pancurses::COLOR_YELLOW,
-            Color::Blue => pancurses::COLOR_BLUE,
-            Color::Magenta => pancurses::COLOR_MAGENTA,
-            Color::Cyan => pancurses::COLOR_CYAN,
-            Color::White => pancurses::COLOR_WHITE,
+    /// Map a Colour enum value to a curses color value
+    ///
+    /// # Arguments
+    /// * `colour` - enum value
+    ///
+    /// # Returns
+    /// Pancurses colour constant
+    fn as_color(&self, colour: Colour) -> i16 {
+        match colour {
+            Colour::Black => pancurses::COLOR_BLACK,
+            Colour::Red => pancurses::COLOR_RED,
+            Colour::Green => pancurses::COLOR_GREEN,
+            Colour::Yellow => pancurses::COLOR_YELLOW,
+            Colour::Blue => pancurses::COLOR_BLUE,
+            Colour::Magenta => pancurses::COLOR_MAGENTA,
+            Colour::Cyan => pancurses::COLOR_CYAN,
+            Colour::White => pancurses::COLOR_WHITE,
         }
     }
 
+    /// Map curses input to an Z-Machine input event.
+    ///
+    /// # Arguments
+    /// * `input` - Curses input
+    ///
+    /// # Returns
+    /// Z-Machine input event
     fn input_to_u16(&self, input: Input) -> InputEvent {
         match input {
             Input::Character(c) => char_to_u16(c),
@@ -1018,6 +1334,16 @@ impl Screen {
     }
 }
 
+/// Builds a curses color pair number for a foreground and background pair.
+///
+/// The index is masked from the foreground and background: 0b00fffbbb
+///
+/// # Arguments
+/// * `fg` - foreground colour
+/// * `bg` - background colour
+///
+/// # Returns
+/// Color pair index
 fn cp(fg: i16, bg: i16) -> i16 {
     // color range 0-7, so 3 bits each
     // color pair index is 6 bits, 00ff fbbb + 1
@@ -1025,6 +1351,13 @@ fn cp(fg: i16, bg: i16) -> i16 {
     ((fg << 3) & 0x38) + (bg & 0x07) + 1
 }
 
+/// Maps a character to a Z-Machine input event
+///
+/// # Arguments
+/// * `c` - Characteer
+///
+/// Returns
+/// Input event
 fn char_to_u16(c: char) -> InputEvent {
     match c {
         // Mac | Windows - slight differences in character values for backspace and return
@@ -1107,6 +1440,14 @@ fn char_to_u16(c: char) -> InputEvent {
     }
 }
 
+/// Maps a Z-Machine character to a char value
+///
+/// # Arguments
+/// * `zchar` - Z-Machine character value
+/// * `font` - font
+///
+/// # Returns
+/// Char value
 fn map_output(zchar: u16, font: u8) -> char {
     match font {
         1 | 4 => match zchar {

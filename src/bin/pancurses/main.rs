@@ -17,6 +17,10 @@ mod files;
 mod runtime;
 mod screen;
 
+/// Initalize configuration.
+///
+/// If `config.yml` exists in the current working directory in in ${HOME}/.mmxyzpltk, it will
+/// be used.  Otherwise, the defaults from [Config] are used.
 fn initialize_config() -> Config {
     if let Some(filename) = files::config_file("config.yml") {
         match File::open(&filename) {
@@ -51,6 +55,7 @@ fn main() -> ExitCode {
         .to_string();
     let config = initialize_config();
 
+    // Initialize logging
     if config.logging() {
         if let Some(filename) = files::config_file("log4rs.yml") {
             if log4rs::init_file(filename, Default::default()).is_ok() {
@@ -67,6 +72,7 @@ fn main() -> ExitCode {
         }
     }
 
+    // Add a panic handler to try and reset the terminal before exiting
     let prev = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         debug!("{}", &info);
@@ -80,6 +86,7 @@ fn main() -> ExitCode {
         prev(info);
     }));
 
+    // Read the ZCode (or Blorb) argument
     let mut data = Vec::new();
     match File::open(filename) {
         Ok(mut f) => match f.read_to_end(&mut data) {
@@ -97,6 +104,8 @@ fn main() -> ExitCode {
         }
     }
 
+    // If the argument was a Blorb file, process it.  Otherwise, look for a Blorb file
+    // the the same basename as the argument and a `.blorb` or `blb` extension.
     let blorb = if data[0..4] == [b'F', b'O', b'R', b'M'] {
         info!(target: "app::trace", "Reading Blorb");
         match Blorb::try_from(data.clone()) {
@@ -125,11 +134,15 @@ fn main() -> ExitCode {
         None
     };
 
+    // Get the ZCode from the Blorb Exec chunk, if present, else from the argument file
     let zcode = match &blorb {
         Some(b) => match b.exec() {
             Some(d) => d.clone(),
             None => {
+                // If the Blorb was not the argument, then `data` should start with the ZCode
+                // version.  If the Blorb _was_ the argument, then it will start with 'F'
                 if data[0] == b'F' {
+                    // The argument was a Blorb with no Exec chunk
                     error!(target: "app::trace", "No Exec chunk in blorb {}", filename);
                     exit(-1);
                 } else {
@@ -140,6 +153,7 @@ fn main() -> ExitCode {
         None => data,
     };
 
+    // Initialize the runtime
     match Runtime::new(zcode, &config, &name, blorb) {
         Err(r) => {
             error!("{}", r);
@@ -147,7 +161,9 @@ fn main() -> ExitCode {
         }
         Ok(mut runtime) => {
             trace!("Begining execution");
+            // Start execution.  `run` should only return with an error
             if let Err(r) = runtime.run() {
+                // Log the error and quit
                 error!("{}", r);
                 runtime.quit();
             }

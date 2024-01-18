@@ -1,3 +1,4 @@
+//! Interpeter runtime
 use std::{collections::HashSet, fs::File, io::Write, process::exit};
 
 use log::{debug, error, warn};
@@ -11,7 +12,19 @@ use zm::{
 
 use crate::screen::Screen;
 
-fn initialize_sound_engine(
+/// Initialize sound.
+///
+/// If a Blorb resource is provided, attempt to create a sound Manager.
+///
+/// # Arguments
+/// * `zmachine` - Reference to the Z-Machine
+/// * `volume_factor` - Volume normalization factor
+/// * `blorb` - [Option] with a Blorb resource file
+///
+/// # Returns
+/// If `blorb` is [Some], returns a [Result] with an initialized sound manager or a [RuntimeError].  
+/// If `blorb` is none, returns a dummy sound manager.
+fn initialize_sound(
     zmachine: &ZMachine,
     volume_factor: f32,
     blorb: Option<Blorb>,
@@ -44,16 +57,33 @@ fn initialize_sound_engine(
     }
 }
 
+/// Runtime state
 pub struct Runtime {
+    /// The Z-Machine
     zmachine: ZMachine,
+    /// Terminal I/O
     screen: Screen,
+    /// Sound
     sound: Manager,
+    /// Transcript file stream
     stream_2: Option<File>,
+    /// Set of seen error codes
     errors: HashSet<ErrorCode>,
+    /// Recoverable error handling strategy
     error_handling: ErrorHandling,
 }
 
 impl Runtime {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `zcode` - ZCode program
+    /// * `config` - Reference to configuration
+    /// * `name` - Base filename
+    /// * `blorb` - Optional Blorb resource file with sound resources
+    ///
+    /// # Returns
+    /// [Result] with a new instance or a [RuntimeError]
     pub fn new(
         zcode: Vec<u8>,
         config: &Config,
@@ -68,7 +98,7 @@ impl Runtime {
             screen.rows() as u8,
             screen.columns() as u8,
         )?;
-        let sound = initialize_sound_engine(&zmachine, config.volume_factor(), blorb)?;
+        let sound = initialize_sound(&zmachine, config.volume_factor(), blorb)?;
 
         Ok(Runtime {
             zmachine,
@@ -80,9 +110,16 @@ impl Runtime {
         })
     }
 
+    /// Write text to the transcript file
+    ///
+    /// Does nothing if the transcript file is not open.
+    ///
+    /// # Arguments
+    /// * `test` - Array of text to write
     fn transcript(&mut self, text: &[u16]) {
         match self.stream_2.as_mut() {
             Some(f) => {
+                // Translate u16 to u8, mapping carriage return (\r) to line feed (\n).
                 let t: Vec<u8> = text
                     .iter()
                     .map(|x| if *x as u8 == b'\r' { b'\n' } else { *x as u8 })
@@ -97,6 +134,16 @@ impl Runtime {
         }
     }
 
+    /// Run the ZCode program
+    ///
+    /// Runs a single instruction on the Z-Machine.  If an interpreter callback results, handles the callback
+    /// and passes any return information to the Z-Machine, then proceeds to the next instruction.
+    ///
+    /// Between instructions, checks if an end-of-sound routine needs to be called.
+    ///
+    /// # Returns
+    /// Empty [Result] when the program finishes or a [RuntimeError].  In most cases, the QUIT instruction
+    /// will cause program termination before the `run` function returns.
     pub fn run(&mut self) -> Result<(), RuntimeError> {
         let mut n = 0;
         let mut response = None;
@@ -415,6 +462,10 @@ impl Runtime {
         }
     }
 
+    /// Quits the program.
+    ///
+    /// This function cleans up the terminal and attempts to clean up shell window on exit.  This works
+    /// on Linux and Macos, but causes a SEGFAULT on Windows.  Room for improvement.
     pub fn quit(&mut self) {
         self.screen.quit();
         self.screen
