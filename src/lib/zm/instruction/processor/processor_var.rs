@@ -326,7 +326,7 @@ pub fn print_char(
 /// * `instruction` - Reference to the instruction
 ///
 /// # Returns
-/// Result containing an [InstructionResult] with a [RequestType::PRINT] interpreter request
+/// Result containing an [InstructionResult] with a [RequestType::Print] interpreter request
 /// or a [RuntimeError]
 pub fn print_num(
     zmachine: &mut ZMachine,
@@ -346,8 +346,8 @@ pub fn print_num(
 ///
 /// If operand 0 is:
 /// * ..=-1000 - seeds the RNG with the absolute value, storing 0
-/// * -999..=0 - sets the RNG into predictable mode, returning 1..=operand[0] in sequence, storing 0
-/// * 1.. -  generates a random number from 1..=operand[0], storing the result
+/// * -999..=0 - sets the RNG into predictable mode, returning 1..=operand\[0\] in sequence, storing 0
+/// * 1.. -  generates a random number from 1..=operand\[0\], storing the result
 ///
 /// # Arguments
 /// * `zmachine` - Mutable reference to the zmachine

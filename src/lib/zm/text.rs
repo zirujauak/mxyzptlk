@@ -45,7 +45,7 @@ fn abbreviation(
 
 /// Read [ZSCII](https://inform-fiction.org/zmachine/standards/z1point1/sect03.html#one) from an address and decode it to a string
 ///
-/// Note that it is illegal for an abbreviation to contain an abbreviation and a [Runtime] error will
+/// Note that it is illegal for an abbreviation to contain an abbreviation and a [RuntimeError] will
 /// be returned.
 ///
 /// # Arguments
@@ -69,7 +69,7 @@ pub fn as_text(
 
 /// Decode a vector of ZSCII words to a string
 ///
-/// Note that it is illegal for an abbreviation to contain an abbreviation and a [Runtime] error will
+/// Note that it is illegal for an abbreviation to contain an abbreviation and a [RuntimeError] will
 /// be returned.
 ///
 /// # Arguments:
