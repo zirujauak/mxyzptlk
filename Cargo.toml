@@ -1,11 +1,15 @@
 [package]
 name = "mxyzptlk"
-version = "1.0.0-beta.2"
+version = "2.0.0-alpha.1"
 edition = "2021"
 
+[[bin]]
+name = "pancurses"
+path = "src/bin/pancurses/main.rs"
+
 [lib]
-name = "iff"
-path = "iff/src/lib.rs"
+name = "zm"
+path = "src/lib/zm/lib.rs"
 edition = "2021"
 crate_type = ["rlib"]
 
