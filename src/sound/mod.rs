@@ -17,7 +17,7 @@ use crate::sound::rodio_player::*;
 use crate::sound::test_player::*;
 
 use crate::{blorb::Blorb, error::RuntimeError};
-use iff::Chunk;
+use crate::iff::Chunk;
 
 #[derive(Debug)]
 pub struct Sound {
