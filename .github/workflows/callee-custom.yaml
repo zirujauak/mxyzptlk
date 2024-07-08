@@ -6,7 +6,7 @@ jobs:
   cache-checkmate:
     runs-on: ubuntu-latest
     steps:
-      - uses: taiki-e/cache-cargo-install-action@v1
+      - uses: taiki-e/cache-cargo-install-action@v2
         with:
           tool: cargo-checkmate
 
@@ -22,8 +22,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install binutils libsndfile1-dev libasound2-dev libudev-dev
 
-      - uses: taiki-e/cache-cargo-install-action@v1
+      - uses: taiki-e/cache-cargo-install-action@v2
         with:
           tool: cargo-checkmate
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: cargo-checkmate run ${{ matrix.phase }}
