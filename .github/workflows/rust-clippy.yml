@@ -41,7 +41,7 @@ jobs:
           # profile: minimal
           toolchain: stable
           components: clippy
-          override: true
+          # override: true
 
       - name: Install required cargo
         run: cargo install clippy-sarif sarif-fmt
