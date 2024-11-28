@@ -1,6 +1,7 @@
+//! [Blorb](https://www.eblong.com/zarf/blorb/blorb.html)
 use std::{collections::HashMap, fs::File};
 
-use crate::iff::{Chunk, self};
+use crate::iff::{self, Chunk};
 
 use crate::{
     error::{ErrorCode, RuntimeError},
@@ -8,37 +9,53 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
+/// The [game identifier](https://www.eblong.com/zarf/blorb/blorb.html#s6) chunk
 pub struct IFhd {
+    /// The release number from the game header
     release_number: u16,
+    /// The 6-character ASCII serial number from the game header
     serial_number: Vec<u8>,
+    /// The checksum from the game header
     checksum: u16,
-    pc: u32,
 }
 
 impl IFhd {
-    pub fn new(release_number: u16, serial_number: &[u8], checksum: u16, pc: u32) -> IFhd {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `release_number` - the header release number value
+    /// * `serial_number` - the header serial number value
+    /// * `checksum` - the header checksum value
+    pub fn new(release_number: u16, serial_number: &[u8], checksum: u16) -> IFhd {
         IFhd {
             release_number,
             serial_number: serial_number.to_vec(),
             checksum,
-            pc,
         }
     }
 
+    /// Get the release number
+    ///
+    /// # Returns
+    /// Release number
     pub fn release_number(&self) -> u16 {
         self.release_number
     }
 
+    /// Get a reference to the serial number vector
+    ///
+    /// # Returns
+    /// Reference to the serial number vector
     pub fn serial_number(&self) -> &Vec<u8> {
         &self.serial_number
     }
 
+    /// Get the checksum
+    ///
+    /// # Returns
+    /// Checksum
     pub fn checksum(&self) -> u16 {
         self.checksum
-    }
-
-    pub fn pc(&self) -> u32 {
-        self.pc
     }
 }
 
@@ -72,26 +89,34 @@ impl TryFrom<&Chunk> for IFhd {
             let release_number = iff::vec_as_unsigned(&data[0..2]) as u16;
             let serial_number = data[2..8].to_vec();
             let checksum = iff::vec_as_unsigned(&data[8..10]) as u16;
-            let pc = iff::vec_as_unsigned(&data[10..13]) as u32;
 
             Ok(IFhd {
                 release_number,
                 serial_number,
                 checksum,
-                pc,
             })
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
+/// RIdx entry
 pub struct Index {
+    /// Usage
     usage: String,
+    /// Number
     number: u32,
+    /// Offset of the start of the resource data in the IFF file
     start: u32,
 }
 
 impl Index {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `usage` - Resource usage (`Pict`, `Snd `, `Data`, or `Exec`)
+    /// * `number` - Resource number
+    /// * `start` - Offset of the start of the resource data in the IFF file
     pub fn new(usage: String, number: u32, start: u32) -> Index {
         Index {
             usage,
@@ -100,14 +125,26 @@ impl Index {
         }
     }
 
+    /// Get the resource usage type
+    ///
+    /// # Returns
+    /// Resource usage type
     pub fn usage(&self) -> &String {
         &self.usage
     }
 
+    /// Get the resource number
+    ///
+    /// # Returns
+    /// Resource number
     pub fn number(&self) -> u32 {
         self.number
     }
 
+    /// Get the reource offset
+    ///
+    /// # Retrusn
+    /// Resource offset in the IFF file
     pub fn start(&self) -> u32 {
         self.start
     }
@@ -132,15 +169,25 @@ impl TryFrom<&[u8]> for Index {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+/// [RIdx](https://www.eblong.com/zarf/blorb/blorb.html#s1) chunk
 pub struct RIdx {
+    /// Index entries
     indices: Vec<Index>,
 }
 
 impl RIdx {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `indices` - Resource index entries
     pub fn new(indices: Vec<Index>) -> RIdx {
         RIdx { indices }
     }
 
+    /// Get a reference to the resource index vector
+    ///
+    /// # Returns
+    /// Reference to the resource index vector
     pub fn indices(&self) -> &Vec<Index> {
         &self.indices
     }
@@ -181,20 +228,36 @@ impl TryFrom<&Chunk> for RIdx {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+/// Loop entry
 pub struct Entry {
+    /// Sound resource number
     number: u32,
+    /// Repeats
     repeats: u32,
 }
 
 impl Entry {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `number` - Sound resource number
+    /// * `repeats` - Repeats (1 for play once, 0 for loop until stopped)
     pub fn new(number: u32, repeats: u32) -> Entry {
         Entry { number, repeats }
     }
 
+    /// Get the sound resource number
+    ///
+    /// # Returns
+    /// Resource number
     pub fn number(&self) -> u32 {
         self.number
     }
 
+    /// Get the repeat count
+    ///
+    /// # Returns
+    /// Repeat count
     pub fn repeats(&self) -> u32 {
         self.repeats
     }
@@ -219,15 +282,26 @@ impl TryFrom<&[u8]> for Entry {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+
+/// [Loop](https://www.eblong.com/zarf/blorb/blorb.html#s11.4) chunk
 pub struct Loop {
+    /// Loop entries
     entries: Vec<Entry>,
 }
 
 impl Loop {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `entries` - Loop entries
     pub fn new(entries: Vec<Entry>) -> Loop {
         Loop { entries }
     }
 
+    /// Get a reference to the loop entries vector
+    ///
+    /// # Returns
+    /// Reference to the loop entries vector
     pub fn entries(&self) -> &Vec<Entry> {
         &self.entries
     }
@@ -264,15 +338,29 @@ impl TryFrom<&Chunk> for Loop {
 }
 
 #[derive(Debug)]
+/// Blorb structure
 pub struct Blorb {
+    /// Resource index
     ridx: RIdx,
+    /// Game identifier
     ifhd: Option<IFhd>,
+    /// Sound resources map (offset -> Chunk)
     sounds: HashMap<u32, Chunk>,
+    /// Looping
     loops: Option<Loop>,
+    /// Optional executable resource
     exec: Option<Vec<u8>>,
 }
 
 impl Blorb {
+    /// Constructor
+    ///
+    /// # Arguments
+    /// * `ridx` - Resource index chunk
+    /// * `ifhd` - Game identifier chunk
+    /// * `sounds` - Sound resource map
+    /// * `loops` - Looping chunk
+    /// * `exec` - Optional executable resource chunk
     pub fn new(
         ridx: RIdx,
         ifhd: Option<IFhd>,
@@ -289,22 +377,42 @@ impl Blorb {
         }
     }
 
+    /// Get a reference to the resource index
+    ///
+    /// # Returns
+    /// Refernce to the resource index
     pub fn ridx(&self) -> &RIdx {
         &self.ridx
     }
 
+    /// Get a reference to the game information chunk
+    ///
+    /// # Returns
+    /// Reference to the game information chunk
     pub fn ifhd(&self) -> Option<&IFhd> {
         self.ifhd.as_ref()
     }
 
+    /// Get a reference to the sound resource map
+    ///
+    /// # Returns
+    /// Reference to the sound resource map
     pub fn sounds(&self) -> &HashMap<u32, Chunk> {
         &self.sounds
     }
 
+    /// Get a reference to the looping chunk
+    ///
+    /// # Returns
+    /// Reference to the looping chunk
     pub fn loops(&self) -> Option<&Loop> {
         self.loops.as_ref()
     }
 
+    /// Get a reference to the executable resource
+    ///
+    /// # Returns
+    /// Reference to the executable resource
     pub fn exec(&self) -> Option<&Vec<u8>> {
         self.exec.as_ref()
     }
@@ -431,51 +539,20 @@ mod tests {
 
     #[test]
     fn test_ifhd_constructor() {
-        let ifhd = IFhd::new(
-            0x1234,
-            &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-            0x5678,
-            0x9abcde,
-        );
+        let ifhd = IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5678);
 
         assert_eq!(ifhd.release_number(), 0x1234);
         assert_eq!(ifhd.serial_number(), &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32]);
         assert_eq!(ifhd.checksum(), 0x5678);
-        assert_eq!(ifhd.pc(), 0x9abcde);
     }
 
     #[test]
     fn test_ifhd_partial_eq() {
-        let i1 = IFhd::new(
-            0x1234,
-            &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-            0x5678,
-            0x9abcde,
-        );
-        let i2 = IFhd::new(
-            0x1234,
-            &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-            0x5678,
-            0x9abcdf,
-        );
-        let i3 = IFhd::new(
-            0x1235,
-            &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-            0x5678,
-            0x9abcde,
-        );
-        let i4 = IFhd::new(
-            0x1234,
-            &[0x32, 0x33, 0x30, 0x37, 0x32, 0x33],
-            0x5678,
-            0x9abcde,
-        );
-        let i5 = IFhd::new(
-            0x1234,
-            &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-            0x5679,
-            0x9abcde,
-        );
+        let i1 = IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5678);
+        let i2 = IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5678);
+        let i3 = IFhd::new(0x1235, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5678);
+        let i4 = IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x33], 0x5678);
+        let i5 = IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5679);
         assert_eq!(i1, i1);
         assert_eq!(i1, i2);
         assert_eq!(i2, i1);
@@ -499,7 +576,6 @@ mod tests {
         assert_eq!(ifhd.release_number(), 0x1234);
         assert_eq!(ifhd.serial_number(), &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32]);
         assert_eq!(ifhd.checksum(), 0x5678);
-        assert_eq!(ifhd.pc(), 0x9abcde);
     }
 
     #[test]
@@ -665,12 +741,7 @@ mod tests {
             Index::new("Snd ".to_string(), 1, 2),
             Index::new("Snd ".to_string(), 3, 4),
         ]);
-        let ifhd = IFhd::new(
-            0x1234,
-            &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-            0x5678,
-            0x9abcde,
-        );
+        let ifhd = IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5678);
         let mut sounds = HashMap::new();
         sounds.insert(0x100, Chunk::new_chunk(0x100, "OGGV", vec![1, 2, 3, 4]));
         sounds.insert(0x200, Chunk::new_chunk(0x200, "OGGV", vec![5, 6, 7]));
@@ -727,12 +798,7 @@ mod tests {
         let blorb = assert_ok!(Blorb::try_from(&iff));
         assert_some_eq!(
             blorb.ifhd(),
-            &IFhd::new(
-                0x1234,
-                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-                0x5678,
-                0x9abcde
-            )
+            &IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5678,)
         );
         assert_eq!(
             blorb.ridx(),
@@ -783,12 +849,7 @@ mod tests {
         let blorb = assert_ok!(Blorb::try_from(&iff));
         assert_some_eq!(
             blorb.ifhd(),
-            &IFhd::new(
-                0x1234,
-                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-                0x5678,
-                0x9abcde
-            )
+            &IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5678,)
         );
         assert_eq!(
             blorb.ridx(),
@@ -844,12 +905,7 @@ mod tests {
         let blorb = assert_ok!(Blorb::try_from(&iff));
         assert_some_eq!(
             blorb.ifhd(),
-            &IFhd::new(
-                0x1234,
-                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-                0x5678,
-                0x9abcde
-            )
+            &IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5678,)
         );
         assert_eq!(
             blorb.ridx(),
@@ -906,12 +962,7 @@ mod tests {
         let blorb = assert_ok!(Blorb::try_from(&iff));
         assert_some_eq!(
             blorb.ifhd(),
-            &IFhd::new(
-                0x1234,
-                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-                0x5678,
-                0x9abcde
-            )
+            &IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5678,)
         );
         assert_eq!(
             blorb.ridx(),
@@ -969,12 +1020,7 @@ mod tests {
         let blorb = assert_ok!(Blorb::try_from(&iff));
         assert_some_eq!(
             blorb.ifhd(),
-            &IFhd::new(
-                0x1234,
-                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-                0x5678,
-                0x9abcde
-            )
+            &IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5678,)
         );
         assert_eq!(
             blorb.ridx(),
@@ -1069,12 +1115,7 @@ mod tests {
         let blorb = assert_ok!(b);
         assert_some_eq!(
             blorb.ifhd(),
-            &IFhd::new(
-                0x1234,
-                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-                0x5678,
-                0x9abcde
-            )
+            &IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5678,)
         );
         assert_eq!(
             blorb.ridx(),
@@ -1133,12 +1174,7 @@ mod tests {
         let blorb = assert_ok!(b);
         assert_some_eq!(
             blorb.ifhd(),
-            &IFhd::new(
-                0x1234,
-                &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32],
-                0x5678,
-                0x9abcde
-            )
+            &IFhd::new(0x1234, &[0x32, 0x33, 0x30, 0x37, 0x32, 0x32], 0x5678,)
         );
         assert_eq!(
             blorb.ridx(),
